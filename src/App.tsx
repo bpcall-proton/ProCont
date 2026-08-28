@@ -1,0 +1,221 @@
+import { useState } from 'react'
+import { AuthProvider } from './auth/AuthProvider'
+import { useAuth } from './auth/AuthContext'
+import { can, type Permission } from './auth/permissions'
+import {
+  AccountingIcon,
+  DashboardIcon,
+  LogoutIcon,
+  ReportsIcon,
+  ScanIcon,
+  SettingsIcon,
+  StoreIcon,
+} from './components/Icons'
+import { Logo } from './components/Logo'
+import { DataModeBadge, SyncBadge } from './components/StatusBadge'
+import { DashboardPage } from './pages/DashboardPage'
+import { AccountingPage } from './pages/AccountingPage'
+import { LoginPage } from './pages/LoginPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { ReportsPage } from './pages/ReportsPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { StoresPage } from './pages/StoresPage'
+import type { InterfaceLanguage } from './domain/types'
+import { AppStoreProvider } from './store/AppStoreProvider'
+import { useAppStore } from './store/AppStoreContext'
+
+type Page =
+  | 'dashboard'
+  | 'accounting'
+  | 'reports'
+  | 'stores'
+  | 'review'
+  | 'settings'
+
+const navigation: {
+  id: Page
+  label: Record<InterfaceLanguage, string>
+  icon: typeof DashboardIcon
+  permission: Permission
+}[] = [
+  {
+    id: 'dashboard',
+    label: { it: 'Panoramica', ro: 'Prezentare', en: 'Overview' },
+    icon: DashboardIcon,
+    permission: 'viewDashboard',
+  },
+  {
+    id: 'accounting',
+    label: { it: 'Contabilità', ro: 'Contabilitate', en: 'Accounting' },
+    icon: AccountingIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'reports',
+    label: { it: 'Statistiche', ro: 'Statistici', en: 'Reports' },
+    icon: ReportsIcon,
+    permission: 'viewReports',
+  },
+  {
+    id: 'stores',
+    label: {
+      it: 'Punti vendita',
+      ro: 'Puncte de vânzare',
+      en: 'Stores',
+    },
+    icon: StoreIcon,
+    permission: 'viewStores',
+  },
+  {
+    id: 'review',
+    label: {
+      it: 'Foto in arrivo',
+      ro: 'Fotografii primite',
+      en: 'Incoming photos',
+    },
+    icon: ScanIcon,
+    permission: 'reviewDocuments',
+  },
+  {
+    id: 'settings',
+    label: { it: 'Impostazioni', ro: 'Setări', en: 'Settings' },
+    icon: SettingsIcon,
+    permission: 'manageSettings',
+  },
+]
+
+function Workspace() {
+  const { user, signOut } = useAuth()
+  const { state, loading, syncState, syncMessage } = useAppStore()
+  const [page, setPage] = useState<Page>('dashboard')
+  const language = state.dataSettings.language
+
+  if (loading) {
+    return (
+      <div className="app-loading">
+        <Logo />
+        <span className="scanner-loader" />
+      </div>
+    )
+  }
+
+  const pages = {
+    dashboard: <DashboardPage />,
+    accounting: <AccountingPage />,
+    reports: <ReportsPage />,
+    stores: <StoresPage />,
+    review: <ReviewPage />,
+    settings: <SettingsPage />,
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <Logo />
+        <nav>
+          {navigation
+            .filter((item) =>
+              user ? can(user.role, item.permission) : false,
+            )
+            .map(({ id, label, icon: Icon }) => (
+            <button
+              className={page === id ? 'active' : ''}
+              key={id}
+              onClick={() => setPage(id)}
+              type="button"
+            >
+              <Icon />
+              <span>{label[language]}</span>
+              {id === 'review' &&
+                state.review.pending + state.review.unrecognized > 0 && (
+                  <small>
+                    {state.review.pending + state.review.unrecognized}
+                  </small>
+                )}
+            </button>
+            ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="user-summary">
+            <span className="user-avatar">
+              {user?.role === 'owner' ? 'TI' : 'CO'}
+            </span>
+            <span>
+              <strong>
+                {user?.role === 'owner'
+                  ? language === 'it'
+                    ? 'Titolare'
+                    : language === 'ro'
+                      ? 'Proprietar'
+                      : 'Owner'
+                  : language === 'it'
+                    ? 'Contabile'
+                    : language === 'ro'
+                      ? 'Contabil'
+                      : 'Accountant'}
+              </strong>
+              <small>{user?.preview ? 'Anteprima locale' : user?.email}</small>
+            </span>
+          </div>
+          <button className="logout-button" onClick={signOut} type="button">
+            <LogoutIcon />
+            {language === 'it'
+              ? 'Esci'
+              : language === 'ro'
+                ? 'Ieșire'
+                : 'Sign out'}
+          </button>
+        </div>
+      </aside>
+
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <strong>{state.company.name}</strong>
+            <span>
+              {state.stores.length} punti vendita · aggiornato{' '}
+              {new Date(state.updatedAt).toLocaleTimeString('it-IT', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+          </div>
+          <div className="topbar-status">
+            <SyncBadge message={syncMessage} state={syncState} />
+            <DataModeBadge mode={state.dataSettings.mode} />
+          </div>
+        </header>
+        <div className="page-container">{pages[page]}</div>
+      </main>
+    </div>
+  )
+}
+
+function SessionGate() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="app-loading">
+        <Logo />
+        <span className="scanner-loader" />
+      </div>
+    )
+  }
+
+  if (!user) return <LoginPage />
+
+  return (
+    <AppStoreProvider key={user.id}>
+      <Workspace />
+    </AppStoreProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <SessionGate />
+    </AuthProvider>
+  )
+}

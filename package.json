@@ -1,0 +1,90 @@
+{
+  "name": "fatture-incassi-pro",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Acquisizione intelligente di fatture e incassi via WhatsApp e Viber.",
+  "author": "BpCall Srl",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "desktop": "npm run build && electron .",
+    "desktop:pack": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "firebase": "12.15.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.12.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.1",
+    "electron": "42.6.1",
+    "electron-builder": "26.15.6",
+    "eslint": "10.3.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.2",
+    "globals": "17.6.0",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.59.2",
+    "vite": "8.2.2"
+  },
+  "build": {
+    "appId": "com.bpcall.fattureincassipro",
+    "productName": "Fatture & Incassi Pro",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "npmRebuild": false,
+    "icon": "build/icon.png",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Fatture-Incassi-Pro-${version}-Windows-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance",
+      "artifactName": "Fatture-Incassi-Pro-${version}-macOS-${arch}.${ext}",
+      "hardenedRuntime": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "artifactName": "Fatture-Incassi-Pro-${version}-Linux-${arch}.${ext}"
+    }
+  }
+}
