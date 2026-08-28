@@ -28,6 +28,7 @@ import {
   exportUnifiedState,
   importLegacyIntoState,
 } from '../data/migrations'
+import { normalizeSenderPhone } from '../domain/senderRouting'
 import {
   AppStoreContext,
   type AppStoreContextValue,
@@ -204,12 +205,77 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         }))
       },
       addStore: (input: NewStoreInput) => {
-        const { store, seller } = createStoreWithSeller(input)
+        if (
+          !stateRef.current.accounting.companies.some(
+            (company) => company.id === input.companyId,
+          )
+        ) {
+          return { ok: false, error: 'Seleziona un’azienda valida' }
+        }
+        const phone = normalizeSenderPhone(input.sellerPhone)
+        if (!phone) {
+          return { ok: false, error: 'Inserisci un numero di telefono valido' }
+        }
+        if (
+          stateRef.current.sellers.some(
+            (seller) => normalizeSenderPhone(seller.phone) === phone,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              'Questo numero è già assegnato: ogni ragazza deve identificare un solo punto vendita',
+          }
+        }
+        const viberUserId = input.sellerViberUserId.trim()
+        if (
+          viberUserId &&
+          stateRef.current.sellers.some(
+            (seller) => seller.viberUserId === viberUserId,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              'Questo ID Viber è già assegnato a un altro punto vendita',
+          }
+        }
+        const { store, seller, accountingSeller } =
+          createStoreWithSeller(input)
         updateState((current) => ({
           ...current,
           stores: [...current.stores, store],
           sellers: [...current.sellers, seller],
+          accounting: {
+            ...current.accounting,
+            sellers: [...current.accounting.sellers, accountingSeller],
+          },
         }))
+        return { ok: true }
+      },
+      setSellerViberUserId: (sellerId: string, value: string) => {
+        const viberUserId = value.trim()
+        if (
+          viberUserId &&
+          stateRef.current.sellers.some(
+            (seller) =>
+              seller.id !== sellerId &&
+              seller.viberUserId === viberUserId,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              'Questo ID Viber è già assegnato a un altro punto vendita',
+          }
+        }
+        updateState((current) => ({
+          ...current,
+          sellers: current.sellers.map((seller) =>
+            seller.id === sellerId ? { ...seller, viberUserId } : seller,
+          ),
+        }))
+        return { ok: true }
       },
       removeStore: (storeId: string) => {
         updateState((current) => {
@@ -265,6 +331,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           dataSettings: {
             ...current.dataSettings,
             driveBackupAfterApproval: enabled,
+          },
+        }))
+      },
+      setDriveFolder: (folder: string) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            driveFolder: folder,
           },
         }))
       },

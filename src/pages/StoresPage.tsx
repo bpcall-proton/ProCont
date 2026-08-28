@@ -4,22 +4,37 @@ import { can } from '../auth/permissions'
 import { useAppStore } from '../store/AppStoreContext'
 
 const emptyForm = {
+  companyId: '',
   storeName: '',
   city: '',
   sellerName: '',
   sellerPhone: '',
+  sellerViberUserId: '',
 }
 
 export function StoresPage() {
   const { user } = useAuth()
-  const { state, addStore, removeStore } = useAppStore()
-  const [form, setForm] = useState(emptyForm)
+  const { state, addStore, removeStore, setSellerViberUserId } = useAppStore()
+  const [form, setForm] = useState(() => ({
+    ...emptyForm,
+    companyId: state.accounting.activeCompanyId ?? '',
+  }))
+  const [error, setError] = useState('')
+  const [viberDrafts, setViberDrafts] = useState<Record<string, string>>({})
   const canEdit = user ? can(user.role, 'manageStores') : false
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    addStore(form)
-    setForm(emptyForm)
+    const result = addStore(form)
+    if (!result.ok) {
+      setError(result.error ?? 'Impossibile aggiungere il punto vendita')
+      return
+    }
+    setError('')
+    setForm({
+      ...emptyForm,
+      companyId: state.accounting.activeCompanyId ?? '',
+    })
   }
 
   return (
@@ -41,6 +56,23 @@ export function StoresPage() {
             </div>
           </div>
           <div className="form-grid">
+            <label>
+              Azienda
+              <select
+                onChange={(event) =>
+                  setForm({ ...form, companyId: event.target.value })
+                }
+                required
+                value={form.companyId}
+              >
+                <option value="">Seleziona azienda</option>
+                {state.accounting.companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               Nome punto vendita
               <input
@@ -74,7 +106,7 @@ export function StoresPage() {
               />
             </label>
             <label>
-              Telefono WhatsApp/Viber
+              Telefono WhatsApp
               <input
                 onChange={(event) =>
                   setForm({ ...form, sellerPhone: event.target.value })
@@ -85,12 +117,26 @@ export function StoresPage() {
                 value={form.sellerPhone}
               />
             </label>
+            <label>
+              ID utente Viber (facoltativo)
+              <input
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    sellerViberUserId: event.target.value,
+                  })
+                }
+                placeholder="sender.id ricevuto dal bot"
+                value={form.sellerViberUserId}
+              />
+            </label>
           </div>
           <div className="form-actions">
             <button className="button button-primary" type="submit">
               Aggiungi punto
             </button>
           </div>
+          {error && <p className="form-error">{error}</p>}
         </form>
       )}
 
@@ -98,6 +144,9 @@ export function StoresPage() {
         {state.stores.map((store) => {
           const seller = state.sellers.find(
             (item) => item.id === store.sellerId,
+          )
+          const company = state.accounting.companies.find(
+            (item) => item.id === store.companyId,
           )
           return (
             <article className="panel store-card" key={store.id}>
@@ -107,6 +156,9 @@ export function StoresPage() {
                 </span>
                 <span className="channel-status">WhatsApp + Viber</span>
               </div>
+              <span className="eyebrow">
+                {company?.name ?? 'Azienda non assegnata'}
+              </span>
               <h2>{store.name}</h2>
               <p>{store.city || 'Città non indicata'}</p>
               <div className="seller-block">
@@ -114,6 +166,36 @@ export function StoresPage() {
                 <strong>{seller?.name}</strong>
                 <small>{seller?.phone}</small>
               </div>
+              {canEdit && seller && (
+                <div className="viber-pairing">
+                  <label>
+                    ID utente Viber
+                    <input
+                      onChange={(event) =>
+                        setViberDrafts({
+                          ...viberDrafts,
+                          [seller.id]: event.target.value,
+                        })
+                      }
+                      placeholder="sender.id ricevuto dal bot"
+                      value={viberDrafts[seller.id] ?? seller.viberUserId}
+                    />
+                  </label>
+                  <button
+                    className="button button-secondary"
+                    onClick={() => {
+                      const result = setSellerViberUserId(
+                        seller.id,
+                        viberDrafts[seller.id] ?? seller.viberUserId,
+                      )
+                      setError(result.error ?? '')
+                    }}
+                    type="button"
+                  >
+                    Salva collegamento Viber
+                  </button>
+                </div>
+              )}
               {canEdit && (
                 <button
                   className="text-button danger-text"

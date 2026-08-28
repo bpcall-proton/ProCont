@@ -92,3 +92,11 @@ export function ReportsIcon(props: IconProps) {
     </Svg>
   )
 }
+
+export function PaidInvoicesIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6 3h12v18H6V3Zm3 5h6m-6 4h3m-3 4 2 2 4-5" />
+    </Svg>
+  )
+}

@@ -1,4 +1,5 @@
 import type {
+  AccountingSeller,
   AccountingState,
   AppState,
   Company,
@@ -12,7 +13,7 @@ export function createId(prefix: string) {
 
 export function createInitialState(companyId = createId('company')): AppState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
     company: {
       id: companyId,
       name: 'La tua azienda',
@@ -36,6 +37,7 @@ export function createInitialState(companyId = createId('company')): AppState {
       mode: 'local',
       language: 'it',
       driveBackupAfterApproval: true,
+      driveFolder: '',
       imageRetentionDays: null,
     },
     accounting: createEmptyAccountingState(companyId),
@@ -67,25 +69,45 @@ export function createEmptyAccountingState(companyId: string): AccountingState {
 }
 
 export function createStoreWithSeller(input: {
+  companyId: string
   storeName: string
   city: string
   sellerName: string
   sellerPhone: string
-}): { store: Store; seller: Seller } {
+  sellerViberUserId: string
+}): {
+  store: Store
+  seller: Seller
+  accountingSeller: AccountingSeller
+} {
+  const sellerId = createId('seller')
   const seller: Seller = {
-    id: createId('seller'),
+    id: sellerId,
+    companyId: input.companyId,
+    accountingSellerId: sellerId,
     name: input.sellerName.trim(),
     phone: input.sellerPhone.trim(),
+    viberUserId: input.sellerViberUserId.trim(),
     whatsappEnabled: true,
     viberEnabled: true,
   }
   const store: Store = {
     id: createId('store'),
+    companyId: input.companyId,
     name: input.storeName.trim(),
     city: input.city.trim(),
     sellerId: seller.id,
   }
-  return { store, seller }
+  const accountingSeller: AccountingSeller = {
+    id: sellerId,
+    companyId: input.companyId,
+    name: seller.name,
+    email: '',
+    phone: seller.phone,
+    city: store.city,
+    notes: `Responsabile del punto vendita ${store.name}`,
+  }
+  return { store, seller, accountingSeller }
 }
 
 export function updateCompany(company: Company, patch: Partial<Company>): Company {

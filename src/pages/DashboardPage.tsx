@@ -72,6 +72,9 @@ export function DashboardPage() {
                 const seller = sellers.find(
                   (item) => item.id === store.sellerId,
                 )
+                const company = state.accounting.companies.find(
+                  (item) => item.id === store.companyId,
+                )
                 return (
                   <div className="store-summary" key={store.id}>
                     <span className="store-avatar">
@@ -80,6 +83,7 @@ export function DashboardPage() {
                     <span>
                       <strong>{store.name}</strong>
                       <small>
+                        {company?.name ?? 'Azienda non assegnata'} ·{' '}
                         {store.city || 'Città non indicata'} ·{' '}
                         {seller?.name ?? 'Venditrice non assegnata'}
                       </small>

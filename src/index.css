@@ -902,6 +902,12 @@ select {
   font-size: 0.7rem;
 }
 
+.viber-pairing {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
 .mode-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1314,6 +1320,29 @@ select {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.invoice-search-toolbar input {
+  min-width: min(100%, 320px);
+}
+
+.integration-steps {
+  display: grid;
+  gap: 14px;
+}
+
+.integration-steps > div {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(6, 8, 16, 0.45);
+}
+
+.integration-steps a {
+  color: var(--cyan);
+  font-size: 0.85rem;
 }
 
 .table-toolbar h2,

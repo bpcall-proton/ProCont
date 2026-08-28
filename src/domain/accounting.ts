@@ -1,5 +1,6 @@
 import type {
   AccountingInvoice,
+  AccountingExpense,
   AccountingState,
   AccountingTaking,
 } from './types'
@@ -67,6 +68,39 @@ export function invoiceRemaining(invoice: AccountingInvoice) {
   return roundMoney(
     Math.max(0, invoice.total - (invoice.settled ? invoice.total : invoice.paidAmount)),
   )
+}
+
+export function allocatedExpense(
+  expense: AccountingExpense,
+  rangeStart: string,
+  rangeEnd: string,
+) {
+  if (expense.recurrence !== 'monthly') {
+    return expense.date >= rangeStart && expense.date <= rangeEnd
+      ? expense.amount
+      : 0
+  }
+  const start =
+    rangeStart && rangeStart > expense.date ? rangeStart : expense.date
+  const boundedEnd = rangeEnd === '9999-12-31' ? today() : rangeEnd
+  const end =
+    expense.recurrenceEndDate &&
+    expense.recurrenceEndDate < boundedEnd
+      ? expense.recurrenceEndDate
+      : boundedEnd
+  if (start > end) return 0
+
+  const cursor = new Date(`${start}T00:00:00Z`)
+  const last = new Date(`${end}T00:00:00Z`)
+  let allocated = 0
+  while (cursor <= last) {
+    const daysInMonth = new Date(
+      Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+    ).getUTCDate()
+    allocated += expense.amount / daysInMonth
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return allocated
 }
 
 export function activeAccounting(state: AccountingState) {

@@ -23,6 +23,7 @@ export function SettingsPage() {
     updateCompany,
     setDataMode,
     setDriveBackup,
+    setDriveFolder,
     setImageRetention,
     setLanguage,
     updateAccounting,
@@ -248,6 +249,14 @@ export function SettingsPage() {
             </button>
           </div>
           <label>
+            Cartella Google Drive
+            <input
+              onChange={(event) => setDriveFolder(event.target.value)}
+              placeholder="URL della cartella oppure Folder ID"
+              value={dataSettings.driveFolder}
+            />
+          </label>
+          <label>
             Conservazione foto originali
             <select
               onChange={(event) =>
@@ -267,8 +276,41 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            La preferenza Drive verrà applicata quando collegheremo il servizio
-            di backup.
+            Il percorso è salvato; il caricamento automatico richiederà
+            l'autorizzazione Google Drive del servizio di backup.
+          </p>
+        </article>
+
+        <article className="panel integration-guide">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">FOTO AUTOMATICHE</span>
+              <h2>WhatsApp e Viber</h2>
+            </div>
+          </div>
+          <div className="integration-steps">
+            <div>
+              <strong>WhatsApp Business Cloud API</strong>
+              <small>
+                Crea l'app Meta, collega numero business e webhook HTTPS,
+                quindi abilita i messaggi. Il numero mittente identifica
+                automaticamente ragazza, bar e azienda.
+              </small>
+              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started/" rel="noreferrer" target="_blank">Configurazione ufficiale Meta</a>
+            </div>
+            <div>
+              <strong>Viber Bot</strong>
+              <small>
+                Richiede un bot commerciale, token e webhook HTTPS. Viber
+                comunica un ID utente, quindi la ragazza viene collegata al
+                primo messaggio tramite abbinamento amministrativo.
+              </small>
+              <a href="https://developers.viber.com/docs/api/rest-bot-api/" rel="noreferrer" target="_blank">Configurazione ufficiale Viber</a>
+            </div>
+          </div>
+          <p className="settings-note">
+            Token e credenziali resteranno nel backend protetto, mai nel file
+            JSON o nell'applicazione.
           </p>
         </article>
 

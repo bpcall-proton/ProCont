@@ -6,6 +6,7 @@ import {
   AccountingIcon,
   DashboardIcon,
   LogoutIcon,
+  PaidInvoicesIcon,
   ReportsIcon,
   ScanIcon,
   SettingsIcon,
@@ -16,6 +17,7 @@ import { DataModeBadge, SyncBadge } from './components/StatusBadge'
 import { DashboardPage } from './pages/DashboardPage'
 import { AccountingPage } from './pages/AccountingPage'
 import { LoginPage } from './pages/LoginPage'
+import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -27,6 +29,7 @@ import { useAppStore } from './store/AppStoreContext'
 type Page =
   | 'dashboard'
   | 'accounting'
+  | 'paidInvoices'
   | 'reports'
   | 'stores'
   | 'review'
@@ -48,6 +51,16 @@ const navigation: {
     id: 'accounting',
     label: { it: 'Contabilità', ro: 'Contabilitate', en: 'Accounting' },
     icon: AccountingIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'paidInvoices',
+    label: {
+      it: 'Fatture pagate',
+      ro: 'Facturi plătite',
+      en: 'Paid invoices',
+    },
+    icon: PaidInvoicesIcon,
     permission: 'manageAccounting',
   },
   {
@@ -102,6 +115,7 @@ function Workspace() {
   const pages = {
     dashboard: <DashboardPage />,
     accounting: <AccountingPage />,
+    paidInvoices: <PaidInvoicesPage />,
     reports: <ReportsPage />,
     stores: <StoresPage />,
     review: <ReviewPage />,
