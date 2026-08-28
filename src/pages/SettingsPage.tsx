@@ -1,7 +1,23 @@
-import { useRef, useState, type ChangeEvent } from 'react'
-import type { Locale } from '../domain/types'
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
+import type { AccountingCompany, Locale } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
-import { useAppStore } from '../store/AppStoreContext'
+import {
+  useAppStore,
+  type AccountingCompanyInput,
+} from '../store/AppStoreContext'
+
+const emptyCompany: AccountingCompanyInput = {
+  name: '',
+  taxId: '',
+  city: '',
+  notes: '',
+  seasonEndDate: null,
+}
 
 function download(content: BlobPart, type: string, filename: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -16,28 +32,130 @@ function csvCell(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`
 }
 
+function CompanyEditor({
+  company,
+  onSave,
+}: {
+  company: AccountingCompany
+  onSave: (
+    companyId: string,
+    input: AccountingCompanyInput,
+  ) => { ok: boolean; error?: string }
+}) {
+  const [form, setForm] = useState<AccountingCompanyInput>({
+    name: company.name,
+    taxId: company.taxId,
+    city: company.city,
+    notes: company.notes,
+    seasonEndDate: company.seasonEndDate,
+  })
+  const [message, setMessage] = useState<string | null>(null)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    const result = onSave(company.id, form)
+    setMessage(result.ok ? 'Dati aziendali aggiornati.' : result.error ?? null)
+  }
+
+  return (
+    <form className="form-stack company-editor" onSubmit={submit}>
+      <div className="form-grid">
+        <label>
+          Ragione sociale
+          <input
+            onChange={(event) =>
+              setForm((current) => ({ ...current, name: event.target.value }))
+            }
+            required
+            value={form.name}
+          />
+        </label>
+        <label>
+          Partita IVA / Codice fiscale
+          <input
+            onChange={(event) =>
+              setForm((current) => ({ ...current, taxId: event.target.value }))
+            }
+            value={form.taxId}
+          />
+        </label>
+        <label>
+          Città
+          <input
+            onChange={(event) =>
+              setForm((current) => ({ ...current, city: event.target.value }))
+            }
+            value={form.city}
+          />
+        </label>
+        <label>
+          Data fine stagione
+          <input
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                seasonEndDate: event.target.value || null,
+              }))
+            }
+            type="date"
+            value={form.seasonEndDate ?? ''}
+          />
+        </label>
+      </div>
+      <label>
+        Note
+        <textarea
+          onChange={(event) =>
+            setForm((current) => ({ ...current, notes: event.target.value }))
+          }
+          rows={3}
+          value={form.notes}
+        />
+      </label>
+      <button className="button button-primary" type="submit">
+        Salva azienda
+      </button>
+      {message && <p className="import-message">{message}</p>}
+    </form>
+  )
+}
+
 export function SettingsPage() {
   const {
     state,
     cloudAvailable,
     updateCompany,
+    setActiveAccountingCompany,
+    addAccountingCompany,
+    updateAccountingCompany,
     setDataMode,
     setDriveBackup,
     setDriveFolder,
     setImageRetention,
     setLanguage,
-    updateAccounting,
     importLegacyData,
     exportUnifiedData,
     exportLegacyData,
   } = useAppStore()
-  const { company, dataSettings } = state
+  const { dataSettings } = state
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [newCompany, setNewCompany] =
+    useState<AccountingCompanyInput>(emptyCompany)
+  const [companyMessage, setCompanyMessage] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
       (item) => item.id === state.accounting.activeCompanyId,
     ) ?? null
+
+  function addCompany(event: FormEvent) {
+    event.preventDefault()
+    const result = addAccountingCompany(newCompany)
+    setCompanyMessage(
+      result.ok ? 'Nuova azienda inserita e selezionata.' : result.error ?? null,
+    )
+    if (result.ok) setNewCompany(emptyCompany)
+  }
 
   async function importJson(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -138,31 +256,105 @@ export function SettingsPage() {
         <article className="panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">AZIENDA</span>
-              <h2>Dati generali</h2>
+              <span className="eyebrow">AZIENDE</span>
+              <h2>Gestione multi-azienda</h2>
             </div>
+            <span className="count-pill">
+              {state.accounting.companies.length}
+            </span>
           </div>
-          <div className="form-stack">
+          <div className="company-list">
+            {state.accounting.companies.map((item) => {
+              const stores = state.stores.filter(
+                (store) => store.companyId === item.id,
+              ).length
+              const invoices = state.accounting.invoices.filter(
+                (invoice) => invoice.companyId === item.id,
+              ).length
+              return (
+                <button
+                  className={
+                    item.id === accountingCompany?.id ? 'selected' : ''
+                  }
+                  key={item.id}
+                  onClick={() => setActiveAccountingCompany(item.id)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {item.taxId || 'Partita IVA non indicata'} · {stores}{' '}
+                      punti vendita · {invoices} fatture
+                    </small>
+                  </span>
+                  <span>
+                    {item.id === accountingCompany?.id ? 'Attiva' : 'Apri'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {accountingCompany && (
+            <CompanyEditor
+              company={accountingCompany}
+              key={accountingCompany.id}
+              onSave={updateAccountingCompany}
+            />
+          )}
+          <form className="company-create-form" onSubmit={addCompany}>
+            <div>
+              <span className="eyebrow">NUOVA AZIENDA</span>
+              <strong>Inserisci un altro soggetto contabile</strong>
+            </div>
+            <div className="form-grid">
+              <label>
+                Ragione sociale
+                <input
+                  onChange={(event) =>
+                    setNewCompany((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  required
+                  value={newCompany.name}
+                />
+              </label>
+              <label>
+                Partita IVA / Codice fiscale
+                <input
+                  onChange={(event) =>
+                    setNewCompany((current) => ({
+                      ...current,
+                      taxId: event.target.value,
+                    }))
+                  }
+                  value={newCompany.taxId}
+                />
+              </label>
+              <label>
+                Città
+                <input
+                  onChange={(event) =>
+                    setNewCompany((current) => ({
+                      ...current,
+                      city: event.target.value,
+                    }))
+                  }
+                  value={newCompany.city}
+                />
+              </label>
+            </div>
+            <button className="button button-secondary" type="submit">
+              Aggiungi azienda
+            </button>
+            {companyMessage && (
+              <p className="import-message">{companyMessage}</p>
+            )}
+          </form>
+          <div className="form-stack company-language">
             <label>
-              Ragione sociale
-              <input
-                onChange={(event) =>
-                  updateCompany({ name: event.target.value })
-                }
-                value={company.name}
-              />
-            </label>
-            <label>
-              Partita IVA / Codice fiscale
-              <input
-                onChange={(event) =>
-                  updateCompany({ taxId: event.target.value })
-                }
-                value={company.taxId}
-              />
-            </label>
-            <label>
-              Lingua principale
+              Lingua dell'interfaccia
               <select
                 onChange={(event) => {
                   const language = event.target.value as Locale
@@ -402,54 +594,6 @@ export function SettingsPage() {
           </div>
         </article>
 
-        {accountingCompany && (
-          <article className="panel">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">PRONOSTICO</span>
-                <h2>Parametri azienda attiva</h2>
-              </div>
-            </div>
-            <div className="form-stack">
-              <label>
-                Città
-                <input
-                  value={accountingCompany.city}
-                  onChange={(event) =>
-                    updateAccounting((current) => ({
-                      ...current,
-                      companies: current.companies.map((item) =>
-                        item.id === accountingCompany.id
-                          ? { ...item, city: event.target.value }
-                          : item,
-                      ),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Data fine stagione
-                <input
-                  type="date"
-                  value={accountingCompany.seasonEndDate ?? ''}
-                  onChange={(event) =>
-                    updateAccounting((current) => ({
-                      ...current,
-                      companies: current.companies.map((item) =>
-                        item.id === accountingCompany.id
-                          ? {
-                              ...item,
-                              seasonEndDate: event.target.value || null,
-                            }
-                          : item,
-                      ),
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          </article>
-        )}
       </section>
     </div>
   )

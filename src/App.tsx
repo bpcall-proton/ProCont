@@ -99,9 +99,22 @@ const navigation: {
 
 function Workspace() {
   const { user, signOut } = useAuth()
-  const { state, loading, syncState, syncMessage } = useAppStore()
+  const {
+    state,
+    loading,
+    syncState,
+    syncMessage,
+    setActiveAccountingCompany,
+  } = useAppStore()
   const [page, setPage] = useState<Page>('dashboard')
   const language = state.dataSettings.language
+  const activeCompany =
+    state.accounting.companies.find(
+      (company) => company.id === state.accounting.activeCompanyId,
+    ) ?? state.accounting.companies[0]
+  const activeStores = activeCompany
+    ? state.stores.filter((store) => store.companyId === activeCompany.id).length
+    : 0
 
   if (loading) {
     return (
@@ -184,10 +197,24 @@ function Workspace() {
 
       <main className="workspace">
         <header className="topbar">
-          <div>
-            <strong>{state.company.name}</strong>
+          <div className="topbar-company">
+            <span>Azienda attiva</span>
+            <select
+              aria-label="Azienda attiva"
+              onChange={(event) =>
+                setActiveAccountingCompany(event.target.value)
+              }
+              value={activeCompany?.id ?? ''}
+            >
+              {state.accounting.companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
             <span>
-              {state.stores.length} punti vendita · aggiornato{' '}
+              {activeStores} punti vendita · {state.accounting.companies.length}{' '}
+              aziende · aggiornato{' '}
               {new Date(state.updatedAt).toLocaleTimeString('it-IT', {
                 hour: '2-digit',
                 minute: '2-digit',
