@@ -2,6 +2,11 @@
 
 Applicazione web e desktop per acquisire fotografie di fatture e incassi, revisionare i dati estratti e calcolare il venit per punto vendita.
 
+Ogni punto vendita appartiene a una sola azienda contabile e ha una sola
+venditrice responsabile. Il numero WhatsApp/Viber della venditrice costituisce
+la chiave univoca usata dal futuro backend per instradare ogni documento verso
+l'azienda e il punto vendita corretti.
+
 ## Funzioni disponibili
 
 - interfaccia responsive scura ciano/viola;

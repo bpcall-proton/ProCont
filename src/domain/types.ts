@@ -28,6 +28,8 @@ export interface Company {
 
 export interface Seller {
   id: string
+  companyId: string
+  accountingSellerId: string
   name: string
   phone: string
   whatsappEnabled: boolean
@@ -36,6 +38,7 @@ export interface Seller {
 
 export interface Store {
   id: string
+  companyId: string
   name: string
   city: string
   sellerId: string
@@ -194,7 +197,7 @@ export interface AccountingState {
 }
 
 export interface AppState {
-  schemaVersion: 2
+  schemaVersion: 3
   company: Company
   stores: Store[]
   sellers: Seller[]

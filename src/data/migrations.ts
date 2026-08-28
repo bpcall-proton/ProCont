@@ -50,6 +50,11 @@ function records(value: unknown) {
   return Array.isArray(value) ? value.filter(isRecord) : []
 }
 
+function contactKey(value: string) {
+  const digits = value.replace(/\D/g, '')
+  return digits.startsWith('00') ? digits.slice(2) : digits
+}
+
 function mapPayment(value: JsonRecord): InvoicePayment {
   return {
     id: text(value.id, crypto.randomUUID()),
@@ -269,17 +274,74 @@ export function normalizeStoredState(
   companyId: string,
 ): AppState | null {
   if (!isRecord(value)) return null
-  if (value.schemaVersion === 2 && isRecord(value.company)) {
+  if (
+    (value.schemaVersion === 2 || value.schemaVersion === 3) &&
+    isRecord(value.company)
+  ) {
     const state = value as unknown as AppState
+    const accounting = isRecord(value.accounting)
+      ? state.accounting
+      : createEmptyAccountingState(companyId)
+    const fallbackCompanyId =
+      accounting.activeCompanyId ?? accounting.companies[0]?.id ?? companyId
+    const accountingSellers = [...accounting.sellers]
+    const sellers = (state.sellers ?? []).map((seller) => {
+      const linked =
+        accountingSellers.find(
+          (candidate) => candidate.id === seller.accountingSellerId,
+        ) ??
+        accountingSellers.find(
+          (candidate) =>
+            contactKey(candidate.phone) !== '' &&
+            contactKey(candidate.phone) === contactKey(seller.phone),
+        ) ??
+        accountingSellers.find(
+          (candidate) =>
+            candidate.name.trim().toLocaleLowerCase() ===
+            seller.name.trim().toLocaleLowerCase(),
+        )
+      const sellerCompanyId =
+        seller.companyId || linked?.companyId || fallbackCompanyId
+      const accountingSellerId =
+        linked?.id ?? seller.accountingSellerId ?? seller.id
+      if (!linked) {
+        accountingSellers.push({
+          id: accountingSellerId,
+          companyId: sellerCompanyId,
+          name: seller.name,
+          email: '',
+          phone: seller.phone,
+          city: '',
+          notes: 'Venditrice collegata a un punto vendita',
+        })
+      }
+      return {
+        ...seller,
+        companyId: sellerCompanyId,
+        accountingSellerId,
+      }
+    })
+    const sellersById = new Map(sellers.map((seller) => [seller.id, seller]))
+    const stores = (state.stores ?? []).map((store) => ({
+      ...store,
+      companyId:
+        sellersById.get(store.sellerId)?.companyId ||
+        store.companyId ||
+        fallbackCompanyId,
+    }))
     return {
       ...state,
+      schemaVersion: 3,
+      stores,
+      sellers,
       dataSettings: {
         ...state.dataSettings,
         language: state.dataSettings.language ?? 'it',
       },
-      accounting: isRecord(value.accounting)
-        ? state.accounting
-        : createEmptyAccountingState(companyId),
+      accounting: {
+        ...accounting,
+        sellers: accountingSellers,
+      },
     }
   }
   if (value.schemaVersion === 1 && isRecord(value.company)) {
@@ -287,15 +349,18 @@ export function normalizeStoredState(
       AppState,
       'schemaVersion' | 'accounting'
     >
-    return {
-      ...previous,
-      schemaVersion: 2,
-      dataSettings: {
-        ...previous.dataSettings,
-        language: 'it',
+    return normalizeStoredState(
+      {
+        ...previous,
+        schemaVersion: 2,
+        dataSettings: {
+          ...previous.dataSettings,
+          language: 'it',
+        },
+        accounting: createEmptyAccountingState(companyId),
       },
-      accounting: createEmptyAccountingState(companyId),
-    }
+      companyId,
+    )
   }
   return null
 }
@@ -357,7 +422,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       data: state,
     },

@@ -4,6 +4,7 @@ import { can } from '../auth/permissions'
 import { useAppStore } from '../store/AppStoreContext'
 
 const emptyForm = {
+  companyId: '',
   storeName: '',
   city: '',
   sellerName: '',
@@ -13,13 +14,25 @@ const emptyForm = {
 export function StoresPage() {
   const { user } = useAuth()
   const { state, addStore, removeStore } = useAppStore()
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() => ({
+    ...emptyForm,
+    companyId: state.accounting.activeCompanyId ?? '',
+  }))
+  const [error, setError] = useState('')
   const canEdit = user ? can(user.role, 'manageStores') : false
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    addStore(form)
-    setForm(emptyForm)
+    const result = addStore(form)
+    if (!result.ok) {
+      setError(result.error ?? 'Impossibile aggiungere il punto vendita')
+      return
+    }
+    setError('')
+    setForm({
+      ...emptyForm,
+      companyId: state.accounting.activeCompanyId ?? '',
+    })
   }
 
   return (
@@ -41,6 +54,23 @@ export function StoresPage() {
             </div>
           </div>
           <div className="form-grid">
+            <label>
+              Azienda
+              <select
+                onChange={(event) =>
+                  setForm({ ...form, companyId: event.target.value })
+                }
+                required
+                value={form.companyId}
+              >
+                <option value="">Seleziona azienda</option>
+                {state.accounting.companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               Nome punto vendita
               <input
@@ -91,6 +121,7 @@ export function StoresPage() {
               Aggiungi punto
             </button>
           </div>
+          {error && <p className="form-error">{error}</p>}
         </form>
       )}
 
@@ -98,6 +129,9 @@ export function StoresPage() {
         {state.stores.map((store) => {
           const seller = state.sellers.find(
             (item) => item.id === store.sellerId,
+          )
+          const company = state.accounting.companies.find(
+            (item) => item.id === store.companyId,
           )
           return (
             <article className="panel store-card" key={store.id}>
@@ -107,6 +141,9 @@ export function StoresPage() {
                 </span>
                 <span className="channel-status">WhatsApp + Viber</span>
               </div>
+              <span className="eyebrow">
+                {company?.name ?? 'Azienda non assegnata'}
+              </span>
               <h2>{store.name}</h2>
               <p>{store.city || 'Città non indicata'}</p>
               <div className="seller-block">

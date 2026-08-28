@@ -9,6 +9,7 @@ import type {
 } from '../domain/types'
 
 export interface NewStoreInput {
+  companyId: string
   storeName: string
   city: string
   sellerName: string
@@ -22,7 +23,7 @@ export interface AppStoreContextValue {
   syncMessage: string | null
   cloudAvailable: boolean
   updateCompany: (patch: Partial<Company>) => void
-  addStore: (input: NewStoreInput) => void
+  addStore: (input: NewStoreInput) => { ok: boolean; error?: string }
   removeStore: (storeId: string) => void
   setDataMode: (mode: DataMode) => Promise<void>
   setDriveBackup: (enabled: boolean) => void
