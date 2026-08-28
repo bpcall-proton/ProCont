@@ -413,10 +413,10 @@ function InvoicesPanel() {
                   <td>{invoice.supplierName || '—'}<small>{invoice.description}</small></td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
                   <td>{money(invoice.theoreticalRevenue)}</td>
-                  <td><span className={`record-status ${invoice.settled ? 'paid' : 'open'}`}>{invoice.settled ? 'Pagata' : 'Da pagare'}</span></td>
+                  <td><span className={`record-status ${invoice.settled ? 'paid' : 'open'}`}>{invoice.settled ? 'Pagata' : invoice.paidAmount > 0 ? 'Parziale' : 'Da pagare'}</span></td>
                   <td className="row-actions">
                     <button type="button" onClick={() => edit(invoice)}>Modifica</button>
-                    {!invoice.settled && <button type="button" onClick={() => { setPaymentTarget(invoice); setPaymentAmount(String(invoiceRemaining(invoice))) }}>Paga</button>}
+                    {!invoice.settled && <button type="button" onClick={() => { setPaymentTarget(invoice); setPaymentAmount('') }}>Acconto / paga</button>}
                     <button className="danger-text" type="button" onClick={() => remove(invoice.id)}>Elimina</button>
                   </td>
                 </tr>
@@ -429,8 +429,8 @@ function InvoicesPanel() {
 
       {paymentTarget && (
         <form className="panel payment-panel" onSubmit={addPayment}>
-          <div><strong>Pagamento fattura {paymentTarget.number}</strong><small>Residuo {money(invoiceRemaining(paymentTarget))}</small></div>
-          <input inputMode="decimal" required value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
+          <div><strong>Pagamento parziale o saldo fattura {paymentTarget.number}</strong><small>Inserisci un acconto oppure l'intero residuo di {money(invoiceRemaining(paymentTarget))}</small></div>
+          <input inputMode="decimal" max={invoiceRemaining(paymentTarget)} placeholder="Importo pagato" required value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
           <input type="date" required value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
           <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{paymentMethods.map((item) => <option key={item}>{item}</option>)}</select>
           <button className="button button-primary" type="submit">Registra pagamento</button>
@@ -621,6 +621,12 @@ function ExpensesPanel() {
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseType, setExpenseType] =
     useState<AccountingExpense['type']>('tassa')
+  const [expenseDate, setExpenseDate] = useState(today())
+  const [expenseRecurrence, setExpenseRecurrence] =
+    useState<AccountingExpense['recurrence']>('once')
+  const [expenseEndDate, setExpenseEndDate] = useState('')
+  const [expenseSellerId, setExpenseSellerId] = useState('')
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
   const [rentalProperty, setRentalProperty] = useState('')
   const [rentalTotal, setRentalTotal] = useState('')
   const [accountantDescription, setAccountantDescription] = useState('')
@@ -628,28 +634,67 @@ function ExpensesPanel() {
 
   function addExpense(event: FormEvent) {
     event.preventDefault()
+    const seller = data.sellers.find((item) => item.id === expenseSellerId)
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => ({
         ...current,
-        expenses: [
-          {
-            id: createId('expense'),
-            companyId,
-            type: expenseType,
-            description: expenseDescription.trim(),
-            sellerId: null,
-            sellerName: '',
-            amount: numberValue(expenseAmount),
-            date: today(),
-            notes: '',
-            settled: false,
-          },
-          ...current.expenses,
-        ],
+        expenses: editingExpenseId
+          ? current.expenses.map((expense) =>
+              expense.id === editingExpenseId
+                ? {
+                    ...expense,
+                    type: expenseType,
+                    description: expenseDescription.trim(),
+                    sellerId:
+                      expenseType === 'stipendio' ? seller?.id ?? null : null,
+                    sellerName:
+                      expenseType === 'stipendio' ? seller?.name ?? '' : '',
+                    amount: numberValue(expenseAmount),
+                    date: expenseDate,
+                    recurrence: expenseRecurrence,
+                    recurrenceEndDate: expenseEndDate || null,
+                  }
+                : expense,
+            )
+          : [
+              {
+                id: createId('expense'),
+                companyId,
+                type: expenseType,
+                description: expenseDescription.trim(),
+                sellerId:
+                  expenseType === 'stipendio' ? seller?.id ?? null : null,
+                sellerName:
+                  expenseType === 'stipendio' ? seller?.name ?? '' : '',
+                amount: numberValue(expenseAmount),
+                date: expenseDate,
+                recurrence: expenseRecurrence,
+                recurrenceEndDate: expenseEndDate || null,
+                notes: '',
+                settled: false,
+              },
+              ...current.expenses,
+            ],
       })),
     )
+    setEditingExpenseId(null)
     setExpenseDescription('')
     setExpenseAmount('')
+    setExpenseDate(today())
+    setExpenseRecurrence('once')
+    setExpenseEndDate('')
+    setExpenseSellerId('')
+  }
+
+  function editExpense(expense: AccountingExpense) {
+    setEditingExpenseId(expense.id)
+    setExpenseType(expense.type)
+    setExpenseDescription(expense.description)
+    setExpenseAmount(String(expense.amount))
+    setExpenseDate(expense.date)
+    setExpenseRecurrence(expense.recurrence)
+    setExpenseEndDate(expense.recurrenceEndDate ?? '')
+    setExpenseSellerId(expense.sellerId ?? '')
   }
 
   function addRental(event: FormEvent) {
@@ -719,14 +764,31 @@ function ExpensesPanel() {
   return (
     <section className="expense-grid">
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">USCITE</span><h2>Stipendi e tasse</h2></div></div>
+        <div className="panel-heading"><div><span className="eyebrow">USCITE</span><h2>Stipendi, tasse e altre spese</h2></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addExpense}>
-          <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as AccountingExpense['type'])}><option value="tassa">Tassa</option><option value="stipendio">Stipendio</option><option value="contabile">Costo contabile</option></select>
+          <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as AccountingExpense['type'])}><option value="tassa">Tassa</option><option value="stipendio">Stipendio</option><option value="contabile">Costo contabile</option><option value="altra">Altra spesa</option></select>
+          {expenseType === 'stipendio' && (
+            <select value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
+              <option value="">Dipendente / venditrice</option>
+              {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+            </select>
+          )}
           <input placeholder="Descrizione" required value={expenseDescription} onChange={(event) => setExpenseDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Importo" required value={expenseAmount} onChange={(event) => setExpenseAmount(event.target.value)} />
-          <button className="button button-primary" type="submit">Registra</button>
+          <input aria-label="Data spesa o inizio ricorrenza" type="date" required value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+          <select value={expenseRecurrence} onChange={(event) => setExpenseRecurrence(event.target.value as AccountingExpense['recurrence'])}>
+            <option value="once">Spesa singola</option>
+            <option value="monthly">Spesa fissa mensile</option>
+          </select>
+          {expenseRecurrence === 'monthly' && (
+            <label>Fine ricorrenza (facoltativa)<input type="date" min={expenseDate} value={expenseEndDate} onChange={(event) => setExpenseEndDate(event.target.value)} /></label>
+          )}
+          <div className="form-actions">
+            {editingExpenseId && <button className="button button-secondary" type="button" onClick={() => setEditingExpenseId(null)}>Annulla</button>}
+            <button className="button button-primary" type="submit">{editingExpenseId ? 'Salva modifica' : 'Registra'}</button>
+          </div>
         </form>
-        <ExpenseList items={data.expenses} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: items }))} />
+        <ExpenseList items={data.expenses} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2></div></div>
@@ -752,12 +814,14 @@ function ExpensesPanel() {
 
 function ExpenseList({
   items,
+  onEdit,
   onUpdate,
 }: {
   items: AccountingExpense[]
+  onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}</small></span><span><strong>{money(item.amount)}</strong><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => onUpdate(items.filter((current) => current.id !== item.id))}>Elimina</button></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => onUpdate(items.filter((current) => current.id !== item.id))}>Elimina</button></span></div>)}</div>
 }
 
 function SettlementList({

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import {
   activeAccounting,
+  addDays,
+  allocatedExpense,
   invoiceRemaining,
   money,
   officialTaking,
@@ -79,9 +81,7 @@ export function ReportsPage() {
       accountantInvoices: source.accountantInvoices.filter((item) =>
         inRange(item.date, range.start, range.end),
       ),
-      expenses: source.expenses.filter((item) =>
-        inRange(item.date, range.start, range.end),
-      ),
+      expenses: source.expenses,
     }),
     [
       range.end,
@@ -112,11 +112,43 @@ export function ReportsPage() {
     (sum, item) => sum + item.total,
     0,
   )
-  const otherExpenses = data.expenses.reduce(
-    (sum, item) => sum + item.amount,
+  const expenseCosts = data.expenses.reduce(
+    (sum, item) => sum + allocatedExpense(item, range.start, range.end),
     0,
   )
-  const costs = purchases + rents + accountant + otherExpenses
+  const costs = purchases + rents + accountant + expenseCosts
+  const fixedCosts = data.expenses
+    .filter((item) => item.recurrence === 'monthly')
+    .reduce(
+      (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+      0,
+    )
+  const expenseByType = {
+    stipendi: data.expenses
+      .filter((item) => item.type === 'stipendio')
+      .reduce(
+        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        0,
+      ),
+    tasse: data.expenses
+      .filter((item) => item.type === 'tassa')
+      .reduce(
+        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        0,
+      ),
+    contabile: data.expenses
+      .filter((item) => item.type === 'contabile')
+      .reduce(
+        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        0,
+      ),
+    altre: data.expenses
+      .filter((item) => item.type === 'altra')
+      .reduce(
+        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        0,
+      ),
+  }
   const inputVat =
     data.invoices.reduce((sum, item) => sum + item.vat, 0) +
     data.rentals.reduce((sum, item) => sum + item.vat, 0) +
@@ -176,6 +208,11 @@ export function ReportsPage() {
       grouped.set(key, created)
       return created
     }
+    const cursor = new Date(`${today().slice(0, 7)}-01T00:00:00Z`)
+    for (let index = 0; index < 12; index += 1) {
+      ensure(cursor.toISOString().slice(0, 7))
+      cursor.setUTCMonth(cursor.getUTCMonth() - 1)
+    }
     source.takings.forEach((item) => {
       const target = ensure(month(item.date))
       target.official += officialTaking(item)
@@ -190,8 +227,18 @@ export function ReportsPage() {
     source.accountantInvoices.forEach((item) => {
       ensure(month(item.date)).costs += item.total
     })
-    source.expenses.forEach((item) => {
-      ensure(month(item.date)).costs += item.amount
+    grouped.forEach((values, key) => {
+      const monthStart = `${key}-01`
+      const date = new Date(`${monthStart}T00:00:00Z`)
+      const monthEnd = new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
+      )
+        .toISOString()
+        .slice(0, 10)
+      values.costs += source.expenses.reduce(
+        (sum, item) => sum + allocatedExpense(item, monthStart, monthEnd),
+        0,
+      )
     })
     return [...grouped.entries()]
       .sort(([left], [right]) => right.localeCompare(left))
@@ -212,8 +259,12 @@ export function ReportsPage() {
       values.costs,
     ]),
   )
-  const allTakingDays = new Set(source.takings.map((item) => item.date)).size
-  const allRealTakings = source.takings.reduce(
+  const currentYearStart = `${new Date().getFullYear()}-01-01`
+  const yearTakings = source.takings.filter((item) =>
+    inRange(item.date, currentYearStart, today()),
+  )
+  const allTakingDays = new Set(yearTakings.map((item) => item.date)).size
+  const allRealTakings = yearTakings.reduce(
     (sum, item) => sum + realTaking(item),
     0,
   )
@@ -223,7 +274,35 @@ export function ReportsPage() {
   const seasonEnd = source.company?.seasonEndDate ?? defaultSeasonEnd
   const remainingDays =
     seasonEnd >= today() ? businessDaysBetween(today(), seasonEnd) : 0
-  const seasonForecast = allRealTakings + averageDailyTaking * remainingDays
+  const yearCosts =
+    source.invoices
+      .filter((item) => inRange(item.date, currentYearStart, today()))
+      .reduce((sum, item) => sum + item.total, 0) +
+    source.rentals
+      .filter((item) => inRange(item.date, currentYearStart, today()))
+      .reduce((sum, item) => sum + item.total, 0) +
+    source.accountantInvoices
+      .filter((item) => inRange(item.date, currentYearStart, today()))
+      .reduce((sum, item) => sum + item.total, 0) +
+    source.expenses.reduce(
+      (sum, item) => sum + allocatedExpense(item, currentYearStart, today()),
+      0,
+    )
+  const futureFixedCosts =
+    seasonEnd >= today()
+      ? source.expenses
+          .filter((item) => item.recurrence === 'monthly')
+          .reduce(
+            (sum, item) =>
+              sum + allocatedExpense(item, addDays(today(), 1), seasonEnd),
+            0,
+          )
+      : 0
+  const seasonForecast =
+    allRealTakings +
+    averageDailyTaking * remainingDays -
+    yearCosts -
+    futureFixedCosts
 
   return (
     <div className="page-stack">
@@ -262,6 +341,11 @@ export function ReportsPage() {
         <ReportCard label="Non dichiarato" value={undeclared} tone="violet" />
         <ReportCard label="Costi totali" value={costs} tone="amber" />
         <ReportCard
+          label="Spese fisse ripartite"
+          value={fixedCosts}
+          tone="amber"
+        />
+        <ReportCard
           label="Utile ufficiale"
           value={official - costs}
           tone={official - costs >= 0 ? 'green' : 'red'}
@@ -284,10 +368,28 @@ export function ReportsPage() {
           tone="violet"
         />
         <ReportCard
-          label={`Pronostico al ${seasonEnd}`}
+          label={`Pronostico utile al ${seasonEnd}`}
           value={seasonForecast}
           tone="cyan"
         />
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">RIPARTIZIONE USCITE</span>
+            <h2>Costi del periodo selezionato</h2>
+          </div>
+        </div>
+        <div className="stats-strip expense-breakdown">
+          <div><span>Fatture fornitori</span><strong>{money(purchases)}</strong></div>
+          <div><span>Affitti</span><strong>{money(rents)}</strong></div>
+          <div><span>Fatture contabile</span><strong>{money(accountant)}</strong></div>
+          <div><span>Stipendi</span><strong>{money(expenseByType.stipendi)}</strong></div>
+          <div><span>Tasse</span><strong>{money(expenseByType.tasse)}</strong></div>
+          <div><span>Costi contabile</span><strong>{money(expenseByType.contabile)}</strong></div>
+          <div><span>Altre spese</span><strong>{money(expenseByType.altre)}</strong></div>
+        </div>
       </section>
 
       <section className="report-columns">

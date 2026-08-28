@@ -230,7 +230,9 @@ function mapAccountantInvoice(value: JsonRecord): AccountantInvoice {
 
 function mapExpense(value: JsonRecord): AccountingExpense {
   const type =
-    value.tipo === 'stipendio' || value.tipo === 'contabile'
+    value.tipo === 'stipendio' ||
+    value.tipo === 'contabile' ||
+    value.tipo === 'altra'
       ? value.tipo
       : 'tassa'
   return {
@@ -242,6 +244,8 @@ function mapExpense(value: JsonRecord): AccountingExpense {
     sellerName: text(value.venditoreNome),
     amount: amount(value.importo),
     date: text(value.data),
+    recurrence: value.ricorrenza === 'monthly' ? 'monthly' : 'once',
+    recurrenceEndDate: nullableText(value.dataFineRicorrenza),
     notes: text(value.note),
     settled: flag(value.pagata),
   }
@@ -275,7 +279,9 @@ export function normalizeStoredState(
 ): AppState | null {
   if (!isRecord(value)) return null
   if (
-    (value.schemaVersion === 2 || value.schemaVersion === 3) &&
+    (value.schemaVersion === 2 ||
+      value.schemaVersion === 3 ||
+      value.schemaVersion === 4) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -319,6 +325,7 @@ export function normalizeStoredState(
         ...seller,
         companyId: sellerCompanyId,
         accountingSellerId,
+        viberUserId: seller.viberUserId ?? '',
       }
     })
     const sellersById = new Map(sellers.map((seller) => [seller.id, seller]))
@@ -331,16 +338,22 @@ export function normalizeStoredState(
     }))
     return {
       ...state,
-      schemaVersion: 3,
+      schemaVersion: 4,
       stores,
       sellers,
       dataSettings: {
         ...state.dataSettings,
         language: state.dataSettings.language ?? 'it',
+        driveFolder: state.dataSettings.driveFolder ?? '',
       },
       accounting: {
         ...accounting,
         sellers: accountingSellers,
+        expenses: (accounting.expenses ?? []).map((expense) => ({
+          ...expense,
+          recurrence: expense.recurrence ?? 'once',
+          recurrenceEndDate: expense.recurrenceEndDate ?? null,
+        })),
       },
     }
   }
@@ -422,7 +435,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       data: state,
     },
@@ -546,6 +559,8 @@ export function exportLegacyAccounting(state: AccountingState) {
           venditoreNome: expense.sellerName,
           importo: expense.amount,
           data: expense.date,
+          ricorrenza: expense.recurrence,
+          dataFineRicorrenza: expense.recurrenceEndDate,
           note: expense.notes,
           pagata: expense.settled,
         })),

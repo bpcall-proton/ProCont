@@ -13,7 +13,7 @@ export function createId(prefix: string) {
 
 export function createInitialState(companyId = createId('company')): AppState {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     company: {
       id: companyId,
       name: 'La tua azienda',
@@ -37,6 +37,7 @@ export function createInitialState(companyId = createId('company')): AppState {
       mode: 'local',
       language: 'it',
       driveBackupAfterApproval: true,
+      driveFolder: '',
       imageRetentionDays: null,
     },
     accounting: createEmptyAccountingState(companyId),
@@ -85,6 +86,7 @@ export function createStoreWithSeller(input: {
     accountingSellerId: sellerId,
     name: input.sellerName.trim(),
     phone: input.sellerPhone.trim(),
+    viberUserId: '',
     whatsappEnabled: true,
     viberEnabled: true,
   }

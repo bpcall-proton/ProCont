@@ -27,6 +27,7 @@ export interface AppStoreContextValue {
   removeStore: (storeId: string) => void
   setDataMode: (mode: DataMode) => Promise<void>
   setDriveBackup: (enabled: boolean) => void
+  setDriveFolder: (folder: string) => void
   setImageRetention: (days: number | null) => void
   setLanguage: (language: InterfaceLanguage) => void
   updateAccounting: (

@@ -9,7 +9,8 @@ export type PaymentMethod =
   | 'Carta'
   | 'Assegno'
   | 'Altro'
-export type ExpenseType = 'tassa' | 'stipendio' | 'contabile'
+export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
+export type ExpenseRecurrence = 'once' | 'monthly'
 
 export interface SessionUser {
   id: string
@@ -32,6 +33,7 @@ export interface Seller {
   accountingSellerId: string
   name: string
   phone: string
+  viberUserId: string
   whatsappEnabled: boolean
   viberEnabled: boolean
 }
@@ -61,6 +63,7 @@ export interface DataSettings {
   mode: DataMode
   language: InterfaceLanguage
   driveBackupAfterApproval: boolean
+  driveFolder: string
   imageRetentionDays: number | null
 }
 
@@ -180,6 +183,8 @@ export interface AccountingExpense {
   sellerName: string
   amount: number
   date: string
+  recurrence: ExpenseRecurrence
+  recurrenceEndDate: string | null
   notes: string
   settled: boolean
 }
@@ -197,7 +202,7 @@ export interface AccountingState {
 }
 
 export interface AppState {
-  schemaVersion: 3
+  schemaVersion: 4
   company: Company
   stores: Store[]
   sellers: Seller[]

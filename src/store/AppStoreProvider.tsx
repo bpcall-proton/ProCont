@@ -297,6 +297,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           },
         }))
       },
+      setDriveFolder: (folder: string) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            driveFolder: folder,
+          },
+        }))
+      },
       setImageRetention: (days: number | null) => {
         updateState((current) => ({
           ...current,

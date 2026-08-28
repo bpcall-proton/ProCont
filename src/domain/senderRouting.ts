@@ -19,15 +19,20 @@ export function normalizeSenderPhone(value: string) {
 
 export function resolveSenderRoute(
   state: AppState,
-  senderPhone: string,
+  senderIdentifier: string,
   channel: MessageChannel,
 ): SenderRoute {
-  const phone = normalizeSenderPhone(senderPhone)
-  if (!phone) return { status: 'not-found' }
+  const identifier =
+    channel === 'whatsapp'
+      ? normalizeSenderPhone(senderIdentifier)
+      : senderIdentifier.trim()
+  if (!identifier) return { status: 'not-found' }
 
   const sellers = state.sellers.filter(
     (seller) =>
-      normalizeSenderPhone(seller.phone) === phone &&
+      (channel === 'whatsapp'
+        ? normalizeSenderPhone(seller.phone) === identifier
+        : seller.viberUserId === identifier) &&
       (channel === 'whatsapp'
         ? seller.whatsappEnabled
         : seller.viberEnabled),
