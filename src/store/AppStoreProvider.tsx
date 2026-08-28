@@ -13,10 +13,21 @@ import {
   createStoreWithSeller,
   updateCompany as patchCompany,
 } from '../domain/defaults'
-import type { AppState, Company, DataMode, SyncState } from '../domain/types'
+import type {
+  AppState,
+  Company,
+  DataMode,
+  InterfaceLanguage,
+  SyncState,
+} from '../domain/types'
 import { CloudRepository } from '../data/cloudRepository'
 import { LocalRepository } from '../data/localRepository'
 import type { AppRepository } from '../data/repository'
+import {
+  exportLegacyAccounting,
+  exportUnifiedState,
+  importLegacyIntoState,
+} from '../data/migrations'
 import {
   AppStoreContext,
   type AppStoreContextValue,
@@ -24,7 +35,30 @@ import {
 } from './AppStoreContext'
 
 function withTimestamp(state: AppState): AppState {
-  return { ...state, updatedAt: new Date().toISOString() }
+  const invoiceValue = state.accounting.invoices.reduce(
+    (total, invoice) => total + invoice.total,
+    0,
+  )
+  const theoreticalRevenue = state.accounting.invoices.reduce(
+    (total, invoice) => total + invoice.theoreticalRevenue,
+    0,
+  )
+  const realTakings = state.accounting.takings.reduce(
+    (total, taking) =>
+      total +
+      (taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos),
+    0,
+  )
+  return {
+    ...state,
+    financial: {
+      invoiceValue,
+      theoreticalRevenue,
+      realTakings,
+      stockRevenue: theoreticalRevenue - realTakings,
+    },
+    updatedAt: new Date().toISOString(),
+  }
 }
 
 function modePreferenceKey(companyId: string) {
@@ -155,6 +189,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         updateState((current) => ({
           ...current,
           company: patchCompany(current.company, patch),
+          accounting: {
+            ...current.accounting,
+            companies: current.accounting.companies.map((company) =>
+              company.id === current.accounting.activeCompanyId
+                ? {
+                    ...company,
+                    name: patch.name ?? company.name,
+                    taxId: patch.taxId ?? company.taxId,
+                  }
+                : company,
+            ),
+          },
         }))
       },
       addStore: (input: NewStoreInput) => {
@@ -231,6 +277,36 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           },
         }))
       },
+      setLanguage: (language: InterfaceLanguage) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            language,
+          },
+        }))
+      },
+      updateAccounting: (updater) => {
+        updateState((current) => ({
+          ...current,
+          accounting: updater(current.accounting),
+        }))
+      },
+      importLegacyData: (json: string) => {
+        try {
+          updateState((current) => importLegacyIntoState(current, json))
+          return { ok: true }
+        } catch (error) {
+          return {
+            ok: false,
+            error:
+              error instanceof Error ? error.message : 'Importazione fallita',
+          }
+        }
+      },
+      exportUnifiedData: () => exportUnifiedState(stateRef.current),
+      exportLegacyData: () =>
+        exportLegacyAccounting(stateRef.current.accounting),
     }),
     [
       cloudRepository,

@@ -1,7 +1,15 @@
 export type UserRole = 'owner' | 'accountant'
 export type DataMode = 'local' | 'cloud'
+export type InterfaceLanguage = 'it' | 'ro' | 'en'
 export type Locale = 'it' | 'ro' | 'en'
 export type SyncState = 'idle' | 'saving' | 'saved' | 'error'
+export type PaymentMethod =
+  | 'Bonifico'
+  | 'Contanti'
+  | 'Carta'
+  | 'Assegno'
+  | 'Altro'
+export type ExpenseType = 'tassa' | 'stipendio' | 'contabile'
 
 export interface SessionUser {
   id: string
@@ -48,17 +56,151 @@ export interface FinancialSummary {
 
 export interface DataSettings {
   mode: DataMode
+  language: InterfaceLanguage
   driveBackupAfterApproval: boolean
   imageRetentionDays: number | null
 }
 
+export interface AccountingCompany {
+  id: string
+  name: string
+  taxId: string
+  city: string
+  notes: string
+  seasonEndDate: string | null
+}
+
+export interface InvoicePayment {
+  id: string
+  date: string
+  amount: number
+  method: PaymentMethod
+}
+
+export interface AccountingInvoice {
+  id: string
+  companyId: string
+  number: string
+  supplierId: string | null
+  supplierName: string
+  sellerId: string | null
+  sellerName: string
+  description: string
+  category: string
+  taxableAmount: number
+  vat: number
+  theoreticalRevenue: number
+  total: number
+  date: string
+  dueDate: string
+  settled: boolean
+  paidAmount: number
+  payments: InvoicePayment[]
+  paymentDate: string | null
+  paymentMethod: PaymentMethod | null
+}
+
+export interface AccountingTaking {
+  id: string
+  companyId: string
+  date: string
+  sellerId: string | null
+  sellerName: string
+  cash: number
+  pos: number
+  withdrawal: number
+  vat: number
+  realTotal: number
+}
+
+export interface AccountingSeller {
+  id: string
+  companyId: string
+  name: string
+  email: string
+  phone: string
+  city: string
+  notes: string
+}
+
+export interface AccountingSupplier {
+  id: string
+  companyId: string
+  name: string
+  taxId: string
+  email: string
+  phone: string
+  city: string
+  notes: string
+}
+
+export interface Rental {
+  id: string
+  companyId: string
+  property: string
+  tenant: string
+  total: number
+  vatRate: number
+  taxableAmount: number
+  vat: number
+  date: string
+  period: string
+  settled: boolean
+  paidAmount: number
+  paymentDate: string | null
+  paymentMethod: PaymentMethod | null
+}
+
+export interface AccountantInvoice {
+  id: string
+  companyId: string
+  description: string
+  number: string
+  total: number
+  vatRate: number
+  taxableAmount: number
+  vat: number
+  date: string
+  dueDate: string
+  settled: boolean
+  paidAmount: number
+  paymentDate: string | null
+  paymentMethod: PaymentMethod | null
+}
+
+export interface AccountingExpense {
+  id: string
+  companyId: string
+  type: ExpenseType
+  description: string
+  sellerId: string | null
+  sellerName: string
+  amount: number
+  date: string
+  notes: string
+  settled: boolean
+}
+
+export interface AccountingState {
+  companies: AccountingCompany[]
+  activeCompanyId: string | null
+  invoices: AccountingInvoice[]
+  takings: AccountingTaking[]
+  sellers: AccountingSeller[]
+  suppliers: AccountingSupplier[]
+  rentals: Rental[]
+  accountantInvoices: AccountantInvoice[]
+  expenses: AccountingExpense[]
+}
+
 export interface AppState {
-  schemaVersion: 1
+  schemaVersion: 2
   company: Company
   stores: Store[]
   sellers: Seller[]
   review: ReviewSummary
   financial: FinancialSummary
   dataSettings: DataSettings
+  accounting: AccountingState
   updatedAt: string
 }

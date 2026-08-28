@@ -1,6 +1,7 @@
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'
 import type { AppState } from '../domain/types'
 import { firestore } from '../auth/firebase'
+import { normalizeStoredState } from './migrations'
 import {
   RepositoryUnavailableError,
   type AppRepository,
@@ -21,8 +22,7 @@ export class CloudRepository implements AppRepository {
   async load() {
     const snapshot = await getDoc(this.reference())
     if (!snapshot.exists()) return null
-    const state = snapshot.data() as AppState
-    return state.schemaVersion === 1 ? state : null
+    return normalizeStoredState(snapshot.data(), this.companyId)
   }
 
   async save(state: AppState) {
@@ -32,8 +32,8 @@ export class CloudRepository implements AppRepository {
   subscribe(listener: (state: AppState) => void) {
     return onSnapshot(this.reference(), (snapshot) => {
       if (!snapshot.exists()) return
-      const state = snapshot.data() as AppState
-      if (state.schemaVersion === 1) listener(state)
+      const state = normalizeStoredState(snapshot.data(), this.companyId)
+      if (state) listener(state)
     })
   }
 }

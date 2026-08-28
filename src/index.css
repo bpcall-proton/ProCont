@@ -1169,3 +1169,412 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+
+.accounting-heading {
+  gap: 28px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.import-message {
+  margin: 14px 0 0;
+  padding: 11px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 10px;
+  color: var(--cyan);
+  background: var(--cyan-soft);
+  font-size: 0.78rem;
+}
+
+.company-switcher {
+  min-width: min(100%, 420px);
+  display: grid;
+  gap: 9px;
+}
+
+.company-switcher form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.section-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 7px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(13, 18, 32, 0.78);
+}
+
+.section-tabs button {
+  min-width: max-content;
+  padding: 10px 15px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+}
+
+.section-tabs button:hover,
+.section-tabs button.active {
+  border-color: rgba(0, 229, 255, 0.3);
+  color: var(--text);
+  background: var(--cyan-soft);
+}
+
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-strip > div {
+  display: grid;
+  gap: 7px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(19, 27, 46, 0.95), rgba(9, 14, 27, 0.9));
+}
+
+.stats-strip span,
+.record-card small,
+.compact-form small,
+.data-table small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.stats-strip strong {
+  font-size: clamp(1rem, 2vw, 1.35rem);
+}
+
+.accounting-form,
+.payment-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.accounting-fields {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.checkbox-row input {
+  width: 17px;
+  height: 17px;
+}
+
+.compact-form,
+.payment-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(120px, 0.7fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.compact-form > div,
+.payment-panel > div {
+  display: grid;
+  gap: 5px;
+  align-self: center;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.table-toolbar h2,
+.panel > h2 {
+  margin: 0 0 15px;
+}
+
+.data-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.data-table td {
+  font-size: 0.83rem;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+.row-actions button,
+.record-card button {
+  padding: 4px 7px;
+  border: 0;
+  color: var(--cyan);
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+.record-status {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.record-status.paid {
+  color: var(--success);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.record-status.open {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.contact-columns,
+.report-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.expense-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.inline-create-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.vertical-form {
+  grid-template-columns: 1fr;
+}
+
+.record-list {
+  display: grid;
+  gap: 8px;
+}
+
+.record-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.record-card > span {
+  display: grid;
+  gap: 4px;
+}
+
+.record-card > span:last-child {
+  justify-items: end;
+}
+
+.report-filter {
+  display: flex;
+  gap: 9px;
+}
+
+.report-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-card {
+  display: grid;
+  gap: 8px;
+  min-height: 104px;
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(19, 27, 46, 0.82);
+}
+
+.report-card span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.report-card strong {
+  font-size: 1.08rem;
+}
+
+.report-green strong { color: var(--success); }
+.report-cyan strong { color: var(--cyan); }
+.report-violet strong { color: var(--lavender); }
+.report-amber strong { color: var(--warning); }
+.report-red strong { color: var(--error); }
+
+.monthly-chart {
+  display: grid;
+  gap: 13px;
+}
+
+.month-row {
+  display: grid;
+  grid-template-columns: 70px minmax(160px, 1fr) minmax(260px, auto);
+  align-items: center;
+  gap: 15px;
+}
+
+.bar-track {
+  position: relative;
+  height: 30px;
+  border-radius: 7px;
+  background: rgba(7, 11, 22, 0.8);
+  overflow: hidden;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 0 5px 5px 0;
+}
+
+.bar.official {
+  top: 1px;
+  background: var(--success);
+}
+
+.bar.real {
+  top: 11px;
+  background: var(--cyan);
+}
+
+.bar.costs {
+  top: 21px;
+  background: var(--warning);
+}
+
+@media (max-width: 1250px) {
+  .accounting-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .report-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .expense-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .stats-strip,
+  .report-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accounting-fields,
+  .contact-columns,
+  .report-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-form,
+  .payment-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .month-row {
+    grid-template-columns: 60px minmax(140px, 1fr);
+  }
+
+  .month-row small {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .sidebar nav {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar nav button {
+    min-width: 78px;
+    flex: 1 0 78px;
+  }
+
+  .stats-strip,
+  .report-kpis,
+  .compact-form,
+  .payment-panel,
+  .company-switcher form {
+    grid-template-columns: 1fr;
+  }
+
+  .record-card,
+  .report-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .record-card > span:last-child {
+    justify-items: start;
+  }
+}

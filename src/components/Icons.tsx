@@ -76,3 +76,19 @@ export function DeviceIcon(props: IconProps) {
     </Svg>
   )
 }
+
+export function AccountingIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5 3h14v18H5V3Zm3 4h8M8 11h2m4 0h2M8 15h2m4 0h2" />
+    </Svg>
+  )
+}
+
+export function ReportsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 20V9m6 11V4m6 16v-7m4 7H2" />
+    </Svg>
+  )
+}

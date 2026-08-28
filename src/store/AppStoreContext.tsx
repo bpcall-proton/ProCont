@@ -1,8 +1,10 @@
 import { createContext, useContext } from 'react'
 import type {
+  AccountingState,
   AppState,
   Company,
   DataMode,
+  InterfaceLanguage,
   SyncState,
 } from '../domain/types'
 
@@ -25,6 +27,13 @@ export interface AppStoreContextValue {
   setDataMode: (mode: DataMode) => Promise<void>
   setDriveBackup: (enabled: boolean) => void
   setImageRetention: (days: number | null) => void
+  setLanguage: (language: InterfaceLanguage) => void
+  updateAccounting: (
+    updater: (accounting: AccountingState) => AccountingState,
+  ) => void
+  importLegacyData: (json: string) => { ok: boolean; error?: string }
+  exportUnifiedData: () => string
+  exportLegacyData: () => string
 }
 
 export const AppStoreContext = createContext<AppStoreContextValue | null>(null)

@@ -1,4 +1,10 @@
-import type { AppState, Company, Seller, Store } from './types'
+import type {
+  AccountingState,
+  AppState,
+  Company,
+  Seller,
+  Store,
+} from './types'
 
 export function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
@@ -6,7 +12,7 @@ export function createId(prefix: string) {
 
 export function createInitialState(companyId = createId('company')): AppState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     company: {
       id: companyId,
       name: 'La tua azienda',
@@ -28,10 +34,35 @@ export function createInitialState(companyId = createId('company')): AppState {
     },
     dataSettings: {
       mode: 'local',
+      language: 'it',
       driveBackupAfterApproval: true,
       imageRetentionDays: null,
     },
+    accounting: createEmptyAccountingState(companyId),
     updatedAt: new Date().toISOString(),
+  }
+}
+
+export function createEmptyAccountingState(companyId: string): AccountingState {
+  return {
+    companies: [
+      {
+        id: companyId,
+        name: 'La tua azienda',
+        taxId: '',
+        city: '',
+        notes: '',
+        seasonEndDate: null,
+      },
+    ],
+    activeCompanyId: companyId,
+    invoices: [],
+    takings: [],
+    sellers: [],
+    suppliers: [],
+    rentals: [],
+    accountantInvoices: [],
+    expenses: [],
   }
 }
 

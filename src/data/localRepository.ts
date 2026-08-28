@@ -1,17 +1,9 @@
 import type { AppState } from '../domain/types'
+import { normalizeStoredState } from './migrations'
 import type { AppRepository } from './repository'
 
 const DATABASE_NAME = 'fatture-incassi-pro'
 const STORE_NAME = 'application-state'
-
-function validState(value: unknown): value is AppState {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'schemaVersion' in value &&
-    value.schemaVersion === 1
-  )
-}
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -32,7 +24,7 @@ async function loadFromIndexedDb(companyId: string) {
     const transaction = database.transaction(STORE_NAME, 'readonly')
     const request = transaction.objectStore(STORE_NAME).get(companyId)
     request.onsuccess = () =>
-      resolve(validState(request.result) ? request.result : null)
+      resolve(normalizeStoredState(request.result, companyId))
     request.onerror = () => {
       database.close()
       reject(request.error)
@@ -68,7 +60,7 @@ export class LocalRepository implements AppRepository {
       if (!raw) return null
       try {
         const parsed: unknown = JSON.parse(raw)
-        return validState(parsed) ? parsed : null
+        return normalizeStoredState(parsed, this.companyId)
       } catch {
         return null
       }

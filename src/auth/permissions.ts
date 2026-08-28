@@ -5,6 +5,8 @@ export type Permission =
   | 'viewStores'
   | 'manageStores'
   | 'reviewDocuments'
+  | 'manageAccounting'
+  | 'viewReports'
   | 'manageSettings'
 
 const permissions: Record<UserRole, ReadonlySet<Permission>> = {
@@ -13,12 +15,16 @@ const permissions: Record<UserRole, ReadonlySet<Permission>> = {
     'viewStores',
     'manageStores',
     'reviewDocuments',
+    'manageAccounting',
+    'viewReports',
     'manageSettings',
   ]),
   accountant: new Set([
     'viewDashboard',
     'viewStores',
     'reviewDocuments',
+    'manageAccounting',
+    'viewReports',
   ]),
 }
 

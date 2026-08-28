@@ -3,8 +3,10 @@ import { AuthProvider } from './auth/AuthProvider'
 import { useAuth } from './auth/AuthContext'
 import { can, type Permission } from './auth/permissions'
 import {
+  AccountingIcon,
   DashboardIcon,
   LogoutIcon,
+  ReportsIcon,
   ScanIcon,
   SettingsIcon,
   StoreIcon,
@@ -12,42 +14,71 @@ import {
 import { Logo } from './components/Logo'
 import { DataModeBadge, SyncBadge } from './components/StatusBadge'
 import { DashboardPage } from './pages/DashboardPage'
+import { AccountingPage } from './pages/AccountingPage'
 import { LoginPage } from './pages/LoginPage'
 import { ReviewPage } from './pages/ReviewPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StoresPage } from './pages/StoresPage'
+import type { InterfaceLanguage } from './domain/types'
 import { AppStoreProvider } from './store/AppStoreProvider'
 import { useAppStore } from './store/AppStoreContext'
 
-type Page = 'dashboard' | 'stores' | 'review' | 'settings'
+type Page =
+  | 'dashboard'
+  | 'accounting'
+  | 'reports'
+  | 'stores'
+  | 'review'
+  | 'settings'
 
 const navigation: {
   id: Page
-  label: string
+  label: Record<InterfaceLanguage, string>
   icon: typeof DashboardIcon
   permission: Permission
 }[] = [
   {
     id: 'dashboard',
-    label: 'Panoramica',
+    label: { it: 'Panoramica', ro: 'Prezentare', en: 'Overview' },
     icon: DashboardIcon,
     permission: 'viewDashboard',
   },
   {
+    id: 'accounting',
+    label: { it: 'Contabilità', ro: 'Contabilitate', en: 'Accounting' },
+    icon: AccountingIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'reports',
+    label: { it: 'Statistiche', ro: 'Statistici', en: 'Reports' },
+    icon: ReportsIcon,
+    permission: 'viewReports',
+  },
+  {
     id: 'stores',
-    label: 'Punti vendita',
+    label: {
+      it: 'Punti vendita',
+      ro: 'Puncte de vânzare',
+      en: 'Stores',
+    },
     icon: StoreIcon,
     permission: 'viewStores',
   },
   {
     id: 'review',
-    label: 'Foto in arrivo',
+    label: {
+      it: 'Foto in arrivo',
+      ro: 'Fotografii primite',
+      en: 'Incoming photos',
+    },
     icon: ScanIcon,
     permission: 'reviewDocuments',
   },
   {
     id: 'settings',
-    label: 'Impostazioni',
+    label: { it: 'Impostazioni', ro: 'Setări', en: 'Settings' },
     icon: SettingsIcon,
     permission: 'manageSettings',
   },
@@ -57,6 +88,7 @@ function Workspace() {
   const { user, signOut } = useAuth()
   const { state, loading, syncState, syncMessage } = useAppStore()
   const [page, setPage] = useState<Page>('dashboard')
+  const language = state.dataSettings.language
 
   if (loading) {
     return (
@@ -69,6 +101,8 @@ function Workspace() {
 
   const pages = {
     dashboard: <DashboardPage />,
+    accounting: <AccountingPage />,
+    reports: <ReportsPage />,
     stores: <StoresPage />,
     review: <ReviewPage />,
     settings: <SettingsPage />,
@@ -91,7 +125,7 @@ function Workspace() {
               type="button"
             >
               <Icon />
-              <span>{label}</span>
+              <span>{label[language]}</span>
               {id === 'review' &&
                 state.review.pending + state.review.unrecognized > 0 && (
                   <small>
@@ -108,14 +142,28 @@ function Workspace() {
             </span>
             <span>
               <strong>
-                {user?.role === 'owner' ? 'Titolare' : 'Contabile'}
+                {user?.role === 'owner'
+                  ? language === 'it'
+                    ? 'Titolare'
+                    : language === 'ro'
+                      ? 'Proprietar'
+                      : 'Owner'
+                  : language === 'it'
+                    ? 'Contabile'
+                    : language === 'ro'
+                      ? 'Contabil'
+                      : 'Accountant'}
               </strong>
               <small>{user?.preview ? 'Anteprima locale' : user?.email}</small>
             </span>
           </div>
           <button className="logout-button" onClick={signOut} type="button">
             <LogoutIcon />
-            Esci
+            {language === 'it'
+              ? 'Esci'
+              : language === 'ro'
+                ? 'Ieșire'
+                : 'Sign out'}
           </button>
         </div>
       </aside>
