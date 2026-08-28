@@ -611,6 +611,7 @@ select {
 .page-stack {
   display: grid;
   gap: 28px;
+  min-width: 0;
 }
 
 .page-heading {
@@ -694,6 +695,7 @@ select {
 }
 
 .panel {
+  min-width: 0;
   padding: 24px;
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1320,6 +1322,8 @@ select {
 }
 
 .data-table-wrap {
+  min-width: 0;
+  max-width: 100%;
   width: 100%;
   overflow-x: auto;
 }

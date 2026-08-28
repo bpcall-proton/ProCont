@@ -314,6 +314,32 @@ export function importLegacyIntoState(
     accounting.companies.find(
       (company) => company.id === accounting.activeCompanyId,
     ) ?? accounting.companies[0]
+  const mergeById = <Item extends { id: string }>(
+    existing: Item[],
+    imported: Item[],
+  ) => {
+    const merged = new Map(existing.map((item) => [item.id, item]))
+    imported.forEach((item) => merged.set(item.id, item))
+    return [...merged.values()]
+  }
+  const mergedAccounting: AccountingState = {
+    companies: mergeById(
+      current.accounting.companies,
+      accounting.companies,
+    ),
+    activeCompanyId:
+      accounting.activeCompanyId ?? current.accounting.activeCompanyId,
+    invoices: mergeById(current.accounting.invoices, accounting.invoices),
+    takings: mergeById(current.accounting.takings, accounting.takings),
+    sellers: mergeById(current.accounting.sellers, accounting.sellers),
+    suppliers: mergeById(current.accounting.suppliers, accounting.suppliers),
+    rentals: mergeById(current.accounting.rentals, accounting.rentals),
+    accountantInvoices: mergeById(
+      current.accounting.accountantInvoices,
+      accounting.accountantInvoices,
+    ),
+    expenses: mergeById(current.accounting.expenses, accounting.expenses),
+  }
   return {
     ...current,
     company: active
@@ -323,7 +349,7 @@ export function importLegacyIntoState(
           taxId: active.taxId,
         }
       : current.company,
-    accounting,
+    accounting: mergedAccounting,
   }
 }
 
