@@ -78,9 +78,10 @@ commerciali, direttamente tramite Rakuten Viber o un partner ufficiale.
 5. L'endpoint deve rispondere HTTP 200 anche al callback iniziale di verifica.
 6. Nei messaggi immagine scarica subito il contenuto dal riferimento media,
    verifica tipo e dimensione e conserva la fotografia originale.
-7. Viber espone `sender.id`, non il numero telefonico. Al primo messaggio
-   l'amministratore deve associare quell'ID alla ragazza corretta; da quel
-   momento il routing determina bar e azienda.
+7. Viber espone `sender.id`, non il numero telefonico. Al primo messaggio,
+   copia questo valore nel campo **ID utente Viber** della venditrice corretta
+   nella pagina **Punti vendita**; da quel momento il routing determina bar e
+   azienda.
 8. Mittenti non collegati o duplicati devono restare nella coda di revisione.
 9. Il webhook deve rispondere entro 5 secondi; OCR e analisi vanno eseguiti in
    coda asincrona.

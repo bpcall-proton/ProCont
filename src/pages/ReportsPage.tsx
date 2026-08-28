@@ -21,7 +21,16 @@ function rangeFor(period: Period, selected: string) {
   }
   if (period === 'year') {
     const year = date.getUTCFullYear()
-    return { start: `${year}-01-01`, end: `${year}-12-31` }
+    const current = new Date(`${today()}T00:00:00Z`)
+    const end =
+      year === current.getUTCFullYear()
+        ? new Date(
+            Date.UTC(year, current.getUTCMonth() + 1, 0),
+          )
+            .toISOString()
+            .slice(0, 10)
+        : `${year}-12-31`
+    return { start: `${year}-01-01`, end }
   }
   if (period === 'month') {
     const year = date.getUTCFullYear()

@@ -227,6 +227,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               'Questo numero è già assegnato: ogni ragazza deve identificare un solo punto vendita',
           }
         }
+        const viberUserId = input.sellerViberUserId.trim()
+        if (
+          viberUserId &&
+          stateRef.current.sellers.some(
+            (seller) => seller.viberUserId === viberUserId,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              'Questo ID Viber è già assegnato a un altro punto vendita',
+          }
+        }
         const { store, seller, accountingSeller } =
           createStoreWithSeller(input)
         updateState((current) => ({
@@ -237,6 +250,30 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             ...current.accounting,
             sellers: [...current.accounting.sellers, accountingSeller],
           },
+        }))
+        return { ok: true }
+      },
+      setSellerViberUserId: (sellerId: string, value: string) => {
+        const viberUserId = value.trim()
+        if (
+          viberUserId &&
+          stateRef.current.sellers.some(
+            (seller) =>
+              seller.id !== sellerId &&
+              seller.viberUserId === viberUserId,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              'Questo ID Viber è già assegnato a un altro punto vendita',
+          }
+        }
+        updateState((current) => ({
+          ...current,
+          sellers: current.sellers.map((seller) =>
+            seller.id === sellerId ? { ...seller, viberUserId } : seller,
+          ),
         }))
         return { ok: true }
       },

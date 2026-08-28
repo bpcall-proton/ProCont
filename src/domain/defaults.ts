@@ -74,6 +74,7 @@ export function createStoreWithSeller(input: {
   city: string
   sellerName: string
   sellerPhone: string
+  sellerViberUserId: string
 }): {
   store: Store
   seller: Seller
@@ -86,7 +87,7 @@ export function createStoreWithSeller(input: {
     accountingSellerId: sellerId,
     name: input.sellerName.trim(),
     phone: input.sellerPhone.trim(),
-    viberUserId: '',
+    viberUserId: input.sellerViberUserId.trim(),
     whatsappEnabled: true,
     viberEnabled: true,
   }

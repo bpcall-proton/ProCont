@@ -902,6 +902,12 @@ select {
   font-size: 0.7rem;
 }
 
+.viber-pairing {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
 .mode-options {
   display: grid;
   grid-template-columns: 1fr 1fr;

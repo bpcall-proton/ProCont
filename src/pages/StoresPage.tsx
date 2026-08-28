@@ -9,16 +9,18 @@ const emptyForm = {
   city: '',
   sellerName: '',
   sellerPhone: '',
+  sellerViberUserId: '',
 }
 
 export function StoresPage() {
   const { user } = useAuth()
-  const { state, addStore, removeStore } = useAppStore()
+  const { state, addStore, removeStore, setSellerViberUserId } = useAppStore()
   const [form, setForm] = useState(() => ({
     ...emptyForm,
     companyId: state.accounting.activeCompanyId ?? '',
   }))
   const [error, setError] = useState('')
+  const [viberDrafts, setViberDrafts] = useState<Record<string, string>>({})
   const canEdit = user ? can(user.role, 'manageStores') : false
 
   function submit(event: FormEvent) {
@@ -104,7 +106,7 @@ export function StoresPage() {
               />
             </label>
             <label>
-              Telefono WhatsApp/Viber
+              Telefono WhatsApp
               <input
                 onChange={(event) =>
                   setForm({ ...form, sellerPhone: event.target.value })
@@ -113,6 +115,19 @@ export function StoresPage() {
                 required
                 type="tel"
                 value={form.sellerPhone}
+              />
+            </label>
+            <label>
+              ID utente Viber (facoltativo)
+              <input
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    sellerViberUserId: event.target.value,
+                  })
+                }
+                placeholder="sender.id ricevuto dal bot"
+                value={form.sellerViberUserId}
               />
             </label>
           </div>
@@ -151,6 +166,36 @@ export function StoresPage() {
                 <strong>{seller?.name}</strong>
                 <small>{seller?.phone}</small>
               </div>
+              {canEdit && seller && (
+                <div className="viber-pairing">
+                  <label>
+                    ID utente Viber
+                    <input
+                      onChange={(event) =>
+                        setViberDrafts({
+                          ...viberDrafts,
+                          [seller.id]: event.target.value,
+                        })
+                      }
+                      placeholder="sender.id ricevuto dal bot"
+                      value={viberDrafts[seller.id] ?? seller.viberUserId}
+                    />
+                  </label>
+                  <button
+                    className="button button-secondary"
+                    onClick={() => {
+                      const result = setSellerViberUserId(
+                        seller.id,
+                        viberDrafts[seller.id] ?? seller.viberUserId,
+                      )
+                      setError(result.error ?? '')
+                    }}
+                    type="button"
+                  >
+                    Salva collegamento Viber
+                  </button>
+                </div>
+              )}
               {canEdit && (
                 <button
                   className="text-button danger-text"

@@ -14,6 +14,7 @@ export interface NewStoreInput {
   city: string
   sellerName: string
   sellerPhone: string
+  sellerViberUserId: string
 }
 
 export interface AppStoreContextValue {
@@ -24,6 +25,10 @@ export interface AppStoreContextValue {
   cloudAvailable: boolean
   updateCompany: (patch: Partial<Company>) => void
   addStore: (input: NewStoreInput) => { ok: boolean; error?: string }
+  setSellerViberUserId: (
+    sellerId: string,
+    viberUserId: string,
+  ) => { ok: boolean; error?: string }
   removeStore: (storeId: string) => void
   setDataMode: (mode: DataMode) => Promise<void>
   setDriveBackup: (enabled: boolean) => void
