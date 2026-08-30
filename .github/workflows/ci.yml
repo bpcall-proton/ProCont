@@ -92,9 +92,10 @@ jobs:
 
       - name: Prepare Android APK
         run: |
+          version="$(node -p "require('./package.json').version")"
           mkdir -p release/mobile
           cp android/app/build/outputs/apk/debug/app-debug.apk \
-            release/mobile/Fatture-Incassi-Pro-0.1.0-Android.apk
+            "release/mobile/Fatture-Incassi-Pro-${version}-Android.apk"
 
       - name: Upload Android APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
