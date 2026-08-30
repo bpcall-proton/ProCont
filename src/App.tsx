@@ -127,6 +127,9 @@ function Workspace() {
   const activeStores = activeCompany
     ? state.stores.filter((store) => store.companyId === activeCompany.id).length
     : 0
+  const hasActiveReviewDocuments = state.reviewDocuments.some(
+    (document) => document.companyId === activeCompany?.id,
+  )
 
   useEffect(() => {
     if (
@@ -134,20 +137,15 @@ function Workspace() {
       !reviewPresented.current &&
       user &&
       can(user.role, 'reviewDocuments') &&
-      state.reviewDocuments.length > 0
+      hasActiveReviewDocuments
     ) {
       reviewPresented.current = true
-      const reviewCompanyId = state.reviewDocuments[0].companyId
-      if (reviewCompanyId !== state.accounting.activeCompanyId) {
-        setActiveAccountingCompany(reviewCompanyId)
-      }
       setPage('review')
     }
   }, [
     loading,
     state.accounting.activeCompanyId,
-    state.reviewDocuments,
-    setActiveAccountingCompany,
+    hasActiveReviewDocuments,
     user,
   ])
 
