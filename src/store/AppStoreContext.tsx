@@ -6,6 +6,7 @@ import type {
   Company,
   DataMode,
   InterfaceLanguage,
+  ReviewDocument,
   SyncState,
 } from '../domain/types'
 
@@ -48,6 +49,9 @@ export interface AppStoreContextValue {
   setLanguage: (language: InterfaceLanguage) => void
   updateAccounting: (
     updater: (accounting: AccountingState) => AccountingState,
+  ) => void
+  updateReviewDocuments: (
+    updater: (documents: ReviewDocument[]) => ReviewDocument[],
   ) => void
   importLegacyData: (json: string) => { ok: boolean; error?: string }
   exportUnifiedData: () => string

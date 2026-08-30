@@ -53,8 +53,20 @@ function withTimestamp(state: AppState): AppState {
       (taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos),
     0,
   )
+  const review = state.reviewDocuments.reduce(
+    (summary, document) => {
+      if (document.status === 'pending') summary.pending += 1
+      if (document.status === 'unrecognized') summary.unrecognized += 1
+      if (document.status === 'possible-duplicate') {
+        summary.possibleDuplicates += 1
+      }
+      return summary
+    },
+    { pending: 0, unrecognized: 0, possibleDuplicates: 0 },
+  )
   return {
     ...state,
+    review,
     financial: {
       invoiceValue,
       theoreticalRevenue,
@@ -494,6 +506,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         updateState((current) => ({
           ...current,
           accounting: updater(current.accounting),
+        }))
+      },
+      updateReviewDocuments: (updater) => {
+        updateState((current) => ({
+          ...current,
+          reviewDocuments: updater(current.reviewDocuments),
         }))
       },
       importLegacyData: (json: string) => {

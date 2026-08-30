@@ -827,6 +827,115 @@ select {
   min-height: 460px;
 }
 
+.photo-upload {
+  cursor: pointer;
+}
+
+.photo-upload input {
+  display: none;
+}
+
+.review-document-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.review-document-card {
+  display: grid;
+  gap: 18px;
+}
+
+.review-photo-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.review-photo-strip img {
+  width: 145px;
+  height: 175px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.review-photo-strip.large img {
+  width: min(320px, 78vw);
+  height: 390px;
+}
+
+.review-document-body {
+  display: grid;
+  gap: 16px;
+}
+
+.review-document-body > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-document-body small {
+  color: var(--muted);
+}
+
+.review-document-body dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.review-document-body dl div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.review-document-body dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.review-document-body dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.danger-button {
+  color: #fecdd3;
+  border-color: rgba(244, 63, 94, 0.28);
+  background: rgba(244, 63, 94, 0.1);
+}
+
+.record-status.unrecognized,
+.record-status.possible-duplicate {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.record-status.pending {
+  color: #fde047;
+  background: rgba(250, 204, 21, 0.16);
+}
+
+.review-entry {
+  scroll-margin-top: 20px;
+}
+
 .empty-icon {
   width: 74px;
   height: 74px;
@@ -1112,6 +1221,10 @@ select {
   .store-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .review-document-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -1374,10 +1487,54 @@ select {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.product-fields {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.wide-field {
+  grid-column: span 2;
+}
+
+.product-table {
+  min-width: 860px;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+.invoice-lines-editor {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(6, 8, 16, 0.36);
+}
+
+.invoice-lines-editor .panel-heading {
+  margin: 0;
+}
+
+.invoice-lines-editor .panel-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.invoice-lines-editor small {
+  color: var(--muted);
+}
+
+.invoice-line-form {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr repeat(3, minmax(110px, 0.65fr)) auto;
+  gap: 9px;
+}
+
+.invoice-lines-table {
+  min-width: 720px;
 }
 
 .checkbox-row input {
@@ -1705,6 +1862,10 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .product-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .report-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1721,13 +1882,19 @@ select {
   }
 
   .accounting-fields,
+  .product-fields,
   .contact-columns,
   .report-columns {
     grid-template-columns: 1fr;
   }
 
+  .wide-field {
+    grid-column: auto;
+  }
+
   .compact-form,
-  .payment-panel {
+  .payment-panel,
+  .invoice-line-form {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1756,6 +1923,7 @@ select {
   .report-kpis,
   .compact-form,
   .payment-panel,
+  .invoice-line-form,
   .company-switcher form {
     grid-template-columns: 1fr;
   }
@@ -1779,5 +1947,15 @@ select {
 
   .record-card > span:last-child {
     justify-items: start;
+  }
+
+  .review-document-body > div:first-child,
+  .page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .review-document-body dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

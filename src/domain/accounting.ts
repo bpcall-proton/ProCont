@@ -1,6 +1,7 @@
 import type {
   AccountingInvoice,
   AccountingExpense,
+  AccountingProduct,
   AccountingState,
   AccountingTaking,
 } from './types'
@@ -44,6 +45,22 @@ export function money(value: number) {
 
 export function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+export function markupPercentage(costInclVat: number, saleInclVat: number) {
+  if (costInclVat <= 0) return 0
+  return roundMoney(((saleInclVat - costInclVat) / costInclVat) * 100)
+}
+
+export function productSalePrice(
+  product: AccountingProduct,
+  purchaseCostInclVat = product.purchaseCostInclVat,
+) {
+  if (product.pricingMode === 'sale-price') return product.salePriceInclVat
+  if (product.pricingMode === 'markup') {
+    return roundMoney(purchaseCostInclVat * (1 + product.markupPercent / 100))
+  }
+  return 0
 }
 
 export function splitVat(total: number, rate: number) {
@@ -129,6 +146,7 @@ export function activeAccounting(state: AccountingState) {
     takings: state.takings.filter((item) => item.companyId === id),
     sellers: state.sellers.filter((item) => item.companyId === id),
     suppliers: state.suppliers.filter((item) => item.companyId === id),
+    products: state.products.filter((item) => item.companyId === id),
     rentals: state.rentals.filter((item) => item.companyId === id),
     accountantInvoices: state.accountantInvoices.filter(
       (item) => item.companyId === id,

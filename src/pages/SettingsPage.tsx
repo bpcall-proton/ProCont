@@ -171,7 +171,17 @@ export function SettingsPage() {
 
   function exportCsv() {
     const lines = [
-      ['TIPO', 'DATA', 'NUMERO', 'NOME', 'IMPONIBILE', 'IVA', 'TOTALE', 'VENIT'],
+      [
+        'TIPO',
+        'DATA',
+        'NUMERO',
+        'NOME',
+        'IMPONIBILE',
+        'IVA',
+        'TOTALE',
+        'VENIT',
+        'RICARICO %',
+      ],
       ...state.accounting.invoices.map((invoice) => [
         'FATTURA',
         invoice.date,
@@ -181,6 +191,7 @@ export function SettingsPage() {
         invoice.vat,
         invoice.total,
         invoice.theoreticalRevenue,
+        invoice.markupPercent,
       ]),
       ...state.accounting.takings.map((taking) => [
         'INCASSO',
@@ -191,6 +202,7 @@ export function SettingsPage() {
         taking.vat,
         taking.cash + taking.pos,
         taking.realTotal,
+        '',
       ]),
     ]
     download(
@@ -215,11 +227,50 @@ export function SettingsPage() {
           IVA: invoice.vat,
           Totale: invoice.total,
           Venit: invoice.theoreticalRevenue,
+          'Ricarico %': invoice.markupPercent,
+          'Righe prodotto': invoice.lines.length,
           Pagata: invoice.settled ? 'Sì' : 'No',
           Residuo: Math.max(0, invoice.total - invoice.paidAmount),
         })),
       ),
       'Fatture',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        state.accounting.invoices.flatMap((invoice) =>
+          invoice.lines.map((line) => ({
+            Fattura: invoice.number,
+            Data: invoice.date,
+            Fornitore: invoice.supplierName,
+            Codice: line.productCode,
+            Prodotto: line.description,
+            Quantità: line.quantity,
+            'Costo unitario IVA inclusa': line.unitPurchaseCostInclVat,
+            'Costo totale IVA inclusa': line.purchaseTotalInclVat,
+            'Vendita unitaria IVA inclusa': line.unitSalePriceInclVat,
+            'Venit totale IVA inclusa': line.saleTotalInclVat,
+            'Ricarico %': line.markupPercent,
+          })),
+        ),
+      ),
+      'Righe fatture',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        state.accounting.products.map((product) => ({
+          Prodotto: product.name,
+          Codice: product.code,
+          Fornitore: product.supplierName,
+          'Costo IVA inclusa': product.purchaseCostInclVat,
+          'Regola venit': product.pricingMode,
+          'Vendita IVA inclusa': product.salePriceInclVat,
+          'Ricarico %': product.markupPercent,
+          Note: product.notes,
+        })),
+      ),
+      'Prodotti',
     )
     XLSX.utils.book_append_sheet(
       workbook,

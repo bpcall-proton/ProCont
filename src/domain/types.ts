@@ -11,6 +11,12 @@ export type PaymentMethod =
   | 'Altro'
 export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
+export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
+export type ReviewDocumentStatus =
+  | 'pending'
+  | 'unrecognized'
+  | 'possible-duplicate'
+export type ReviewDocumentSource = 'whatsapp' | 'viber' | 'manual-upload'
 
 export interface SessionUser {
   id: string
@@ -83,6 +89,33 @@ export interface InvoicePayment {
   method: PaymentMethod
 }
 
+export interface AccountingProduct {
+  id: string
+  companyId: string
+  supplierId: string | null
+  supplierName: string
+  code: string
+  name: string
+  purchaseCostInclVat: number
+  pricingMode: ProductPricingMode
+  salePriceInclVat: number
+  markupPercent: number
+  notes: string
+}
+
+export interface InvoiceLine {
+  id: string
+  productId: string | null
+  productCode: string
+  description: string
+  quantity: number
+  unitPurchaseCostInclVat: number
+  unitSalePriceInclVat: number
+  purchaseTotalInclVat: number
+  saleTotalInclVat: number
+  markupPercent: number
+}
+
 export interface AccountingInvoice {
   id: string
   companyId: string
@@ -97,6 +130,8 @@ export interface AccountingInvoice {
   vat: number
   theoreticalRevenue: number
   total: number
+  markupPercent: number
+  lines: InvoiceLine[]
   date: string
   dueDate: string
   settled: boolean
@@ -197,17 +232,41 @@ export interface AccountingState {
   takings: AccountingTaking[]
   sellers: AccountingSeller[]
   suppliers: AccountingSupplier[]
+  products: AccountingProduct[]
   rentals: Rental[]
   accountantInvoices: AccountantInvoice[]
   expenses: AccountingExpense[]
 }
 
+export interface ReviewInvoiceSuggestion {
+  number: string
+  supplierId: string | null
+  sellerId: string | null
+  description: string
+  taxableAmount: number
+  vat: number
+  theoreticalRevenue: number
+  date: string
+}
+
+export interface ReviewDocument {
+  id: string
+  companyId: string
+  source: ReviewDocumentSource
+  senderName: string
+  receivedAt: string
+  status: ReviewDocumentStatus
+  images: string[]
+  suggestion: ReviewInvoiceSuggestion
+}
+
 export interface AppState {
-  schemaVersion: 5
+  schemaVersion: 6
   company: Company
   stores: Store[]
   sellers: Seller[]
   review: ReviewSummary
+  reviewDocuments: ReviewDocument[]
   financial: FinancialSummary
   dataSettings: DataSettings
   accounting: AccountingState

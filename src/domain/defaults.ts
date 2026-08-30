@@ -13,7 +13,7 @@ export function createId(prefix: string) {
 
 export function createInitialState(companyId = createId('company')): AppState {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     company: {
       id: companyId,
       name: 'La tua azienda',
@@ -27,6 +27,7 @@ export function createInitialState(companyId = createId('company')): AppState {
       unrecognized: 0,
       possibleDuplicates: 0,
     },
+    reviewDocuments: [],
     financial: {
       invoiceValue: 0,
       theoreticalRevenue: 0,
@@ -62,6 +63,7 @@ export function createEmptyAccountingState(companyId: string): AccountingState {
     takings: [],
     sellers: [],
     suppliers: [],
+    products: [],
     rentals: [],
     accountantInvoices: [],
     expenses: [],

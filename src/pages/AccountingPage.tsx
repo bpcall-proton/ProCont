@@ -6,8 +6,11 @@ import {
   expenseCategories,
   invoiceDueState,
   invoiceRemaining,
+  markupPercentage,
   money,
   paymentMethods,
+  productSalePrice,
+  roundMoney,
   splitVat,
   today,
 } from '../domain/accounting'
@@ -18,6 +21,7 @@ import type {
   AccountingInvoice,
   AccountingState,
   AccountingTaking,
+  InvoiceLine,
   PaymentMethod,
   Rental,
 } from '../domain/types'
@@ -146,9 +150,16 @@ const emptyInvoice = {
   taxableAmount: '',
   vat: '',
   theoreticalRevenue: '',
-  total: '',
   date: today(),
   settled: false,
+}
+
+const emptyInvoiceLine = {
+  productId: '',
+  description: '',
+  quantity: '1',
+  unitPurchaseCostInclVat: '',
+  unitSalePriceInclVat: '',
 }
 
 function InvoicesPanel() {
@@ -156,6 +167,8 @@ function InvoicesPanel() {
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyInvoice)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [lines, setLines] = useState<InvoiceLine[]>([])
+  const [lineForm, setLineForm] = useState(emptyInvoiceLine)
   const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [sellerFilter, setSellerFilter] = useState('')
@@ -220,6 +233,74 @@ function InvoicesPanel() {
     (sum, item) => sum + item.theoreticalRevenue,
     0,
   )
+  const invoiceTotal = roundMoney(
+    numberValue(form.taxableAmount) + numberValue(form.vat),
+  )
+  const lineRevenue = roundMoney(
+    lines.reduce((sum, line) => sum + line.saleTotalInclVat, 0),
+  )
+  const invoiceRevenue =
+    lines.length > 0 ? lineRevenue : numberValue(form.theoreticalRevenue)
+  const invoiceMarkup = markupPercentage(invoiceTotal, invoiceRevenue)
+
+  function selectProduct(productId: string) {
+    const product = data.products.find((item) => item.id === productId)
+    if (!product) {
+      setLineForm({ ...emptyInvoiceLine, productId })
+      return
+    }
+    setLineForm({
+      productId,
+      description: product.name,
+      quantity: '1',
+      unitPurchaseCostInclVat: String(product.purchaseCostInclVat),
+      unitSalePriceInclVat:
+        product.pricingMode === 'manual'
+          ? ''
+          : String(productSalePrice(product)),
+    })
+    if (product.supplierId) {
+      setForm((current) => ({
+        ...current,
+        supplierId: product.supplierId ?? '',
+      }))
+    }
+  }
+
+  function addInvoiceLine() {
+    const quantity = Math.max(0, numberValue(lineForm.quantity))
+    const unitPurchaseCostInclVat = numberValue(
+      lineForm.unitPurchaseCostInclVat,
+    )
+    const unitSalePriceInclVat = numberValue(lineForm.unitSalePriceInclVat)
+    if (!lineForm.description.trim() || quantity <= 0) return
+    const purchaseTotalInclVat = roundMoney(
+      quantity * unitPurchaseCostInclVat,
+    )
+    const saleTotalInclVat = roundMoney(quantity * unitSalePriceInclVat)
+    const product = data.products.find(
+      (item) => item.id === lineForm.productId,
+    )
+    setLines((current) => [
+      ...current,
+      {
+        id: createId('invoice-line'),
+        productId: product?.id ?? null,
+        productCode: product?.code ?? '',
+        description: lineForm.description.trim(),
+        quantity,
+        unitPurchaseCostInclVat,
+        unitSalePriceInclVat,
+        purchaseTotalInclVat,
+        saleTotalInclVat,
+        markupPercent: markupPercentage(
+          purchaseTotalInclVat,
+          saleTotalInclVat,
+        ),
+      },
+    ])
+    setLineForm(emptyInvoiceLine)
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -244,8 +325,10 @@ function InvoicesPanel() {
           category: form.category,
           taxableAmount: numberValue(form.taxableAmount),
           vat: numberValue(form.vat),
-          theoreticalRevenue: numberValue(form.theoreticalRevenue),
-          total: numberValue(form.total),
+          theoreticalRevenue: invoiceRevenue,
+          total: invoiceTotal,
+          markupPercent: invoiceMarkup,
+          lines,
           date: form.date,
           dueDate: addDays(
             form.date,
@@ -253,7 +336,7 @@ function InvoicesPanel() {
           ),
           settled: form.settled,
           paidAmount: form.settled
-            ? numberValue(form.total)
+            ? invoiceTotal
             : previous?.paidAmount ?? 0,
           payments: previous?.payments ?? [],
           paymentDate: form.settled
@@ -275,6 +358,7 @@ function InvoicesPanel() {
     )
     setEditingId(null)
     setForm(emptyInvoice)
+    setLines([])
   }
 
   function edit(invoice: AccountingInvoice) {
@@ -288,10 +372,10 @@ function InvoicesPanel() {
       taxableAmount: String(invoice.taxableAmount),
       vat: String(invoice.vat),
       theoreticalRevenue: String(invoice.theoreticalRevenue),
-      total: String(invoice.total),
       date: invoice.date,
       settled: invoice.settled,
     })
+    setLines(invoice.lines)
   }
 
   function remove(id: string) {
@@ -407,14 +491,134 @@ function InvoicesPanel() {
           <label>Venditore<select value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Descrizione<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Imponibile<input inputMode="decimal" value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
-          <label>IVA<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Totale<input inputMode="decimal" required value={form.total} onChange={(event) => setForm({ ...form, total: event.target.value })} /></label>
-          <label>Venit previsto<input inputMode="decimal" value={form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
+          <label>Imponibile<input inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
+          <label>IVA facoltativa<input inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
+          <label>Totale automatico<input readOnly value={money(invoiceTotal)} /></label>
+          <label>Venit totale<input disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
+          <label>Ricarico fattura<input readOnly value={`${invoiceMarkup}%`} /></label>
         </div>
+        <section className="invoice-lines-editor">
+          <div className="panel-heading">
+            <div>
+              <strong>Righe prodotto</strong>
+              <small>Costi e valori di vendita sono comprensivi di IVA.</small>
+            </div>
+          </div>
+          <div className="invoice-line-form">
+            <select
+              aria-label="Prodotto della riga"
+              onChange={(event) => selectProduct(event.target.value)}
+              value={lineForm.productId}
+            >
+              <option value="">Prodotto libero</option>
+              {data.products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                  {product.code ? ` · ${product.code}` : ''}
+                </option>
+              ))}
+            </select>
+            <input
+              onChange={(event) =>
+                setLineForm({
+                  ...lineForm,
+                  description: event.target.value,
+                })
+              }
+              placeholder="Descrizione prodotto"
+              value={lineForm.description}
+            />
+            <input
+              aria-label="Quantità"
+              inputMode="decimal"
+              min="0"
+              onChange={(event) =>
+                setLineForm({ ...lineForm, quantity: event.target.value })
+              }
+              placeholder="Quantità"
+              value={lineForm.quantity}
+            />
+            <input
+              aria-label="Costo unitario IVA inclusa"
+              inputMode="decimal"
+              min="0"
+              onChange={(event) =>
+                setLineForm({
+                  ...lineForm,
+                  unitPurchaseCostInclVat: event.target.value,
+                })
+              }
+              placeholder="Costo IVA inclusa"
+              value={lineForm.unitPurchaseCostInclVat}
+            />
+            <input
+              aria-label="Vendita unitaria IVA inclusa"
+              inputMode="decimal"
+              min="0"
+              onChange={(event) =>
+                setLineForm({
+                  ...lineForm,
+                  unitSalePriceInclVat: event.target.value,
+                })
+              }
+              placeholder="Vendita / venit"
+              value={lineForm.unitSalePriceInclVat}
+            />
+            <button
+              className="button button-secondary"
+              onClick={addInvoiceLine}
+              type="button"
+            >
+              Aggiungi riga
+            </button>
+          </div>
+          {lines.length > 0 && (
+            <div className="data-table-wrap">
+              <table className="data-table invoice-lines-table">
+                <thead>
+                  <tr>
+                    <th>Prodotto</th>
+                    <th>Qtà</th>
+                    <th>Costo totale</th>
+                    <th>Venit totale</th>
+                    <th>Ricarico</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>
+                        {line.description}
+                        <small>{line.productCode || 'Riga manuale'}</small>
+                      </td>
+                      <td>{line.quantity}</td>
+                      <td>{money(line.purchaseTotalInclVat)}</td>
+                      <td>{money(line.saleTotalInclVat)}</td>
+                      <td>{line.markupPercent}%</td>
+                      <td className="row-actions">
+                        <button
+                          className="danger-text"
+                          onClick={() =>
+                            setLines((current) =>
+                              current.filter((item) => item.id !== line.id),
+                            )
+                          }
+                          type="button"
+                        >
+                          Rimuovi
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
         <label className="checkbox-row"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         <div className="form-actions">
-          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyInvoice) }}>Annulla</button>}
+          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyInvoice); setLines([]) }}>Annulla</button>}
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra fattura'}</button>
         </div>
       </form>
@@ -448,7 +652,7 @@ function InvoicesPanel() {
         </div>
         <div className="data-table-wrap">
           <table className="data-table">
-            <thead><tr><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
               {invoices.map((invoice) => {
                 const dueState = invoiceDueState(invoice)
@@ -457,7 +661,7 @@ function InvoicesPanel() {
                   <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
                   <td>{invoice.supplierName || '—'}<small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small></td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
-                  <td>{money(invoice.theoreticalRevenue)}</td>
+                  <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe</small></td>
                   <td>
                     <span className={`record-status ${dueState}`}>
                       {dueState === 'paid'

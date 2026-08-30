@@ -4,11 +4,13 @@ import type {
   AccountingCompany,
   AccountingExpense,
   AccountingInvoice,
+  AccountingProduct,
   AccountingSeller,
   AccountingState,
   AccountingSupplier,
   AccountingTaking,
   AppState,
+  InvoiceLine,
   InvoicePayment,
   PaymentMethod,
   Rental,
@@ -54,6 +56,15 @@ function paymentMethod(value: unknown): PaymentMethod | null {
 
 function records(value: unknown) {
   return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function pricingMode(value: unknown) {
+  return value === 'markup' || value === 'manual' ? value : 'sale-price'
+}
+
+function markupPercent(cost: number, sale: number) {
+  if (cost <= 0) return 0
+  return Math.round((((sale - cost) / cost) * 100 + Number.EPSILON) * 100) / 100
 }
 
 function contactKey(value: string) {
@@ -108,6 +119,8 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
       },
     ]
   }
+  const lines = records(value.righe).map(mapInvoiceLine)
+  const theoreticalRevenue = amount(value.venit)
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
@@ -120,8 +133,13 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
     category: text(value.categoria),
     taxableAmount: amount(value.imponibile),
     vat: amount(value.iva),
-    theoreticalRevenue: amount(value.venit),
+    theoreticalRevenue,
     total,
+    markupPercent:
+      typeof value.ricaricoPercentuale === 'number'
+        ? amount(value.ricaricoPercentuale)
+        : markupPercent(total, theoreticalRevenue),
+    lines,
     date: text(value.data),
     dueDate: text(value.scadenza),
     settled,
@@ -129,6 +147,35 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
     payments,
     paymentDate: nullableText(value.dataPagamento),
     paymentMethod: paymentMethod(value.metodoPagamento),
+  }
+}
+
+function mapInvoiceLine(value: JsonRecord): InvoiceLine {
+  const quantity = Math.max(0, amount(value.quantita))
+  const unitPurchaseCostInclVat = amount(value.costoUnitarioIvaInclusa)
+  const unitSalePriceInclVat = amount(value.venditaUnitariaIvaInclusa)
+  const purchaseTotalInclVat =
+    typeof value.costoTotaleIvaInclusa === 'number'
+      ? amount(value.costoTotaleIvaInclusa)
+      : quantity * unitPurchaseCostInclVat
+  const saleTotalInclVat =
+    typeof value.venitTotaleIvaInclusa === 'number'
+      ? amount(value.venitTotaleIvaInclusa)
+      : quantity * unitSalePriceInclVat
+  return {
+    id: text(value.id, crypto.randomUUID()),
+    productId: nullableText(value.prodottoId),
+    productCode: text(value.codiceProdotto),
+    description: text(value.descrizione),
+    quantity,
+    unitPurchaseCostInclVat,
+    unitSalePriceInclVat,
+    purchaseTotalInclVat,
+    saleTotalInclVat,
+    markupPercent:
+      typeof value.ricaricoPercentuale === 'number'
+        ? amount(value.ricaricoPercentuale)
+        : markupPercent(purchaseTotalInclVat, saleTotalInclVat),
   }
 }
 
@@ -170,6 +217,22 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
     city: text(value.citta),
     notes: text(value.note),
     paymentTermsDays: positiveInteger(value.giorniPagamento, 10),
+  }
+}
+
+function mapProduct(value: JsonRecord): AccountingProduct {
+  return {
+    id: text(value.id, crypto.randomUUID()),
+    companyId: text(value.aziendaId),
+    supplierId: nullableText(value.fornitoreId),
+    supplierName: text(value.fornitoreNome),
+    code: text(value.codice),
+    name: text(value.nome),
+    purchaseCostInclVat: amount(value.costoIvaInclusa),
+    pricingMode: pricingMode(value.regolaVenit),
+    salePriceInclVat: amount(value.venditaIvaInclusa),
+    markupPercent: amount(value.ricaricoPercentuale),
+    notes: text(value.note),
   }
 }
 
@@ -274,6 +337,7 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     takings: records(candidate.incassi).map(mapTaking),
     sellers: records(candidate.venditori).map(mapSeller),
     suppliers: records(candidate.fornitori).map(mapSupplier),
+    products: records(candidate.prodotti).map(mapProduct),
     rentals: records(candidate.affitti).map(mapRental),
     accountantInvoices: records(candidate.contabile).map(mapAccountantInvoice),
     expenses: records(candidate.stipendiTasse).map(mapExpense),
@@ -289,7 +353,8 @@ export function normalizeStoredState(
     (value.schemaVersion === 2 ||
       value.schemaVersion === 3 ||
       value.schemaVersion === 4 ||
-      value.schemaVersion === 5) &&
+      value.schemaVersion === 5 ||
+      value.schemaVersion === 6) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -344,11 +409,39 @@ export function normalizeStoredState(
         store.companyId ||
         fallbackCompanyId,
     }))
+    const invoices = (accounting.invoices ?? []).map((invoice) => {
+      const lines = invoice.lines ?? []
+      return {
+        ...invoice,
+        lines,
+        markupPercent:
+          invoice.markupPercent ??
+          markupPercent(invoice.total, invoice.theoreticalRevenue),
+      }
+    })
     return {
       ...state,
-      schemaVersion: 5,
+      schemaVersion: 6,
       stores,
       sellers,
+      reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
+        ...document,
+        source: document.source ?? 'manual-upload',
+        senderName: document.senderName ?? '',
+        status: document.status ?? 'unrecognized',
+        images: Array.isArray(document.images) ? document.images : [],
+        suggestion: {
+          number: document.suggestion?.number ?? '',
+          supplierId: document.suggestion?.supplierId ?? null,
+          sellerId: document.suggestion?.sellerId ?? null,
+          description: document.suggestion?.description ?? '',
+          taxableAmount: document.suggestion?.taxableAmount ?? 0,
+          vat: document.suggestion?.vat ?? 0,
+          theoreticalRevenue:
+            document.suggestion?.theoreticalRevenue ?? 0,
+          date: document.suggestion?.date ?? '',
+        },
+      })),
       dataSettings: {
         ...state.dataSettings,
         language: state.dataSettings.language ?? 'it',
@@ -356,6 +449,7 @@ export function normalizeStoredState(
       },
       accounting: {
         ...accounting,
+        invoices,
         sellers: accountingSellers,
         suppliers: (accounting.suppliers ?? []).map((supplier) => ({
           ...supplier,
@@ -363,6 +457,17 @@ export function normalizeStoredState(
             supplier.paymentTermsDays,
             10,
           ),
+        })),
+        products: (accounting.products ?? []).map((product) => ({
+          ...product,
+          supplierId: product.supplierId ?? null,
+          supplierName: product.supplierName ?? '',
+          code: product.code ?? '',
+          purchaseCostInclVat: product.purchaseCostInclVat ?? 0,
+          pricingMode: product.pricingMode ?? 'manual',
+          salePriceInclVat: product.salePriceInclVat ?? 0,
+          markupPercent: product.markupPercent ?? 0,
+          notes: product.notes ?? '',
         })),
         expenses: (accounting.expenses ?? []).map((expense) => ({
           ...expense,
@@ -426,6 +531,7 @@ export function importLegacyIntoState(
     takings: mergeById(current.accounting.takings, accounting.takings),
     sellers: mergeById(current.accounting.sellers, accounting.sellers),
     suppliers: mergeById(current.accounting.suppliers, accounting.suppliers),
+    products: mergeById(current.accounting.products, accounting.products),
     rentals: mergeById(current.accounting.rentals, accounting.rentals),
     accountantInvoices: mergeById(
       current.accounting.accountantInvoices,
@@ -450,7 +556,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 5,
+      version: 6,
       exportedAt: new Date().toISOString(),
       data: state,
     },
@@ -489,6 +595,19 @@ export function exportLegacyAccounting(state: AccountingState) {
           iva: invoice.vat,
           venit: invoice.theoreticalRevenue,
           importo: invoice.total,
+          ricaricoPercentuale: invoice.markupPercent,
+          righe: invoice.lines.map((line) => ({
+            id: line.id,
+            prodottoId: line.productId,
+            codiceProdotto: line.productCode,
+            descrizione: line.description,
+            quantita: line.quantity,
+            costoUnitarioIvaInclusa: line.unitPurchaseCostInclVat,
+            venditaUnitariaIvaInclusa: line.unitSalePriceInclVat,
+            costoTotaleIvaInclusa: line.purchaseTotalInclVat,
+            venitTotaleIvaInclusa: line.saleTotalInclVat,
+            ricaricoPercentuale: line.markupPercent,
+          })),
           data: invoice.date,
           scadenza: invoice.dueDate,
           pagata: invoice.settled,
@@ -533,6 +652,19 @@ export function exportLegacyAccounting(state: AccountingState) {
           citta: supplier.city,
           note: supplier.notes,
           giorniPagamento: supplier.paymentTermsDays,
+        })),
+        prodotti: state.products.map((product) => ({
+          id: product.id,
+          aziendaId: product.companyId,
+          fornitoreId: product.supplierId,
+          fornitoreNome: product.supplierName,
+          codice: product.code,
+          nome: product.name,
+          costoIvaInclusa: product.purchaseCostInclVat,
+          regolaVenit: product.pricingMode,
+          venditaIvaInclusa: product.salePriceInclVat,
+          ricaricoPercentuale: product.markupPercent,
+          note: product.notes,
         })),
         affitti: state.rentals.map((rental) => ({
           id: rental.id,

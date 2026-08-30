@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AuthProvider } from './auth/AuthProvider'
 import { useAuth } from './auth/AuthContext'
 import { can, type Permission } from './auth/permissions'
@@ -7,6 +7,7 @@ import {
   DashboardIcon,
   LogoutIcon,
   PaidInvoicesIcon,
+  ProductIcon,
   ReportsIcon,
   ScanIcon,
   SettingsIcon,
@@ -18,6 +19,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { AccountingPage } from './pages/AccountingPage'
 import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
+import { ProductsPage } from './pages/ProductsPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -30,6 +32,7 @@ type Page =
   | 'dashboard'
   | 'accounting'
   | 'paidInvoices'
+  | 'products'
   | 'reports'
   | 'stores'
   | 'review'
@@ -51,6 +54,12 @@ const navigation: {
     id: 'accounting',
     label: { it: 'Contabilità', ro: 'Contabilitate', en: 'Accounting' },
     icon: AccountingIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'products',
+    label: { it: 'Prodotti', ro: 'Produse', en: 'Products' },
+    icon: ProductIcon,
     permission: 'manageAccounting',
   },
   {
@@ -107,6 +116,7 @@ function Workspace() {
     setActiveAccountingCompany,
   } = useAppStore()
   const [page, setPage] = useState<Page>('dashboard')
+  const reviewPresented = useRef(false)
   const language = state.dataSettings.language
   const activeCompany =
     state.accounting.companies.find(
@@ -115,6 +125,29 @@ function Workspace() {
   const activeStores = activeCompany
     ? state.stores.filter((store) => store.companyId === activeCompany.id).length
     : 0
+
+  useEffect(() => {
+    if (
+      !loading &&
+      !reviewPresented.current &&
+      user &&
+      can(user.role, 'reviewDocuments') &&
+      state.reviewDocuments.length > 0
+    ) {
+      reviewPresented.current = true
+      const reviewCompanyId = state.reviewDocuments[0].companyId
+      if (reviewCompanyId !== state.accounting.activeCompanyId) {
+        setActiveAccountingCompany(reviewCompanyId)
+      }
+      setPage('review')
+    }
+  }, [
+    loading,
+    state.accounting.activeCompanyId,
+    state.reviewDocuments,
+    setActiveAccountingCompany,
+    user,
+  ])
 
   if (loading) {
     return (
@@ -128,6 +161,7 @@ function Workspace() {
   const pages = {
     dashboard: <DashboardPage />,
     accounting: <AccountingPage />,
+    products: <ProductsPage />,
     paidInvoices: <PaidInvoicesPage />,
     reports: <ReportsPage />,
     stores: <StoresPage />,
