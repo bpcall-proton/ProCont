@@ -1,7 +1,7 @@
 {
   "name": "fatture-incassi-pro",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Acquisizione intelligente di fatture e incassi via WhatsApp e Viber.",
   "author": "BpCall Srl",
   "main": "electron/main.cjs",
@@ -16,6 +16,7 @@
     "preview": "vite preview",
     "desktop": "npm run build && electron .",
     "desktop:pack": "npm run build && electron-builder --dir",
+    "desktop:win": "npm run build && electron-builder --win nsis --x64",
     "mobile:sync": "npm run build && cap sync android",
     "android:apk": "npm run mobile:sync && cd android && ./gradlew assembleDebug"
   },
@@ -68,7 +69,15 @@
           ]
         }
       ],
-      "artifactName": "Fatture-Incassi-Pro-${version}-Windows-${arch}.${ext}"
+      "artifactName": "Fatture-Incassi-Pro-Setup-${version}-Windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fatture & Incassi Pro",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [
@@ -88,6 +97,7 @@
       "target": [
         "AppImage"
       ],
+      "executableName": "fatture-incassi-pro",
       "category": "Office",
       "artifactName": "Fatture-Incassi-Pro-${version}-Linux-${arch}.${ext}"
     }

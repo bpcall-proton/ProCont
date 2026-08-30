@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to update
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Package Windows
+        run: npm run build && npx electron-builder --win nsis --x64 --publish never
+
+      - name: Publish Windows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Get-ChildItem "release/Fatture-Incassi-Pro-Setup-*.exe" |
+            ForEach-Object {
+              gh release upload "$env:RELEASE_TAG" $_.FullName --clobber
+            }
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Package macOS
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build && npx electron-builder --mac dmg --x64 --arm64 --publish never
+
+      - name: Publish macOS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release/Fatture-Incassi-Pro-*.dmg --clobber
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Package Linux
+        run: npm run build && npx electron-builder --linux AppImage --x64 --publish never
+
+      - name: Publish Linux
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release/Fatture-Incassi-Pro-*.AppImage --clobber
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+
+      - name: Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install
+        run: npm ci
+
+      - name: Package Android
+        run: npm run android:apk
+
+      - name: Prepare Android
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p release/mobile
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "release/mobile/Fatture-Incassi-Pro-${version}-Android.apk"
+
+      - name: Publish Android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release/mobile/Fatture-Incassi-Pro-*-Android.apk --clobber
