@@ -411,8 +411,16 @@ export function normalizeStoredState(
     }))
     const invoices = (accounting.invoices ?? []).map((invoice) => {
       const lines = invoice.lines ?? []
+      const vat = invoice.vat ?? 0
+      const storedTaxableAmount = invoice.taxableAmount ?? 0
+      const taxableAmount =
+        storedTaxableAmount === 0 && vat === 0 && invoice.total > 0
+          ? invoice.total
+          : storedTaxableAmount
       return {
         ...invoice,
+        taxableAmount,
+        vat,
         lines,
         markupPercent:
           invoice.markupPercent ??
