@@ -4,9 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to update
+        required: true
+        default: v0.1.0
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
   windows:
@@ -26,7 +35,7 @@ jobs:
         run: npm ci
 
       - name: Package Windows
-        run: npm run desktop:win
+        run: npm run build && npx electron-builder --win nsis --x64 --publish never
 
       - name: Publish Windows
         env:
@@ -34,7 +43,7 @@ jobs:
         run: |
           Get-ChildItem "release/Fatture-Incassi-Pro-Setup-*.exe" |
             ForEach-Object {
-              gh release upload "$env:GITHUB_REF_NAME" $_.FullName --clobber
+              gh release upload "$env:RELEASE_TAG" $_.FullName --clobber
             }
 
   macos:
@@ -56,12 +65,12 @@ jobs:
       - name: Package macOS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run build && npx electron-builder --mac dmg --x64 --arm64
+        run: npm run build && npx electron-builder --mac dmg --x64 --arm64 --publish never
 
       - name: Publish macOS
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" release/Fatture-Incassi-Pro-*.dmg --clobber
+        run: gh release upload "$RELEASE_TAG" release/Fatture-Incassi-Pro-*.dmg --clobber
 
   linux:
     runs-on: ubuntu-latest
@@ -80,12 +89,12 @@ jobs:
         run: npm ci
 
       - name: Package Linux
-        run: npm run build && npx electron-builder --linux AppImage --x64
+        run: npm run build && npx electron-builder --linux AppImage --x64 --publish never
 
       - name: Publish Linux
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" release/Fatture-Incassi-Pro-*.AppImage --clobber
+        run: gh release upload "$RELEASE_TAG" release/Fatture-Incassi-Pro-*.AppImage --clobber
 
   android:
     runs-on: ubuntu-latest
@@ -121,7 +130,7 @@ jobs:
 
       - name: Prepare Android
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           mkdir -p release/mobile
           cp android/app/build/outputs/apk/debug/app-debug.apk \
             "release/mobile/Fatture-Incassi-Pro-${version}-Android.apk"
@@ -129,4 +138,4 @@ jobs:
       - name: Publish Android
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" release/mobile/Fatture-Incassi-Pro-*-Android.apk --clobber
+        run: gh release upload "$RELEASE_TAG" release/mobile/Fatture-Incassi-Pro-*-Android.apk --clobber

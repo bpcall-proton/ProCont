@@ -97,6 +97,7 @@
       "target": [
         "AppImage"
       ],
+      "executableName": "fatture-incassi-pro",
       "category": "Office",
       "artifactName": "Fatture-Incassi-Pro-${version}-Linux-${arch}.${ext}"
     }
