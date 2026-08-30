@@ -23,6 +23,8 @@ export const expenseCategories = [
   'Altro',
 ]
 
+export const defaultPaymentTermsDays = 10
+
 export function today() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -68,6 +70,19 @@ export function invoiceRemaining(invoice: AccountingInvoice) {
   return roundMoney(
     Math.max(0, invoice.total - (invoice.settled ? invoice.total : invoice.paidAmount)),
   )
+}
+
+export type InvoiceDueState = 'paid' | 'overdue' | 'due-soon' | 'open'
+
+export function invoiceDueState(
+  invoice: AccountingInvoice,
+  referenceDate = today(),
+): InvoiceDueState {
+  if (invoice.settled) return 'paid'
+  if (!invoice.dueDate) return 'open'
+  if (invoice.dueDate < referenceDate) return 'overdue'
+  if (invoice.dueDate <= addDays(referenceDate, 2)) return 'due-soon'
+  return 'open'
 }
 
 export function allocatedExpense(

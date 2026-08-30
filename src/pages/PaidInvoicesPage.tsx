@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { invoiceRemaining, money } from '../domain/accounting'
+import { invoiceDueState, invoiceRemaining, money } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
 type PaymentFilter = 'paid' | 'partial' | 'all'
@@ -8,8 +8,17 @@ export function PaidInvoicesPage() {
   const { state, setActiveAccountingCompany } = useAppStore()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PaymentFilter>('paid')
+  const [supplierFilter, setSupplierFilter] = useState('')
+  const [sellerFilter, setSellerFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const companyId = state.accounting.activeCompanyId
+  const suppliers = state.accounting.suppliers.filter(
+    (supplier) => supplier.companyId === companyId,
+  )
+  const sellers = state.accounting.sellers.filter(
+    (seller) => seller.companyId === companyId,
+  )
 
   const invoices = useMemo(
     () =>
@@ -33,12 +42,35 @@ export function PaidInvoicesPage() {
               .toLocaleLowerCase()
               .includes(normalizedQuery),
         )
+        .filter(
+          (invoice) =>
+            !supplierFilter || invoice.supplierId === supplierFilter,
+        )
+        .filter(
+          (invoice) => !sellerFilter || invoice.sellerId === sellerFilter,
+        )
+        .filter((invoice) => {
+          if (!monthFilter) return true
+          const lastPayment =
+            invoice.payments[invoice.payments.length - 1]?.date ??
+            invoice.paymentDate ??
+            invoice.date
+          return lastPayment.slice(0, 7) === monthFilter
+        })
         .sort((left, right) =>
           (right.paymentDate ?? right.date).localeCompare(
             left.paymentDate ?? left.date,
           ),
         ),
-    [companyId, filter, normalizedQuery, state.accounting.invoices],
+    [
+      companyId,
+      filter,
+      monthFilter,
+      normalizedQuery,
+      sellerFilter,
+      state.accounting.invoices,
+      supplierFilter,
+    ],
   )
 
   return (
@@ -55,9 +87,12 @@ export function PaidInvoicesPage() {
         <div className="report-filter">
           <select
             aria-label="Azienda contabile"
-            onChange={(event) =>
+            onChange={(event) => {
+              setSupplierFilter('')
+              setSellerFilter('')
+              setMonthFilter('')
               setActiveAccountingCompany(event.target.value)
-            }
+            }}
             value={companyId ?? ''}
           >
             {state.accounting.companies.map((company) => (
@@ -83,13 +118,24 @@ export function PaidInvoicesPage() {
       <section className="panel">
         <div className="table-toolbar invoice-search-toolbar">
           <h2>Archivio pagamenti</h2>
-          <input
-            aria-label="Cerca fattura o fornitore"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cerca fornitore o n. fattura"
-            type="search"
-            value={query}
-          />
+          <div className="invoice-filters">
+            <input
+              aria-label="Cerca fattura o fornitore"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Cerca fornitore o n. fattura"
+              type="search"
+              value={query}
+            />
+            <select aria-label="Filtra per fornitore" value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+              <option value="">Tutti i fornitori</option>
+              {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+            <select aria-label="Filtra per venditore" value={sellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+              <option value="">Tutti i venditori</option>
+              {sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+            </select>
+            <input aria-label="Filtra per mese pagamento" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+          </div>
         </div>
         <div className="data-table-wrap">
           <table className="data-table">
@@ -105,14 +151,14 @@ export function PaidInvoicesPage() {
             </thead>
             <tbody>
               {invoices.map((invoice) => (
-                <tr key={invoice.id}>
+                <tr className={`invoice-row ${invoiceDueState(invoice)}`} key={invoice.id}>
                   <td>
                     <strong>{invoice.number || '—'}</strong>
                     <small>{invoice.date}</small>
                   </td>
                   <td>
                     {invoice.supplierName || '—'}
-                    <small>{invoice.description}</small>
+                    <small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small>
                   </td>
                   <td>{money(invoice.total)}</td>
                   <td>

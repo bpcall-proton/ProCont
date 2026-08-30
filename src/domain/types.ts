@@ -138,6 +138,7 @@ export interface AccountingSupplier {
   phone: string
   city: string
   notes: string
+  paymentTermsDays: number
 }
 
 export interface Rental {
@@ -202,7 +203,7 @@ export interface AccountingState {
 }
 
 export interface AppState {
-  schemaVersion: 4
+  schemaVersion: 5
   company: Company
   stores: Store[]
   sellers: Seller[]
