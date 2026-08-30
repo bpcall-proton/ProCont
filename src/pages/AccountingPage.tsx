@@ -383,6 +383,11 @@ export function InvoicesPanel({
   }
 
   function edit(invoice: AccountingInvoice) {
+    const vat = invoice.vat ?? 0
+    const taxableAmount =
+      (invoice.taxableAmount ?? 0) === 0 && vat === 0 && invoice.total > 0
+        ? invoice.total
+        : invoice.taxableAmount
     setEditingId(invoice.id)
     setForm({
       number: invoice.number,
@@ -390,8 +395,8 @@ export function InvoicesPanel({
       sellerId: invoice.sellerId ?? '',
       description: invoice.description,
       category: invoice.category,
-      taxableAmount: String(invoice.taxableAmount),
-      vat: String(invoice.vat),
+      taxableAmount: String(taxableAmount),
+      vat: String(vat),
       theoreticalRevenue: String(invoice.theoreticalRevenue),
       date: invoice.date,
       settled: invoice.settled,
