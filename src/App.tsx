@@ -17,6 +17,7 @@ import { Logo } from './components/Logo'
 import { DataModeBadge, SyncBadge } from './components/StatusBadge'
 import { DashboardPage } from './pages/DashboardPage'
 import { AccountingPage } from './pages/AccountingPage'
+import { InvoiceArchivePage } from './pages/InvoiceArchivePage'
 import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
 import { ProductsPage } from './pages/ProductsPage'
@@ -31,6 +32,7 @@ import { useAppStore } from './store/AppStoreContext'
 type Page =
   | 'dashboard'
   | 'accounting'
+  | 'invoiceArchive'
   | 'paidInvoices'
   | 'products'
   | 'reports'
@@ -160,7 +162,12 @@ function Workspace() {
 
   const pages = {
     dashboard: <DashboardPage />,
-    accounting: <AccountingPage />,
+    accounting: (
+      <AccountingPage onOpenInvoiceArchive={() => setPage('invoiceArchive')} />
+    ),
+    invoiceArchive: (
+      <InvoiceArchivePage onBack={() => setPage('accounting')} />
+    ),
     products: <ProductsPage />,
     paidInvoices: <PaidInvoicesPage />,
     reports: <ReportsPage />,

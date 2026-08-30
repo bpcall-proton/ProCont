@@ -1381,6 +1381,17 @@ select {
   gap: 28px;
 }
 
+.accounting-heading-actions,
+.invoice-archive-actions {
+  min-width: min(100%, 420px);
+  display: grid;
+  gap: 9px;
+}
+
+.accounting-heading-actions > .button {
+  justify-self: end;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1614,6 +1625,23 @@ select {
   max-width: 100%;
   width: 100%;
   overflow-x: auto;
+}
+
+.invoice-archive-panel {
+  min-height: 0;
+}
+
+.invoice-archive-table-wrap {
+  max-height: calc(100vh - 310px);
+  overflow: auto;
+}
+
+.invoice-archive-table-wrap .data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgb(13, 18, 32);
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .data-table {
@@ -1953,6 +1981,15 @@ select {
   .page-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .accounting-heading-actions,
+  .invoice-archive-actions {
+    width: 100%;
+  }
+
+  .accounting-heading-actions > .button {
+    justify-self: stretch;
   }
 
   .review-document-body dl {
