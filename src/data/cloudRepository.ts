@@ -80,6 +80,10 @@ export class CloudRepository implements AppRepository {
         const state = normalizeStoredState(snapshot.data(), this.companyId)
         return state ? [state] : []
       })
+      const legacySnapshot = await getDoc(this.legacyReference())
+      if (legacySnapshot.exists()) {
+        await deleteDoc(this.legacyReference())
+      }
       return mergeCompanyStates(workspace, companies)
     }
 

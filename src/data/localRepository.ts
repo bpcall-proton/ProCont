@@ -135,10 +135,12 @@ export class LocalRepository implements AppRepository {
           this.loadState(companyStorageId(company.id)),
         ),
       )
-      return mergeCompanyStates(
+      const state = mergeCompanyStates(
         workspace,
         companyStates.filter((state): state is AppState => state !== null),
       )
+      await this.deleteState(this.companyId)
+      return state
     }
 
     const legacyState = await this.loadState(this.companyId)
