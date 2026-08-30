@@ -1,4 +1,5 @@
 import {
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -94,6 +95,7 @@ export class CloudRepository implements AppRepository {
       this.workspaceReference(),
       createWorkspaceState(legacyState),
     )
+    await deleteDoc(this.legacyReference())
     return legacyState
   }
 

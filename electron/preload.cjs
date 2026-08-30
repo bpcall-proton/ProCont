@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('desktopApp', {
     ipcRenderer.invoke('local-state:load', companyId),
   saveLocalState: (companyId, content) =>
     ipcRenderer.invoke('local-state:save', companyId, content),
+  deleteLocalState: (companyId) =>
+    ipcRenderer.invoke('local-state:delete', companyId),
 })
