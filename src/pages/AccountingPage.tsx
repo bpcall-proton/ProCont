@@ -41,7 +41,13 @@ function mutateCompany(
   return state.activeCompanyId ? updater(state.activeCompanyId) : state
 }
 
-export function AccountingPage() {
+interface AccountingPageProps {
+  onOpenInvoiceArchive: () => void
+}
+
+export function AccountingPage({
+  onOpenInvoiceArchive,
+}: AccountingPageProps) {
   const {
     state,
     setActiveAccountingCompany,
@@ -78,31 +84,40 @@ export function AccountingPage() {
             archivio dei documenti automatici.
           </p>
         </div>
-        <div className="company-switcher">
-          <select
-            aria-label="Azienda contabile attiva"
-            onChange={(event) =>
-              setActiveAccountingCompany(event.target.value)
-            }
-            value={state.accounting.activeCompanyId ?? ''}
+        <div className="accounting-heading-actions">
+          <button
+            className="button button-primary"
+            onClick={onOpenInvoiceArchive}
+            type="button"
           >
-            {state.accounting.companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
-          <form onSubmit={addCompany}>
-            <input
-              onChange={(event) => setCompanyName(event.target.value)}
-              placeholder="Nuova azienda"
-              value={companyName}
-            />
-            <button className="button button-secondary" type="submit">
-              Aggiungi
-            </button>
-          </form>
-          {companyError && <p className="import-message">{companyError}</p>}
+            Archivio fatture
+          </button>
+          <div className="company-switcher">
+            <select
+              aria-label="Azienda contabile attiva"
+              onChange={(event) =>
+                setActiveAccountingCompany(event.target.value)
+              }
+              value={state.accounting.activeCompanyId ?? ''}
+            >
+              {state.accounting.companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
+            <form onSubmit={addCompany}>
+              <input
+                onChange={(event) => setCompanyName(event.target.value)}
+                placeholder="Nuova azienda"
+                value={companyName}
+              />
+              <button className="button button-secondary" type="submit">
+                Aggiungi
+              </button>
+            </form>
+            {companyError && <p className="import-message">{companyError}</p>}
+          </div>
         </div>
       </header>
 
@@ -162,7 +177,13 @@ const emptyInvoiceLine = {
   unitSalePriceInclVat: '',
 }
 
-function InvoicesPanel() {
+interface InvoicesPanelProps {
+  archiveOnly?: boolean
+}
+
+export function InvoicesPanel({
+  archiveOnly = false,
+}: InvoicesPanelProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyInvoice)
@@ -470,13 +491,16 @@ function InvoicesPanel() {
 
   return (
     <>
-      <section className="stats-strip">
-        <div><span>Totale fatture</span><strong>{money(total)}</strong></div>
-        <div><span>Pagato</span><strong>{money(paid)}</strong></div>
-        <div><span>Residuo</span><strong>{money(total - paid)}</strong></div>
-        <div><span>Venit previsto</span><strong>{money(theoretical)}</strong></div>
-      </section>
+      {!archiveOnly && (
+        <section className="stats-strip">
+          <div><span>Totale fatture</span><strong>{money(total)}</strong></div>
+          <div><span>Pagato</span><strong>{money(paid)}</strong></div>
+          <div><span>Residuo</span><strong>{money(total - paid)}</strong></div>
+          <div><span>Venit previsto</span><strong>{money(theoretical)}</strong></div>
+        </section>
+      )}
 
+      {(!archiveOnly || editingId) && (
       <form className="panel accounting-form" onSubmit={submit}>
         <div className="panel-heading">
           <div>
@@ -622,15 +646,18 @@ function InvoicesPanel() {
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra fattura'}</button>
         </div>
       </form>
+      )}
 
+      {!archiveOnly && (
       <form className="panel compact-form" onSubmit={distributeAdvance}>
         <div><strong>Anticipo fornitore a cascata</strong><small>Distribuisce il pagamento dalle fatture più vecchie.</small></div>
         <select required value={advanceSupplier} onChange={(event) => setAdvanceSupplier(event.target.value)}><option value="">Fornitore</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
         <input inputMode="decimal" placeholder="Importo" required value={advanceAmount} onChange={(event) => setAdvanceAmount(event.target.value)} />
         <button className="button button-secondary" type="submit">Distribuisci</button>
       </form>
+      )}
 
-      <section className="panel">
+      <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ''}`}>
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
           <div className="invoice-filters">
@@ -650,7 +677,7 @@ function InvoicesPanel() {
             <input aria-label="Filtra per mese fattura" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
           </div>
         </div>
-        <div className="data-table-wrap">
+        <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ''}`}>
           <table className="data-table">
             <thead><tr><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
@@ -686,7 +713,7 @@ function InvoicesPanel() {
               })}
             </tbody>
           </table>
-          {invoices.length === 0 && <div className="empty-state compact-empty"><strong>Nessuna fattura</strong><span>Usa il modulo sopra per l'inserimento manuale.</span></div>}
+          {invoices.length === 0 && <div className="empty-state compact-empty"><strong>Nessuna fattura</strong><span>{archiveOnly ? 'Modifica i filtri per cercare nell’archivio.' : "Usa il modulo sopra per l'inserimento manuale."}</span></div>}
         </div>
       </section>
 
