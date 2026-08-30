@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "desktop": "npm run build && electron .",
-    "desktop:pack": "npm run build && electron-builder --dir"
+    "desktop:pack": "npm run build && electron-builder --dir",
+    "desktop:win": "npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
     "firebase": "12.15.0",
@@ -63,7 +64,15 @@
           ]
         }
       ],
-      "artifactName": "Fatture-Incassi-Pro-${version}-Windows-${arch}.${ext}"
+      "artifactName": "Fatture-Incassi-Pro-Setup-${version}-Windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fatture & Incassi Pro",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [

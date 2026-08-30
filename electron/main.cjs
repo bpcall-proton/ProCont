@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
+app.setAppUserModelId('com.bpcall.fattureincassipro')
+
 function statePath(companyId) {
   if (
     typeof companyId !== 'string' ||
