@@ -8,16 +8,25 @@ const currency = new Intl.NumberFormat('it-IT', {
 
 export function DashboardPage() {
   const { state } = useAppStore()
-  const { financial, review, stores, sellers } = state
+  const { financial, review } = state
+  const companyId = state.accounting.activeCompanyId
+  const activeCompany = state.accounting.companies.find(
+    (company) => company.id === companyId,
+  )
+  const stores = state.stores.filter((store) => store.companyId === companyId)
+  const sellers = state.sellers.filter(
+    (seller) => seller.companyId === companyId,
+  )
 
   return (
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">PANORAMICA GENERALE</span>
+          <span className="eyebrow">PANORAMICA AZIENDA</span>
           <h1>Controllo operativo</h1>
           <p>
-            Totale aziendale e situazione dei singoli punti vendita.
+            Dati e situazione dei punti vendita di{' '}
+            {activeCompany?.name ?? "dell'azienda selezionata"}.
           </p>
         </div>
         <button className="button button-primary" type="button">
@@ -72,9 +81,6 @@ export function DashboardPage() {
                 const seller = sellers.find(
                   (item) => item.id === store.sellerId,
                 )
-                const company = state.accounting.companies.find(
-                  (item) => item.id === store.companyId,
-                )
                 return (
                   <div className="store-summary" key={store.id}>
                     <span className="store-avatar">
@@ -83,7 +89,6 @@ export function DashboardPage() {
                     <span>
                       <strong>{store.name}</strong>
                       <small>
-                        {company?.name ?? 'Azienda non assegnata'} ·{' '}
                         {store.city || 'Città non indicata'} ·{' '}
                         {seller?.name ?? 'Venditrice non assegnata'}
                       </small>

@@ -419,6 +419,7 @@ export function normalizeStoredState(
           : storedTaxableAmount
       return {
         ...invoice,
+        companyId: invoice.companyId || fallbackCompanyId,
         taxableAmount,
         vat,
         lines,
@@ -434,6 +435,7 @@ export function normalizeStoredState(
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
         ...document,
+        companyId: document.companyId || fallbackCompanyId,
         source: document.source ?? 'manual-upload',
         senderName: document.senderName ?? '',
         status: document.status ?? 'unrecognized',
@@ -458,9 +460,13 @@ export function normalizeStoredState(
       accounting: {
         ...accounting,
         invoices,
-        sellers: accountingSellers,
+        sellers: accountingSellers.map((seller) => ({
+          ...seller,
+          companyId: seller.companyId || fallbackCompanyId,
+        })),
         suppliers: (accounting.suppliers ?? []).map((supplier) => ({
           ...supplier,
+          companyId: supplier.companyId || fallbackCompanyId,
           paymentTermsDays: positiveInteger(
             supplier.paymentTermsDays,
             10,
@@ -468,6 +474,7 @@ export function normalizeStoredState(
         })),
         products: (accounting.products ?? []).map((product) => ({
           ...product,
+          companyId: product.companyId || fallbackCompanyId,
           supplierId: product.supplierId ?? null,
           supplierName: product.supplierName ?? '',
           code: product.code ?? '',
@@ -479,9 +486,24 @@ export function normalizeStoredState(
         })),
         expenses: (accounting.expenses ?? []).map((expense) => ({
           ...expense,
+          companyId: expense.companyId || fallbackCompanyId,
           recurrence: expense.recurrence ?? 'once',
           recurrenceEndDate: expense.recurrenceEndDate ?? null,
         })),
+        takings: (accounting.takings ?? []).map((taking) => ({
+          ...taking,
+          companyId: taking.companyId || fallbackCompanyId,
+        })),
+        rentals: (accounting.rentals ?? []).map((rental) => ({
+          ...rental,
+          companyId: rental.companyId || fallbackCompanyId,
+        })),
+        accountantInvoices: (accounting.accountantInvoices ?? []).map(
+          (invoice) => ({
+            ...invoice,
+            companyId: invoice.companyId || fallbackCompanyId,
+          }),
+        ),
       },
     }
   }
@@ -557,6 +579,84 @@ export function importLegacyIntoState(
         }
       : current.company,
     accounting: mergedAccounting,
+  }
+}
+
+export function importLegacyIntoActiveCompany(
+  current: AppState,
+  json: string,
+): AppState {
+  const targetCompanyId = current.accounting.activeCompanyId
+  if (!targetCompanyId) throw new Error('Seleziona prima un’azienda.')
+
+  const imported = importLegacyIntoState(
+    createInitialState(current.company.id),
+    json,
+  )
+  const sourceCompanyId =
+    imported.accounting.activeCompanyId ??
+    imported.accounting.companies[0]?.id ??
+    null
+  if (!sourceCompanyId) {
+    throw new Error('Il file non contiene dati di un’azienda.')
+  }
+
+  const mergeById = <Item extends { id: string }>(
+    existing: Item[],
+    additions: Item[],
+  ) => {
+    const merged = new Map(existing.map((item) => [item.id, item]))
+    additions.forEach((item) => merged.set(item.id, item))
+    return [...merged.values()]
+  }
+  const companyRecords = <Item extends { companyId: string }>(items: Item[]) =>
+    items
+      .filter((item) => item.companyId === sourceCompanyId)
+      .map((item) => ({ ...item, companyId: targetCompanyId }))
+
+  return {
+    ...current,
+    stores: mergeById(current.stores, companyRecords(imported.stores)),
+    sellers: mergeById(current.sellers, companyRecords(imported.sellers)),
+    reviewDocuments: mergeById(
+      current.reviewDocuments,
+      companyRecords(imported.reviewDocuments),
+    ),
+    accounting: {
+      ...current.accounting,
+      invoices: mergeById(
+        current.accounting.invoices,
+        companyRecords(imported.accounting.invoices),
+      ),
+      takings: mergeById(
+        current.accounting.takings,
+        companyRecords(imported.accounting.takings),
+      ),
+      sellers: mergeById(
+        current.accounting.sellers,
+        companyRecords(imported.accounting.sellers),
+      ),
+      suppliers: mergeById(
+        current.accounting.suppliers,
+        companyRecords(imported.accounting.suppliers),
+      ),
+      products: mergeById(
+        current.accounting.products,
+        companyRecords(imported.accounting.products),
+      ),
+      rentals: mergeById(
+        current.accounting.rentals,
+        companyRecords(imported.accounting.rentals),
+      ),
+      accountantInvoices: mergeById(
+        current.accounting.accountantInvoices,
+        companyRecords(imported.accounting.accountantInvoices),
+      ),
+      expenses: mergeById(
+        current.accounting.expenses,
+        companyRecords(imported.accounting.expenses),
+      ),
+    },
   }
 }
 

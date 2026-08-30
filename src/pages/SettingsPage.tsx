@@ -32,6 +32,16 @@ function csvCell(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`
 }
 
+function filenamePart(value: string) {
+  return (
+    value
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'azienda'
+  )
+}
+
 function CompanyEditor({
   company,
   onSave,
@@ -147,6 +157,17 @@ export function SettingsPage() {
     state.accounting.companies.find(
       (item) => item.id === state.accounting.activeCompanyId,
     ) ?? null
+  const companyId = accountingCompany?.id
+  const companyFilename = filenamePart(accountingCompany?.name ?? '')
+  const invoices = state.accounting.invoices.filter(
+    (invoice) => invoice.companyId === companyId,
+  )
+  const takings = state.accounting.takings.filter(
+    (taking) => taking.companyId === companyId,
+  )
+  const products = state.accounting.products.filter(
+    (product) => product.companyId === companyId,
+  )
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
@@ -163,7 +184,7 @@ export function SettingsPage() {
     const result = importLegacyData(await file.text())
     setImportMessage(
       result.ok
-        ? 'Dati di Contabilità Pro importati correttamente.'
+        ? `Dati importati soltanto in ${accountingCompany?.name ?? "nell'azienda selezionata"}.`
         : result.error ?? 'Importazione fallita.',
     )
     event.target.value = ''
@@ -182,7 +203,7 @@ export function SettingsPage() {
         'VENIT',
         'RICARICO %',
       ],
-      ...state.accounting.invoices.map((invoice) => [
+      ...invoices.map((invoice) => [
         'FATTURA',
         invoice.date,
         invoice.number,
@@ -193,7 +214,7 @@ export function SettingsPage() {
         invoice.theoreticalRevenue,
         invoice.markupPercent,
       ]),
-      ...state.accounting.takings.map((taking) => [
+      ...takings.map((taking) => [
         'INCASSO',
         taking.date,
         '',
@@ -208,7 +229,7 @@ export function SettingsPage() {
     download(
       `\uFEFF${lines.map((row) => row.map(csvCell).join(';')).join('\n')}`,
       'text/csv;charset=utf-8',
-      `fatture-incassi-${new Date().toISOString().slice(0, 10)}.csv`,
+      `fatture-incassi-${companyFilename}-${new Date().toISOString().slice(0, 10)}.csv`,
     )
   }
 
@@ -218,7 +239,7 @@ export function SettingsPage() {
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
-        state.accounting.invoices.map((invoice) => ({
+        invoices.map((invoice) => ({
           Data: invoice.date,
           Numero: invoice.number,
           Fornitore: invoice.supplierName,
@@ -238,7 +259,7 @@ export function SettingsPage() {
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
-        state.accounting.invoices.flatMap((invoice) =>
+        invoices.flatMap((invoice) =>
           invoice.lines.map((line) => ({
             Fattura: invoice.number,
             Data: invoice.date,
@@ -259,7 +280,7 @@ export function SettingsPage() {
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
-        state.accounting.products.map((product) => ({
+        products.map((product) => ({
           Prodotto: product.name,
           Codice: product.code,
           Fornitore: product.supplierName,
@@ -275,7 +296,7 @@ export function SettingsPage() {
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
-        state.accounting.takings.map((taking) => ({
+        takings.map((taking) => ({
           Data: taking.date,
           Venditore: taking.sellerName,
           Cash: taking.cash,
@@ -289,7 +310,7 @@ export function SettingsPage() {
     )
     XLSX.writeFile(
       workbook,
-      `fatture-incassi-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      `fatture-incassi-${companyFilename}-${new Date().toISOString().slice(0, 10)}.xlsx`,
     )
   }
 
@@ -565,8 +586,8 @@ export function SettingsPage() {
             </div>
           </div>
           <p className="settings-note">
-            Importa il backup JSON v5 della vecchia applicazione senza
-            cancellare fatture, incassi, aziende, fornitori o pagamenti.
+            Importa il backup JSON v5 nella sola azienda selezionata, senza
+            modificare gli archivi delle altre aziende.
           </p>
           <input
             accept="application/json,.json"
@@ -589,7 +610,7 @@ export function SettingsPage() {
                 download(
                   exportLegacyData(),
                   'application/json',
-                  'contabilita-pro-backup-v5.json',
+                  `contabilita-pro-${companyFilename}-backup-v5.json`,
                 )
               }
               type="button"
@@ -614,7 +635,7 @@ export function SettingsPage() {
                 download(
                   exportUnifiedData(),
                   'application/json',
-                  'fatture-incassi-pro-backup.json',
+                  `fatture-incassi-pro-${companyFilename}-backup.json`,
                 )
               }
               type="button"

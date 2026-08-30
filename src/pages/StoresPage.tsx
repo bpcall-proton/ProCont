@@ -4,7 +4,6 @@ import { can } from '../auth/permissions'
 import { useAppStore } from '../store/AppStoreContext'
 
 const emptyForm = {
-  companyId: '',
   storeName: '',
   city: '',
   sellerName: '',
@@ -15,26 +14,28 @@ const emptyForm = {
 export function StoresPage() {
   const { user } = useAuth()
   const { state, addStore, removeStore, setSellerViberUserId } = useAppStore()
-  const [form, setForm] = useState(() => ({
-    ...emptyForm,
-    companyId: state.accounting.activeCompanyId ?? '',
-  }))
+  const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [viberDrafts, setViberDrafts] = useState<Record<string, string>>({})
   const canEdit = user ? can(user.role, 'manageStores') : false
+  const companyId = state.accounting.activeCompanyId
+  const activeCompany = state.accounting.companies.find(
+    (company) => company.id === companyId,
+  )
+  const stores = state.stores.filter((store) => store.companyId === companyId)
+  const sellers = state.sellers.filter(
+    (seller) => seller.companyId === companyId,
+  )
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const result = addStore(form)
+    const result = addStore({ ...form, companyId: companyId ?? '' })
     if (!result.ok) {
       setError(result.error ?? 'Impossibile aggiungere il punto vendita')
       return
     }
     setError('')
-    setForm({
-      ...emptyForm,
-      companyId: state.accounting.activeCompanyId ?? '',
-    })
+    setForm(emptyForm)
   }
 
   return (
@@ -58,20 +59,7 @@ export function StoresPage() {
           <div className="form-grid">
             <label>
               Azienda
-              <select
-                onChange={(event) =>
-                  setForm({ ...form, companyId: event.target.value })
-                }
-                required
-                value={form.companyId}
-              >
-                <option value="">Seleziona azienda</option>
-                {state.accounting.companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
+              <input readOnly value={activeCompany?.name ?? ''} />
             </label>
             <label>
               Nome punto vendita
@@ -141,12 +129,9 @@ export function StoresPage() {
       )}
 
       <section className="store-grid">
-        {state.stores.map((store) => {
-          const seller = state.sellers.find(
+        {stores.map((store) => {
+          const seller = sellers.find(
             (item) => item.id === store.sellerId,
-          )
-          const company = state.accounting.companies.find(
-            (item) => item.id === store.companyId,
           )
           return (
             <article className="panel store-card" key={store.id}>
@@ -156,9 +141,7 @@ export function StoresPage() {
                 </span>
                 <span className="channel-status">WhatsApp + Viber</span>
               </div>
-              <span className="eyebrow">
-                {company?.name ?? 'Azienda non assegnata'}
-              </span>
+              <span className="eyebrow">{activeCompany?.name}</span>
               <h2>{store.name}</h2>
               <p>{store.city || 'Città non indicata'}</p>
               <div className="seller-block">
@@ -208,7 +191,7 @@ export function StoresPage() {
             </article>
           )
         })}
-        {state.stores.length === 0 && !canEdit && (
+        {stores.length === 0 && !canEdit && (
           <div className="panel empty-state">
             <strong>Nessun punto vendita disponibile</strong>
             <span>Il titolare deve completare la configurazione.</span>

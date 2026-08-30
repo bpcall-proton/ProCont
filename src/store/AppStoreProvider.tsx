@@ -28,8 +28,9 @@ import type { AppRepository } from '../data/repository'
 import {
   exportLegacyAccounting,
   exportUnifiedState,
-  importLegacyIntoState,
+  importLegacyIntoActiveCompany,
 } from '../data/migrations'
+import { createCompanyState } from '../data/companyState'
 import { normalizeSenderPhone } from '../domain/senderRouting'
 import {
   AppStoreContext,
@@ -38,22 +39,32 @@ import {
   type NewStoreInput,
 } from './AppStoreContext'
 
-function withTimestamp(state: AppState): AppState {
-  const invoiceValue = state.accounting.invoices.reduce(
+function withActiveCompanySummaries(state: AppState): AppState {
+  const companyId = state.accounting.activeCompanyId
+  const invoices = state.accounting.invoices.filter(
+    (invoice) => invoice.companyId === companyId,
+  )
+  const takings = state.accounting.takings.filter(
+    (taking) => taking.companyId === companyId,
+  )
+  const reviewDocuments = state.reviewDocuments.filter(
+    (document) => document.companyId === companyId,
+  )
+  const invoiceValue = invoices.reduce(
     (total, invoice) => total + invoice.total,
     0,
   )
-  const theoreticalRevenue = state.accounting.invoices.reduce(
+  const theoreticalRevenue = invoices.reduce(
     (total, invoice) => total + invoice.theoreticalRevenue,
     0,
   )
-  const realTakings = state.accounting.takings.reduce(
+  const realTakings = takings.reduce(
     (total, taking) =>
       total +
       (taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos),
     0,
   )
-  const review = state.reviewDocuments.reduce(
+  const review = reviewDocuments.reduce(
     (summary, document) => {
       if (document.status === 'pending') summary.pending += 1
       if (document.status === 'unrecognized') summary.unrecognized += 1
@@ -73,6 +84,12 @@ function withTimestamp(state: AppState): AppState {
       realTakings,
       stockRevenue: theoreticalRevenue - realTakings,
     },
+  }
+}
+
+function withTimestamp(state: AppState): AppState {
+  return {
+    ...withActiveCompanySummaries(state),
     updatedAt: new Date().toISOString(),
   }
 }
@@ -156,8 +173,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const unsubscribe = useRef<() => void>(() => undefined)
 
   const applyState = useCallback((next: AppState) => {
-    stateRef.current = next
-    setState(next)
+    const summarized = withActiveCompanySummaries(next)
+    stateRef.current = summarized
+    setState(summarized)
   }, [])
 
   const enqueueSave = useCallback((next: AppState) => {
@@ -516,7 +534,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       },
       importLegacyData: (json: string) => {
         try {
-          updateState((current) => importLegacyIntoState(current, json))
+          updateState((current) =>
+            importLegacyIntoActiveCompany(current, json),
+          )
           return { ok: true }
         } catch (error) {
           return {
@@ -526,9 +546,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           }
         }
       },
-      exportUnifiedData: () => exportUnifiedState(stateRef.current),
-      exportLegacyData: () =>
-        exportLegacyAccounting(stateRef.current.accounting),
+      exportUnifiedData: () => {
+        const current = stateRef.current
+        const companyId = current.accounting.activeCompanyId
+        return exportUnifiedState(
+          companyId ? createCompanyState(current, companyId) : current,
+        )
+      },
+      exportLegacyData: () => {
+        const current = stateRef.current
+        const companyId = current.accounting.activeCompanyId
+        return exportLegacyAccounting(
+          companyId
+            ? createCompanyState(current, companyId).accounting
+            : current.accounting,
+        )
+      },
     }),
     [
       cloudRepository,
