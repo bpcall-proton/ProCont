@@ -188,6 +188,9 @@ export function InvoicesPanel({
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyInvoice)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [repeatSupplier, setRepeatSupplier] = useState(false)
+  const [repeatSeller, setRepeatSeller] = useState(false)
+  const [repeatDate, setRepeatDate] = useState(false)
   const [lines, setLines] = useState<InvoiceLine[]>([])
   const [lineForm, setLineForm] = useState(emptyInvoiceLine)
   const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
@@ -323,6 +326,13 @@ export function InvoicesPanel({
     setLineForm(emptyInvoiceLine)
   }
 
+  function resetInvoiceForm() {
+    setEditingId(null)
+    setForm({ ...emptyInvoice, date: today() })
+    setLines([])
+    setLineForm(emptyInvoiceLine)
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault()
     updateAccounting((current) =>
@@ -377,9 +387,18 @@ export function InvoicesPanel({
         }
       }),
     )
+    const nextForm = editingId
+      ? { ...emptyInvoice, date: today() }
+      : {
+          ...emptyInvoice,
+          supplierId: repeatSupplier ? form.supplierId : '',
+          sellerId: repeatSeller ? form.sellerId : '',
+          date: repeatDate ? form.date : today(),
+        }
     setEditingId(null)
-    setForm(emptyInvoice)
+    setForm(nextForm)
     setLines([])
+    setLineForm(emptyInvoiceLine)
   }
 
   function edit(invoice: AccountingInvoice) {
@@ -507,17 +526,58 @@ export function InvoicesPanel({
 
       {(!archiveOnly || editingId) && (
       <form className="panel accounting-form" onSubmit={submit}>
-        <div className="panel-heading">
+        <div className="panel-heading invoice-form-heading">
           <div>
             <span className="eyebrow">INSERIMENTO MANUALE</span>
             <h2>{editingId ? 'Modifica fattura' : 'Nuova fattura'}</h2>
           </div>
+          <div className="invoice-entry-shortcuts">
+            {!editingId && (
+              <div className="invoice-entry-options">
+                <label className="checkbox-row">
+                  <input
+                    checked={repeatSupplier}
+                    onChange={(event) =>
+                      setRepeatSupplier(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  Riparti da fornitore
+                </label>
+                <label className="checkbox-row">
+                  <input
+                    checked={repeatSeller}
+                    onChange={(event) =>
+                      setRepeatSeller(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  Riparti da venditore
+                </label>
+                <label className="checkbox-row">
+                  <input
+                    checked={repeatDate}
+                    onChange={(event) => setRepeatDate(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Mantieni ultima data
+                </label>
+              </div>
+            )}
+            <button
+              className="button button-secondary"
+              onClick={resetInvoiceForm}
+              type="button"
+            >
+              Reset dati
+            </button>
+          </div>
         </div>
         <div className="form-grid accounting-fields">
-          <label>Numero<input required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
-          <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Fornitore<select value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Venditore<select value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Numero fattura<input placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
+          <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Descrizione<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Imponibile<input inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
@@ -647,7 +707,7 @@ export function InvoicesPanel({
         </section>
         <label className="checkbox-row"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         <div className="form-actions">
-          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyInvoice); setLines([]) }}>Annulla</button>}
+          {editingId && <button className="button button-secondary" type="button" onClick={resetInvoiceForm}>Annulla</button>}
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra fattura'}</button>
         </div>
       </form>
