@@ -2,7 +2,9 @@ import { useMemo, useState, type FormEvent } from 'react'
 import {
   activeAccounting,
   addDays,
+  defaultPaymentTermsDays,
   expenseCategories,
+  invoiceDueState,
   invoiceRemaining,
   money,
   paymentMethods,
@@ -155,6 +157,9 @@ function InvoicesPanel() {
   const [form, setForm] = useState(emptyInvoice)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
+  const [supplierFilter, setSupplierFilter] = useState('')
+  const [sellerFilter, setSellerFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
   const [paymentTarget, setPaymentTarget] =
     useState<AccountingInvoice | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -163,6 +168,16 @@ function InvoicesPanel() {
     useState<PaymentMethod>('Bonifico')
   const [advanceSupplier, setAdvanceSupplier] = useState('')
   const [advanceAmount, setAdvanceAmount] = useState('')
+  const activeSupplierFilter = data.suppliers.some(
+    (supplier) => supplier.id === supplierFilter,
+  )
+    ? supplierFilter
+    : ''
+  const activeSellerFilter = data.sellers.some(
+    (seller) => seller.id === sellerFilter,
+  )
+    ? sellerFilter
+    : ''
 
   const invoices = useMemo(
     () =>
@@ -174,8 +189,27 @@ function InvoicesPanel() {
               ? !invoice.settled
               : true,
         )
+        .filter(
+          (invoice) =>
+            !activeSupplierFilter ||
+            invoice.supplierId === activeSupplierFilter,
+        )
+        .filter(
+          (invoice) =>
+            !activeSellerFilter || invoice.sellerId === activeSellerFilter,
+        )
+        .filter(
+          (invoice) =>
+            !monthFilter || invoice.date.slice(0, 7) === monthFilter,
+        )
         .sort((left, right) => right.date.localeCompare(left.date)),
-    [data.invoices, filter],
+    [
+      activeSellerFilter,
+      activeSupplierFilter,
+      data.invoices,
+      filter,
+      monthFilter,
+    ],
   )
   const total = invoices.reduce((sum, item) => sum + item.total, 0)
   const paid = invoices.reduce(
@@ -213,7 +247,10 @@ function InvoicesPanel() {
           theoreticalRevenue: numberValue(form.theoreticalRevenue),
           total: numberValue(form.total),
           date: form.date,
-          dueDate: addDays(form.date, 10),
+          dueDate: addDays(
+            form.date,
+            supplier?.paymentTermsDays ?? defaultPaymentTermsDays,
+          ),
           settled: form.settled,
           paidAmount: form.settled
             ? numberValue(form.total)
@@ -390,32 +427,59 @@ function InvoicesPanel() {
       </form>
 
       <section className="panel">
-        <div className="table-toolbar">
+        <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
-          <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
-            <option value="all">Tutte</option>
-            <option value="open">Da pagare</option>
-            <option value="paid">Pagate</option>
-          </select>
+          <div className="invoice-filters">
+            <select aria-label="Filtra per stato" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+              <option value="all">Tutti gli stati</option>
+              <option value="open">Da pagare</option>
+              <option value="paid">Pagate</option>
+            </select>
+            <select aria-label="Filtra per fornitore" value={activeSupplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+              <option value="">Tutti i fornitori</option>
+              {data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+            <select aria-label="Filtra per venditore" value={activeSellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+              <option value="">Tutti i venditori</option>
+              {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+            </select>
+            <input aria-label="Filtra per mese fattura" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+          </div>
         </div>
         <div className="data-table-wrap">
           <table className="data-table">
-            <thead><tr><th>Data / N.</th><th>Fornitore</th><th>Totale</th><th>Venit</th><th>Stato</th><th>Azioni</th></tr></thead>
+            <thead><tr><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id}>
+              {invoices.map((invoice) => {
+                const dueState = invoiceDueState(invoice)
+                return (
+                <tr className={`invoice-row ${dueState}`} key={invoice.id}>
                   <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
-                  <td>{invoice.supplierName || '—'}<small>{invoice.description}</small></td>
+                  <td>{invoice.supplierName || '—'}<small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small></td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
                   <td>{money(invoice.theoreticalRevenue)}</td>
-                  <td><span className={`record-status ${invoice.settled ? 'paid' : 'open'}`}>{invoice.settled ? 'Pagata' : invoice.paidAmount > 0 ? 'Parziale' : 'Da pagare'}</span></td>
+                  <td>
+                    <span className={`record-status ${dueState}`}>
+                      {dueState === 'paid'
+                        ? 'Pagata'
+                        : dueState === 'overdue'
+                          ? 'Scaduta'
+                          : dueState === 'due-soon'
+                            ? 'In scadenza'
+                            : invoice.paidAmount > 0
+                              ? 'Parziale'
+                              : 'Da pagare'}
+                    </span>
+                    <small>Scadenza {invoice.dueDate || 'non indicata'}</small>
+                  </td>
                   <td className="row-actions">
                     <button type="button" onClick={() => edit(invoice)}>Modifica</button>
                     {!invoice.settled && <button type="button" onClick={() => { setPaymentTarget(invoice); setPaymentAmount('') }}>Acconto / paga</button>}
                     <button className="danger-text" type="button" onClick={() => remove(invoice.id)}>Elimina</button>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
           {invoices.length === 0 && <div className="empty-state compact-empty"><strong>Nessuna fattura</strong><span>Usa il modulo sopra per l'inserimento manuale.</span></div>}
@@ -537,6 +601,9 @@ function ContactsPanel() {
   const [sellerPhone, setSellerPhone] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
+  const [supplierPaymentTerms, setSupplierPaymentTerms] = useState(
+    String(defaultPaymentTermsDays),
+  )
 
   function addSeller(event: FormEvent) {
     event.preventDefault()
@@ -576,6 +643,10 @@ function ContactsPanel() {
             phone: '',
             city: '',
             notes: '',
+            paymentTermsDays: Math.max(
+              0,
+              Math.round(numberValue(supplierPaymentTerms)),
+            ),
           },
           ...current.suppliers,
         ],
@@ -583,6 +654,22 @@ function ContactsPanel() {
     )
     setSupplierName('')
     setSupplierTaxId('')
+    setSupplierPaymentTerms(String(defaultPaymentTermsDays))
+  }
+
+  function updateSupplierPaymentTerms(supplierId: string, value: string) {
+    const paymentTermsDays = Math.max(
+      0,
+      Math.min(365, Math.round(numberValue(value))),
+    )
+    updateAccounting((current) => ({
+      ...current,
+      suppliers: current.suppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? { ...supplier, paymentTermsDays }
+          : supplier,
+      ),
+    }))
   }
 
   return (
@@ -598,11 +685,11 @@ function ContactsPanel() {
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Fornitori</h2></div><span className="count-pill">{data.suppliers.length}</span></div>
-        <form className="inline-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
           const total = invoices.reduce((sum, item) => sum + item.total, 0)
-          return <div className="record-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
     </section>

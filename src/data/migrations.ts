@@ -28,6 +28,12 @@ function amount(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
+function positiveInteger(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : fallback
+}
+
 function flag(value: unknown) {
   return value === true
 }
@@ -163,6 +169,7 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
     phone: text(value.telefono),
     city: text(value.citta),
     notes: text(value.note),
+    paymentTermsDays: positiveInteger(value.giorniPagamento, 10),
   }
 }
 
@@ -281,7 +288,8 @@ export function normalizeStoredState(
   if (
     (value.schemaVersion === 2 ||
       value.schemaVersion === 3 ||
-      value.schemaVersion === 4) &&
+      value.schemaVersion === 4 ||
+      value.schemaVersion === 5) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -338,7 +346,7 @@ export function normalizeStoredState(
     }))
     return {
       ...state,
-      schemaVersion: 4,
+      schemaVersion: 5,
       stores,
       sellers,
       dataSettings: {
@@ -349,6 +357,13 @@ export function normalizeStoredState(
       accounting: {
         ...accounting,
         sellers: accountingSellers,
+        suppliers: (accounting.suppliers ?? []).map((supplier) => ({
+          ...supplier,
+          paymentTermsDays: positiveInteger(
+            supplier.paymentTermsDays,
+            10,
+          ),
+        })),
         expenses: (accounting.expenses ?? []).map((expense) => ({
           ...expense,
           recurrence: expense.recurrence ?? 'once',
@@ -435,7 +450,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 4,
+      version: 5,
       exportedAt: new Date().toISOString(),
       data: state,
     },
@@ -517,6 +532,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           telefono: supplier.phone,
           citta: supplier.city,
           note: supplier.notes,
+          giorniPagamento: supplier.paymentTermsDays,
         })),
         affitti: state.rentals.map((rental) => ({
           id: rental.id,
