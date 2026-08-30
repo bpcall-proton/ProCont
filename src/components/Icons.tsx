@@ -100,3 +100,11 @@ export function PaidInvoicesIcon(props: IconProps) {
     </Svg>
   )
 }
+
+export function ProductIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m4 7 8-4 8 4-8 4-8-4Zm0 0v10l8 4 8-4V7M12 11v10" />
+    </Svg>
+  )
+}
