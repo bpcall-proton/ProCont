@@ -34,6 +34,15 @@ ipcMain.handle('local-state:save', async (_event, companyId, content) => {
   await fs.rename(temporary, destination)
 })
 
+ipcMain.handle('local-state:delete', async (_event, companyId) => {
+  try {
+    await fs.unlink(statePath(companyId))
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return
+    throw error
+  }
+})
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1440,

@@ -62,6 +62,22 @@ async function saveToIndexedDb(storageId: string, state: AppState) {
   })
 }
 
+async function deleteFromIndexedDb(storageId: string) {
+  const database = await openDatabase()
+  return new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite')
+    transaction.objectStore(STORE_NAME).delete(storageId)
+    transaction.oncomplete = () => {
+      database.close()
+      resolve()
+    }
+    transaction.onerror = () => {
+      database.close()
+      reject(transaction.error)
+    }
+  })
+}
+
 export class LocalRepository implements AppRepository {
   readonly mode = 'local' as const
 
@@ -92,6 +108,14 @@ export class LocalRepository implements AppRepository {
     await saveToIndexedDb(storageId, state)
   }
 
+  private async deleteState(storageId: string) {
+    if (window.desktopApp) {
+      await window.desktopApp.deleteLocalState(storageId)
+      return
+    }
+    await deleteFromIndexedDb(storageId)
+  }
+
   private async saveAllCompanyStates(state: AppState) {
     await Promise.all(
       state.accounting.companies.map((company) =>
@@ -111,10 +135,12 @@ export class LocalRepository implements AppRepository {
           this.loadState(companyStorageId(company.id)),
         ),
       )
-      return mergeCompanyStates(
+      const state = mergeCompanyStates(
         workspace,
         companyStates.filter((state): state is AppState => state !== null),
       )
+      await this.deleteState(this.companyId)
+      return state
     }
 
     const legacyState = await this.loadState(this.companyId)
@@ -124,6 +150,7 @@ export class LocalRepository implements AppRepository {
       workspaceStorageId(this.companyId),
       createWorkspaceState(legacyState),
     )
+    await this.deleteState(this.companyId)
     return legacyState
   }
 

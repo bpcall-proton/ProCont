@@ -1,4 +1,5 @@
 import {
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -79,6 +80,10 @@ export class CloudRepository implements AppRepository {
         const state = normalizeStoredState(snapshot.data(), this.companyId)
         return state ? [state] : []
       })
+      const legacySnapshot = await getDoc(this.legacyReference())
+      if (legacySnapshot.exists()) {
+        await deleteDoc(this.legacyReference())
+      }
       return mergeCompanyStates(workspace, companies)
     }
 
@@ -94,6 +99,7 @@ export class CloudRepository implements AppRepository {
       this.workspaceReference(),
       createWorkspaceState(legacyState),
     )
+    await deleteDoc(this.legacyReference())
     return legacyState
   }
 
