@@ -57,3 +57,48 @@ jobs:
           name: Fatture-Incassi-Pro-Windows-Installer
           path: release/Fatture-Incassi-Pro-Setup-*.exe
           if-no-files-found: error
+
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+
+      - name: Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build Android APK
+        run: npm run android:apk
+
+      - name: Prepare Android APK
+        run: |
+          mkdir -p release/mobile
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            release/mobile/Fatture-Incassi-Pro-0.1.0-Android.apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Fatture-Incassi-Pro-Android
+          path: release/mobile/Fatture-Incassi-Pro-*-Android.apk
+          if-no-files-found: error
