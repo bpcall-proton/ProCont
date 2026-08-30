@@ -5,7 +5,7 @@ import { useAppStore } from '../store/AppStoreContext'
 type PaymentFilter = 'paid' | 'partial' | 'all'
 
 export function PaidInvoicesPage() {
-  const { state, updateAccounting } = useAppStore()
+  const { state, setActiveAccountingCompany } = useAppStore()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PaymentFilter>('paid')
   const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -56,10 +56,7 @@ export function PaidInvoicesPage() {
           <select
             aria-label="Azienda contabile"
             onChange={(event) =>
-              updateAccounting((current) => ({
-                ...current,
-                activeCompanyId: event.target.value,
-              }))
+              setActiveAccountingCompany(event.target.value)
             }
             value={companyId ?? ''}
           >

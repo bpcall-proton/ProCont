@@ -9,11 +9,13 @@ import {
 import { firebaseConfigured } from '../auth/firebase'
 import { useAuth } from '../auth/AuthContext'
 import {
+  createId,
   createInitialState,
   createStoreWithSeller,
   updateCompany as patchCompany,
 } from '../domain/defaults'
 import type {
+  AccountingCompany,
   AppState,
   Company,
   DataMode,
@@ -31,6 +33,7 @@ import {
 import { normalizeSenderPhone } from '../domain/senderRouting'
 import {
   AppStoreContext,
+  type AccountingCompanyInput,
   type AppStoreContextValue,
   type NewStoreInput,
 } from './AppStoreContext'
@@ -73,6 +76,46 @@ function readModePreference(companyId: string): DataMode | null {
 
 function writeModePreference(companyId: string, mode: DataMode) {
   localStorage.setItem(modePreferenceKey(companyId), mode)
+}
+
+function normalizeCompanyValue(value: string) {
+  return value.trim().toLocaleLowerCase()
+}
+
+function normalizeTaxId(value: string) {
+  return value.replace(/\s/g, '').toLocaleUpperCase()
+}
+
+function validateAccountingCompany(
+  companies: AccountingCompany[],
+  input: AccountingCompanyInput,
+  currentId?: string,
+) {
+  const name = input.name.trim()
+  const taxId = input.taxId.trim()
+
+  if (!name) return 'Inserisci il nome dell’azienda.'
+  if (
+    companies.some(
+      (company) =>
+        company.id !== currentId &&
+        normalizeCompanyValue(company.name) === normalizeCompanyValue(name),
+    )
+  ) {
+    return 'Esiste già un’azienda con questo nome.'
+  }
+  if (
+    taxId &&
+    companies.some(
+      (company) =>
+        company.id !== currentId &&
+        normalizeTaxId(company.taxId) === normalizeTaxId(taxId),
+    )
+  ) {
+    return 'Esiste già un’azienda con questa partita IVA o codice fiscale.'
+  }
+
+  return null
 }
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
@@ -203,6 +246,92 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             ),
           },
         }))
+      },
+      setActiveAccountingCompany: (activeCompanyId: string) => {
+        if (
+          !stateRef.current.accounting.companies.some(
+            (company) => company.id === activeCompanyId,
+          )
+        ) {
+          return
+        }
+        updateState((current) => ({
+          ...current,
+          accounting: {
+            ...current.accounting,
+            activeCompanyId,
+          },
+        }))
+      },
+      addAccountingCompany: (input: AccountingCompanyInput) => {
+        const current = stateRef.current
+        const error = validateAccountingCompany(
+          current.accounting.companies,
+          input,
+        )
+        if (error) return { ok: false, error }
+
+        const company: AccountingCompany = {
+          ...input,
+          id: createId('accounting-company'),
+          name: input.name.trim(),
+          taxId: input.taxId.trim(),
+          city: input.city.trim(),
+          notes: input.notes.trim(),
+        }
+        updateState((next) => ({
+          ...next,
+          accounting: {
+            ...next.accounting,
+            companies: [...next.accounting.companies, company],
+            activeCompanyId: company.id,
+          },
+        }))
+        return { ok: true }
+      },
+      updateAccountingCompany: (
+        companyId: string,
+        input: AccountingCompanyInput,
+      ) => {
+        const current = stateRef.current
+        if (
+          !current.accounting.companies.some(
+            (company) => company.id === companyId,
+          )
+        ) {
+          return { ok: false, error: 'Azienda non trovata.' }
+        }
+        const error = validateAccountingCompany(
+          current.accounting.companies,
+          input,
+          companyId,
+        )
+        if (error) return { ok: false, error }
+
+        const patch = {
+          ...input,
+          name: input.name.trim(),
+          taxId: input.taxId.trim(),
+          city: input.city.trim(),
+          notes: input.notes.trim(),
+        }
+        updateState((next) => ({
+          ...next,
+          company:
+            next.company.id === companyId
+              ? patchCompany(next.company, {
+                  name: patch.name,
+                  taxId: patch.taxId,
+                })
+              : next.company,
+          accounting: {
+            ...next.accounting,
+            companies: next.accounting.companies.map((company) =>
+              company.id === companyId ? { ...company, ...patch } : company,
+            ),
+          },
+        }))
+        return { ok: true }
       },
       addStore: (input: NewStoreInput) => {
         if (

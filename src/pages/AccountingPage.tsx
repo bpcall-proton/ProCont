@@ -36,32 +36,29 @@ function mutateCompany(
 }
 
 export function AccountingPage() {
-  const { state, updateAccounting } = useAppStore()
+  const {
+    state,
+    setActiveAccountingCompany,
+    addAccountingCompany,
+  } = useAppStore()
   const [section, setSection] = useState<Section>('invoices')
   const [companyName, setCompanyName] = useState('')
+  const [companyError, setCompanyError] = useState<string | null>(null)
   const active = activeAccounting(state.accounting)
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
     const name = companyName.trim()
     if (!name) return
-    const id = createId('accounting-company')
-    updateAccounting((current) => ({
-      ...current,
-      companies: [
-        ...current.companies,
-        {
-          id,
-          name,
-          taxId: '',
-          city: '',
-          notes: '',
-          seasonEndDate: null,
-        },
-      ],
-      activeCompanyId: id,
-    }))
-    setCompanyName('')
+    const result = addAccountingCompany({
+      name,
+      taxId: '',
+      city: '',
+      notes: '',
+      seasonEndDate: null,
+    })
+    setCompanyError(result.error ?? null)
+    if (result.ok) setCompanyName('')
   }
 
   return (
@@ -79,10 +76,7 @@ export function AccountingPage() {
           <select
             aria-label="Azienda contabile attiva"
             onChange={(event) =>
-              updateAccounting((current) => ({
-                ...current,
-                activeCompanyId: event.target.value,
-              }))
+              setActiveAccountingCompany(event.target.value)
             }
             value={state.accounting.activeCompanyId ?? ''}
           >
@@ -102,6 +96,7 @@ export function AccountingPage() {
               Aggiungi
             </button>
           </form>
+          {companyError && <p className="import-message">{companyError}</p>}
         </div>
       </header>
 

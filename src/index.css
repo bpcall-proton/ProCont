@@ -38,7 +38,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -53,7 +54,8 @@ button:disabled {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
@@ -313,7 +315,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 46px;
   padding: 0 13px;
@@ -325,8 +328,14 @@ select {
 }
 
 input:hover,
-select:hover {
+select:hover,
+textarea:hover {
   border-color: #405171;
+}
+
+textarea {
+  padding: 12px 13px;
+  resize: vertical;
 }
 
 select {
@@ -538,9 +547,15 @@ select {
   backdrop-filter: blur(14px);
 }
 
-.topbar > div:first-child {
+.topbar-company {
   display: grid;
   gap: 5px;
+}
+
+.topbar-company select {
+  min-width: min(42vw, 320px);
+  padding: 7px 34px 7px 10px;
+  font-weight: 800;
 }
 
 .topbar span {
@@ -692,6 +707,72 @@ select {
 
 .settings-grid {
   align-items: start;
+}
+
+.company-list {
+  display: grid;
+  gap: 8px;
+}
+
+.company-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(19, 27, 46, 0.72);
+  text-align: left;
+}
+
+.company-list button.selected {
+  border-color: rgba(0, 229, 255, 0.5);
+  background: var(--cyan-soft);
+  box-shadow: inset 3px 0 0 var(--cyan);
+}
+
+.company-list button > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.company-list button small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-list button > span:last-child {
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.company-editor,
+.company-create-form,
+.company-language {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+
+.company-editor .button,
+.company-create-form .button {
+  justify-self: start;
+}
+
+.company-create-form {
+  display: grid;
+  gap: 16px;
+}
+
+.company-create-form > div:first-child {
+  display: grid;
+  gap: 5px;
 }
 
 .panel {
@@ -1133,9 +1214,14 @@ select {
     padding-inline: 17px;
   }
 
-  .topbar > div:first-child span,
+  .topbar-company > span,
   .sync-badge {
     display: none;
+  }
+
+  .topbar-company select {
+    min-width: 0;
+    max-width: 52vw;
   }
 
   .page-container {

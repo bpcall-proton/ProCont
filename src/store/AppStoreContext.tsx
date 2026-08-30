@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type {
+  AccountingCompany,
   AccountingState,
   AppState,
   Company,
@@ -17,6 +18,8 @@ export interface NewStoreInput {
   sellerViberUserId: string
 }
 
+export type AccountingCompanyInput = Omit<AccountingCompany, 'id'>
+
 export interface AppStoreContextValue {
   state: AppState
   loading: boolean
@@ -24,6 +27,14 @@ export interface AppStoreContextValue {
   syncMessage: string | null
   cloudAvailable: boolean
   updateCompany: (patch: Partial<Company>) => void
+  setActiveAccountingCompany: (companyId: string) => void
+  addAccountingCompany: (
+    input: AccountingCompanyInput,
+  ) => { ok: boolean; error?: string }
+  updateAccountingCompany: (
+    companyId: string,
+    input: AccountingCompanyInput,
+  ) => { ok: boolean; error?: string }
   addStore: (input: NewStoreInput) => { ok: boolean; error?: string }
   setSellerViberUserId: (
     sellerId: string,
