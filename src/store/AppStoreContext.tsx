@@ -22,11 +22,17 @@ export interface NewStoreInput {
 
 export type AccountingCompanyInput = Omit<AccountingCompany, 'id'>
 
+export interface LocalStoragePaths {
+  workspace: string
+  company: string
+}
+
 export interface AppStoreContextValue {
   state: AppState
   loading: boolean
   syncState: SyncState
   syncMessage: string | null
+  localStoragePaths: LocalStoragePaths | null
   driveSyncState: SyncState
   driveSyncMessage: string | null
   driveAccountEmail: string | null

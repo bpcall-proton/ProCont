@@ -41,6 +41,7 @@ import {
   AppStoreContext,
   type AccountingCompanyInput,
   type AppStoreContextValue,
+  type LocalStoragePaths,
   type NewStoreInput,
 } from './AppStoreContext'
 
@@ -186,6 +187,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [localStoragePaths, setLocalStoragePaths] =
+    useState<LocalStoragePaths | null>(null)
   const [driveSyncState, setDriveSyncState] = useState<SyncState>('idle')
   const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null)
   const [driveAccountEmail, setDriveAccountEmail] = useState(
@@ -306,6 +309,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [applyState, cloudRepository, companyId, localRepository])
 
+  useEffect(() => {
+    const activeCompanyId = state.accounting.activeCompanyId
+    if (!window.desktopApp || !activeCompanyId) return
+    let cancelled = false
+    void window.desktopApp
+      .getLocalStatePaths(companyId, activeCompanyId)
+      .then((paths) => {
+        if (!cancelled) setLocalStoragePaths(paths)
+      })
+      .catch(() => {
+        if (!cancelled) setLocalStoragePaths(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [companyId, state.accounting.activeCompanyId])
+
   const updateState = useCallback(
     (updater: (current: AppState) => AppState) => {
       const next = withTimestamp(updater(stateRef.current))
@@ -321,6 +341,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       loading,
       syncState,
       syncMessage,
+      localStoragePaths,
       driveSyncState,
       driveSyncMessage,
       driveAccountEmail,
@@ -697,6 +718,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state,
       syncMessage,
       syncState,
+      localStoragePaths,
       driveSyncMessage,
       driveSyncState,
       driveAccountEmail,

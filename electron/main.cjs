@@ -43,6 +43,14 @@ ipcMain.handle('local-state:delete', async (_event, companyId) => {
   }
 })
 
+ipcMain.handle(
+  'local-state:paths',
+  (_event, accountId, activeCompanyId) => ({
+    workspace: statePath(`${accountId}-workspace`),
+    company: statePath(`company-${activeCompanyId}`),
+  }),
+)
+
 ipcMain.handle('drive-backup:select-folder', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],

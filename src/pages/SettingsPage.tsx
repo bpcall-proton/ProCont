@@ -144,7 +144,10 @@ export function SettingsPage() {
     driveAccountEmail,
     driveSyncMessage,
     driveSyncState,
+    localStoragePaths,
     refreshDriveConnection,
+    syncMessage,
+    syncState,
     updateCompany,
     setActiveAccountingCompany,
     addAccountingCompany,
@@ -185,6 +188,21 @@ export function SettingsPage() {
     (product) => product.companyId === companyId,
   )
   const driveFolderConfigured = dataSettings.driveFolder.trim().length > 0
+  const cloudStatusClass =
+    !cloudAvailable || syncState === 'error'
+      ? 'drive-status-denied'
+      : dataSettings.mode === 'cloud' && syncState !== 'saving'
+        ? 'drive-status-ok'
+        : 'drive-status-pending'
+  const cloudStatusLabel = !cloudAvailable
+    ? 'Non collegato'
+    : syncState === 'error'
+      ? 'Errore di sincronizzazione'
+      : dataSettings.mode !== 'cloud'
+        ? 'Pronto, modalità locale'
+        : syncState === 'saving'
+          ? 'Sincronizzazione in corso'
+          : 'Sincronizzato'
 
   async function prepareGoogleConnection() {
     setGoogleBusy(true)
@@ -584,6 +602,36 @@ export function SettingsPage() {
               Firebase.
             </p>
           )}
+          <div className="archive-location-grid">
+            <div className="storage-path-card">
+              <small>Percorso JSON locale</small>
+              <strong>
+                {window.desktopApp
+                  ? 'File dell’azienda attiva'
+                  : 'Archivio interno del dispositivo'}
+              </strong>
+              <code>
+                {localStoragePaths?.company ??
+                  'IndexedDB del browser/app · nessun file JSON accessibile'}
+              </code>
+              {localStoragePaths && (
+                <em>Archivio generale: {localStoragePaths.workspace}</em>
+              )}
+            </div>
+            <div className={`drive-status ${cloudStatusClass}`}>
+              <span className="drive-status-dot" />
+              <span>
+                <small>Sincronizzazione Cloud</small>
+                <strong>{cloudStatusLabel}</strong>
+                <em>
+                  {syncMessage ??
+                    (dataSettings.mode === 'cloud'
+                      ? 'Google Drive collegato e senza dati in attesa'
+                      : 'Seleziona Cloud per sincronizzare i dati')}
+                </em>
+              </span>
+            </div>
+          </div>
           <div className="setting-row google-account-row">
             <span>
               <strong>Accesso Google Drive</strong>
