@@ -29,7 +29,7 @@ verso l'azienda e il punto vendita corretti.
 - importazione senza perdita del JSON v5 di Contabilità Pro;
 - backup JSON completo e compatibile, export Excel/CSV e stampa PDF;
 - archivio Locale su IndexedDB/web o file applicativo/desktop;
-- archivio Cloud su Firestore con passaggio protetto tra modalità;
+- archivio Cloud su Google Drive con collegamento OAuth per dispositivo;
 - base per foto in arrivo, revisione e sincronizzazione.
 
 ## Sviluppo
@@ -49,9 +49,15 @@ npm run build
 npm run desktop:pack
 ```
 
-## Firebase
+## Google Drive
 
-Compilare `.env.local` con la configurazione web Firebase. Senza configurazione, l'app offre una modalità di anteprima locale e mantiene disabilitato l'archivio cloud.
+Compilare `VITE_DRIVE_SYNC_URL` in `.env.local` con l'indirizzo del servizio
+`drive_sync`. Senza servizio configurato l'applicazione resta in modalità
+locale. Il collegamento si esegue una volta per dispositivo da
+**Impostazioni → Accedi con Google Drive**; il refresh token resta cifrato nel
+servizio e non viene mai scritto nel backup contabile.
+
+Firebase resta utilizzabile solo per l'accesso email/password esistente.
 
 Il backend WhatsApp/Viber, l'OCR e il collegamento Google Drive vengono
 implementati nelle fasi successive. Contabilità Pro può già essere importata

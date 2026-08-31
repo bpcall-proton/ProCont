@@ -6,23 +6,55 @@ JSON.
 
 ## Google Drive
 
-Google Drive è destinato ai backup e agli export, non al database
-transazionale.
+Google Drive è l'archivio sincronizzato dell'applicazione. Il servizio
+`drive_sync` conserva il refresh token cifrato lato server; i dispositivi
+ricevono soltanto un token di dispositivo revocabile, mai salvato nel JSON
+contabile.
 
-1. Installa e configura Google Drive per desktop.
-2. Crea una cartella sincronizzata, per esempio `Fatture Incassi Pro`.
-3. Nell'EXE apri **Impostazioni → Backup e conservazione**.
-4. Premi **Scegli cartella** e seleziona la cartella locale di Google Drive.
-5. Il programma aggiorna automaticamente un JSON separato per l'azienda
-   attiva dopo ogni modifica.
-6. **Sincronizza ora** permette di forzare subito il salvataggio.
-7. Google Drive per desktop trasferisce il file locale nell'account online.
+### Configurazione Google Cloud
 
-Il salvataggio diretto dalle versioni web e mobile richiederà invece un
-servizio OAuth Google Drive dedicato.
+1. Crea un progetto su https://console.cloud.google.com/.
+2. Abilita **Google Drive API**.
+3. Configura la schermata di consenso OAuth e aggiungi l'account proprietario
+   come utente autorizzato.
+4. Crea una credenziale **ID client OAuth → Applicazione web**.
+5. Come URI di reindirizzamento inserisci
+   `https://SERVIZIO/oauth/google/callback`.
+6. Annota `client_id` e `client_secret`.
+
+### Avvio del servizio
+
+Segreti richiesti dal servizio:
+
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `PUBLIC_BASE_URL`
+- `TOKEN_ENCRYPTION_KEY` (chiave Fernet)
+- `APP_SECRET`
+
+Il frontend richiede solo `VITE_DRIVE_SYNC_URL` con l'indirizzo pubblico del
+servizio.
+
+### Collegamento dei dispositivi
+
+1. Apri **Impostazioni → Modalità dati**.
+2. Premi **Accedi con Google Drive**.
+3. Autorizza l'account Google nella pagina che si apre.
+4. Torna nell'applicazione: il collegamento viene rilevato automaticamente.
+5. Seleziona **Cloud** per usare Drive come archivio principale.
+6. Ripeti la procedura una volta su ogni dispositivo (PC, Android, iPhone,
+   tablet): l'account Google resta lo stesso e i dati sono condivisi.
+
+I file vengono creati nella cartella Drive `Fatture Incassi Pro`, con un JSON
+per ogni azienda più l'archivio comune. Il salvataggio verifica la revisione
+del file e blocca la scrittura se un altro dispositivo ha già aggiornato i
+dati.
+
+La cartella locale di Google Drive per desktop resta disponibile come backup
+aggiuntivo nell'EXE.
 
 Documentazione:
-- https://developers.google.com/workspace/drive/api/guides/folder
+- https://developers.google.com/identity/protocols/oauth2/web-server
 - https://developers.google.com/workspace/drive/api/guides/manage-uploads
 
 ## WhatsApp Business Cloud API
