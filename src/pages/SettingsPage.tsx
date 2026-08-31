@@ -187,7 +187,33 @@ export function SettingsPage() {
   const products = state.accounting.products.filter(
     (product) => product.companyId === companyId,
   )
-  const driveFolderConfigured = dataSettings.driveFolder.trim().length > 0
+  const driveFolderIsUrl = /^https?:\/\//i.test(
+    dataSettings.driveFolder.trim(),
+  )
+  const driveFolderConfigured =
+    dataSettings.driveFolder.trim().length > 0 && !driveFolderIsUrl
+  const driveBackupStatusClass = !dataSettings.driveBackupAfterApproval
+    ? ''
+    : driveSyncState === 'error'
+      ? 'drive-status-denied'
+      : driveSyncState === 'saving'
+        ? 'drive-status-pending'
+        : driveSyncState === 'saved'
+          ? 'drive-status-ok'
+          : ''
+  const driveBackupStatusLabel = !window.desktopApp
+    ? 'Disponibile solo nell’EXE'
+    : !dataSettings.driveBackupAfterApproval
+      ? 'Copia locale disattivata'
+      : !driveFolderConfigured
+        ? 'Seleziona una cartella locale'
+        : driveSyncState === 'error'
+          ? 'Errore nella copia locale'
+          : driveSyncState === 'saving'
+            ? 'Copia in corso'
+            : driveSyncState === 'saved'
+              ? 'Copia locale aggiornata'
+              : 'Pronta per il primo backup'
   const cloudStatusClass =
     !cloudAvailable || syncState === 'error'
       ? 'drive-status-denied'
@@ -698,8 +724,10 @@ export function SettingsPage() {
           </div>
           <div className="setting-row">
             <span>
-              <strong>Backup locale Drive per desktop</strong>
-              <small>Copia aggiuntiva nella cartella Google Drive del PC</small>
+              <strong>Copia locale facoltativa</strong>
+              <small>
+                Solo EXE desktop · non serve alla sincronizzazione Cloud
+              </small>
             </span>
             <button
               aria-pressed={dataSettings.driveBackupAfterApproval}
@@ -714,76 +742,25 @@ export function SettingsPage() {
               <span />
             </button>
           </div>
-          <div
-            aria-label="Stato Google Drive"
-            className="drive-status-grid"
-          >
-            <div
-              className={`drive-status ${
-                driveSyncState === 'saved'
-                  ? 'drive-status-ok'
-                  : driveSyncState === 'saving'
-                    ? 'drive-status-pending'
-                    : 'drive-status-denied'
-              }`}
-            >
-              <span className="drive-status-dot" />
-              <span>
-                <small>Collegamento</small>
-                <strong>
-                  {driveSyncState === 'saved'
-                    ? 'Cartella raggiungibile'
-                    : driveSyncState === 'saving'
-                      ? 'Verifica in corso'
-                      : 'Non collegato'}
-                </strong>
-                {driveFolderConfigured && driveSyncState === 'idle' && (
-                  <em>Cartella salvata, backup non ancora eseguito</em>
-                )}
-              </span>
-            </div>
-            <div
-              className={`drive-status ${
-                driveSyncState === 'saved'
-                  ? 'drive-status-ok'
-                  : driveSyncState === 'saving'
-                    ? 'drive-status-pending'
-                    : 'drive-status-denied'
-              }`}
-            >
-              <span className="drive-status-dot" />
-              <span>
-                <small>Sincronizzazione</small>
-                <strong>
-                  {!driveFolderConfigured
-                    ? 'Non configurata'
-                    : driveSyncState === 'saved'
-                      ? 'JSON aggiornato'
-                      : driveSyncState === 'saving'
-                        ? 'Sincronizzazione'
-                        : dataSettings.driveBackupAfterApproval
-                          ? 'Da sincronizzare'
-                          : 'Negata'}
-                </strong>
-                {driveFolderConfigured &&
-                  driveSyncState !== 'saved' &&
-                  dataSettings.driveBackupAfterApproval && (
-                    <em>Dati in attesa di salvataggio</em>
-                  )}
-              </span>
-            </div>
+          <div className={`drive-backup-summary ${driveBackupStatusClass}`}>
+            <span className="drive-status-dot" />
+            <span>
+              <small>Stato copia locale</small>
+              <strong>{driveBackupStatusLabel}</strong>
+            </span>
           </div>
           <div className="drive-folder-form">
             <label>
-              Cartella locale Google Drive
+              Cartella del computer
               <input
                 placeholder="Seleziona la cartella sincronizzata sul computer"
                 readOnly
-                value={dataSettings.driveFolder}
+                value={driveFolderIsUrl ? '' : dataSettings.driveFolder}
               />
             </label>
             <button
               className="button button-primary"
+              disabled={!window.desktopApp}
               onClick={() => void selectDriveFolder()}
               type="button"
             >
@@ -791,14 +768,25 @@ export function SettingsPage() {
             </button>
             <button
               className="button"
-              disabled={!driveFolderConfigured}
+              disabled={
+                !window.desktopApp ||
+                !dataSettings.driveBackupAfterApproval ||
+                !driveFolderConfigured
+              }
               onClick={() => void syncDriveBackup()}
               type="button"
             >
               Sincronizza ora
             </button>
           </div>
-          {driveSyncMessage && (
+          {driveFolderIsUrl && (
+            <p className="drive-folder-warning">
+              L’indirizzo web salvato non è una cartella del computer. Premi
+              “Scegli cartella” e seleziona la cartella Google Drive installata
+              sul PC.
+            </p>
+          )}
+          {driveSyncMessage && !driveFolderIsUrl && (
             <p aria-live="polite" className="import-message">
               {driveSyncMessage}
             </p>
@@ -823,9 +811,9 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Nell’EXE seleziona una cartella gestita da Google Drive per
-            desktop. Il programma aggiorna automaticamente un JSON separato
-            per l’azienda attiva; Google Drive completa il caricamento online.
+            Questa è soltanto una copia di sicurezza aggiuntiva. Per usare gli
+            stessi dati su PC, telefono e tablet utilizza la modalità Cloud
+            nella sezione precedente.
           </p>
         </article>
 
