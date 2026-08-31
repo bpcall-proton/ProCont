@@ -193,9 +193,9 @@ export function InvoicesPanel({
   const [repeatDate, setRepeatDate] = useState(false)
   const [lines, setLines] = useState<InvoiceLine[]>([])
   const [lineForm, setLineForm] = useState(emptyInvoiceLine)
+  const dateInputRef = useRef<HTMLInputElement>(null)
   const supplierInputRef = useRef<HTMLSelectElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
-  const invoiceNumberInputRef = useRef<HTMLInputElement>(null)
   const taxableAmountInputRef = useRef<HTMLInputElement>(null)
   const theoreticalRevenueInputRef = useRef<HTMLInputElement>(null)
   const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
@@ -406,11 +406,13 @@ export function InvoicesPanel({
     setLineForm(emptyInvoiceLine)
     if (!editingId) {
       window.requestAnimationFrame(() => {
-        const nextInput = repeatSeller
-          ? invoiceNumberInputRef.current
-          : repeatSupplier
+        const nextInput = !repeatDate
+          ? dateInputRef.current
+          : !repeatSeller
             ? sellerInputRef.current
-            : supplierInputRef.current
+            : !repeatSupplier
+              ? supplierInputRef.current
+              : taxableAmountInputRef.current
         nextInput?.focus()
       })
     }
@@ -556,13 +558,11 @@ export function InvoicesPanel({
               <div className="invoice-entry-options">
                 <label className="checkbox-row">
                   <input
-                    checked={repeatSupplier}
-                    onChange={(event) =>
-                      setRepeatSupplier(event.target.checked)
-                    }
+                    checked={repeatDate}
+                    onChange={(event) => setRepeatDate(event.target.checked)}
                     type="checkbox"
                   />
-                  Riparti da fornitore
+                  Mantieni ultima data
                 </label>
                 <label className="checkbox-row">
                   <input
@@ -576,11 +576,13 @@ export function InvoicesPanel({
                 </label>
                 <label className="checkbox-row">
                   <input
-                    checked={repeatDate}
-                    onChange={(event) => setRepeatDate(event.target.checked)}
+                    checked={repeatSupplier}
+                    onChange={(event) =>
+                      setRepeatSupplier(event.target.checked)
+                    }
                     type="checkbox"
                   />
-                  Mantieni ultima data
+                  Riparti da fornitore
                 </label>
               </div>
             )}
@@ -594,10 +596,10 @@ export function InvoicesPanel({
           </div>
         </div>
         <div className="form-grid accounting-fields">
-          <label>Fornitore<select ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Data<input ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Numero fattura<input ref={invoiceNumberInputRef} placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && repeatDate) { event.preventDefault(); taxableAmountInputRef.current?.focus() } }} /></label>
-          <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+          <label>Fornitore<select ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Numero fattura<input placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
           <label>Descrizione<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Imponibile<input ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
