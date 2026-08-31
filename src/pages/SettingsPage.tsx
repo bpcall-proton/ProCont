@@ -4,6 +4,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react'
+import { useAuth } from '../auth/AuthContext'
 import type { AccountingCompany, Locale } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
 import {
@@ -132,6 +133,11 @@ function CompanyEditor({
 
 export function SettingsPage() {
   const {
+    user,
+    firebaseConfigured,
+    signInWithGoogle,
+  } = useAuth()
+  const {
     state,
     cloudAvailable,
     driveSyncMessage,
@@ -156,6 +162,8 @@ export function SettingsPage() {
   const [newCompany, setNewCompany] =
     useState<AccountingCompanyInput>(emptyCompany)
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
+  const [googleMessage, setGoogleMessage] = useState<string | null>(null)
+  const [googleBusy, setGoogleBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
@@ -173,6 +181,16 @@ export function SettingsPage() {
     (product) => product.companyId === companyId,
   )
   const driveFolderConfigured = dataSettings.driveFolder.trim().length > 0
+
+  async function connectGoogle() {
+    setGoogleBusy(true)
+    const error = await signInWithGoogle()
+    setGoogleMessage(
+      error ??
+        'Accesso Google collegato. Seleziona Cloud per sincronizzare i dispositivi.',
+    )
+    setGoogleBusy(false)
+  }
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
@@ -505,6 +523,37 @@ export function SettingsPage() {
               l'accesso con un account reale.
             </p>
           )}
+          <div className="setting-row google-account-row">
+            <span>
+              <strong>Accesso Google</strong>
+              <small>
+                {firebaseConfigured && !user?.preview
+                  ? `${user?.email ?? 'Account collegato'} · accesso conservato da Google`
+                  : 'Non configurato · nessuna password viene salvata nel JSON'}
+              </small>
+            </span>
+            <button
+              className="button button-secondary"
+              disabled={!firebaseConfigured || googleBusy}
+              onClick={() => void connectGoogle()}
+              type="button"
+            >
+              {googleBusy
+                ? 'Collegamento...'
+                : firebaseConfigured && !user?.preview
+                  ? 'Ricollega Google'
+                  : 'Accedi con Google'}
+            </button>
+          </div>
+          {googleMessage && (
+            <p aria-live="polite" className="import-message">
+              {googleMessage}
+            </p>
+          )}
+          <p className="settings-note">
+            La modalità Cloud mantiene gli stessi dati su computer, web,
+            Android e iPhone. Google Drive resta il backup JSON separato.
+          </p>
         </article>
 
         <article className="panel">
