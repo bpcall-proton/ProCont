@@ -1525,6 +1525,11 @@ select {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.accounting-paid-field {
+  align-self: end;
+  min-height: 46px;
+}
+
 .product-fields {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

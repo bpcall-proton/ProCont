@@ -603,6 +603,7 @@ export function InvoicesPanel({
           <label>Totale automatico<input readOnly value={money(invoiceTotal)} /></label>
           <label>Venit totale<input disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
           <label>Ricarico fattura<input readOnly value={`${invoiceMarkup}%`} /></label>
+          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
         <section className="invoice-lines-editor">
           <div className="panel-heading">
@@ -723,7 +724,6 @@ export function InvoicesPanel({
             </div>
           )}
         </section>
-        <label className="checkbox-row"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         {editingId && (
           <div className="form-actions">
             <button className="button button-secondary" type="button" onClick={resetInvoiceForm}>Annulla</button>
