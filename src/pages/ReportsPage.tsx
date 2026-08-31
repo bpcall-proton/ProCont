@@ -357,9 +357,9 @@ export function ReportsPage() {
           eyebrow="STATISTICHE VENDITORE"
           name={selectedSeller.name}
           note={
-            [selectedSeller.phone, selectedSeller.email]
+            [selectedSeller.phone, selectedSeller.email, selectedSeller.iban]
               .filter(Boolean)
-              .join(' · ') || 'Nessun contatto indicato'
+              .join(' · ') || 'Nessun contatto o IBAN indicato'
           }
           onBack={() => setDetail(null)}
           period={period}
@@ -473,9 +473,13 @@ export function ReportsPage() {
         <DetailHeader
           eyebrow="STATISTICHE FORNITORE"
           name={selectedSupplier.name}
-          note={`${selectedSupplier.paymentTermsDays} giorni per il pagamento${
-            selectedSupplier.phone ? ` · ${selectedSupplier.phone}` : ''
-          }`}
+          note={[
+            `${selectedSupplier.paymentTermsDays} giorni per il pagamento`,
+            selectedSupplier.phone,
+            selectedSupplier.iban,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           onBack={() => setDetail(null)}
           period={period}
           selected={selected}

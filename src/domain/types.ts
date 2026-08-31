@@ -160,6 +160,7 @@ export interface AccountingSeller {
   name: string
   email: string
   phone: string
+  iban: string
   city: string
   notes: string
 }
@@ -171,6 +172,7 @@ export interface AccountingSupplier {
   taxId: string
   email: string
   phone: string
+  iban: string
   city: string
   notes: string
   paymentTermsDays: number

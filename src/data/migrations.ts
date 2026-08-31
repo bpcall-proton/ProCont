@@ -201,6 +201,7 @@ function mapSeller(value: JsonRecord): AccountingSeller {
     name: text(value.nome),
     email: text(value.email),
     phone: text(value.telefono),
+    iban: text(value.iban),
     city: text(value.citta),
     notes: text(value.note),
   }
@@ -214,6 +215,7 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
     taxId: text(value.partitaIva),
     email: text(value.email),
     phone: text(value.telefono),
+    iban: text(value.iban),
     city: text(value.citta),
     notes: text(value.note),
     paymentTermsDays: positiveInteger(value.giorniPagamento, 10),
@@ -390,6 +392,7 @@ export function normalizeStoredState(
           name: seller.name,
           email: '',
           phone: seller.phone,
+          iban: '',
           city: '',
           notes: 'Venditrice collegata a un punto vendita',
         })
@@ -463,10 +466,12 @@ export function normalizeStoredState(
         sellers: accountingSellers.map((seller) => ({
           ...seller,
           companyId: seller.companyId || fallbackCompanyId,
+          iban: seller.iban ?? '',
         })),
         suppliers: (accounting.suppliers ?? []).map((supplier) => ({
           ...supplier,
           companyId: supplier.companyId || fallbackCompanyId,
+          iban: supplier.iban ?? '',
           paymentTermsDays: positiveInteger(
             supplier.paymentTermsDays,
             10,
@@ -747,6 +752,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           nome: seller.name,
           email: seller.email,
           telefono: seller.phone,
+          iban: seller.iban,
           citta: seller.city,
           note: seller.notes,
         })),
@@ -757,6 +763,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           partitaIva: supplier.taxId,
           email: supplier.email,
           telefono: supplier.phone,
+          iban: supplier.iban,
           citta: supplier.city,
           note: supplier.notes,
           giorniPagamento: supplier.paymentTermsDays,

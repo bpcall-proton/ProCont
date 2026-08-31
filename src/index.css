@@ -1854,8 +1854,12 @@ select {
   margin-bottom: 18px;
 }
 
+.contact-create-form {
+  grid-template-columns: 1fr 1fr 1.25fr auto;
+}
+
 .supplier-create-form {
-  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto;
+  grid-template-columns: 1fr 1fr 1.25fr minmax(130px, 0.65fr) auto;
 }
 
 .vertical-form {
@@ -1889,7 +1893,28 @@ select {
 
 .supplier-card {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) auto auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1fr) auto auto;
+}
+
+.contact-card {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1fr) auto;
+}
+
+.contact-iban {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.contact-iban input {
+  min-width: 0;
+}
+
+.payment-destination {
+  color: var(--cyan);
+  font-weight: 700;
 }
 
 .supplier-payment-terms {
@@ -2117,7 +2142,9 @@ select {
     width: 100%;
   }
 
+  .contact-create-form,
   .supplier-create-form,
+  .contact-card,
   .supplier-card {
     grid-template-columns: 1fr;
   }
