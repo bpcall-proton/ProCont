@@ -196,6 +196,8 @@ export function InvoicesPanel({
   const supplierInputRef = useRef<HTMLSelectElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
   const invoiceNumberInputRef = useRef<HTMLInputElement>(null)
+  const taxableAmountInputRef = useRef<HTMLInputElement>(null)
+  const theoreticalRevenueInputRef = useRef<HTMLInputElement>(null)
   const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [sellerFilter, setSellerFilter] = useState('')
@@ -594,15 +596,15 @@ export function InvoicesPanel({
         <div className="form-grid accounting-fields">
           <label>Fornitore<select ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Numero fattura<input ref={invoiceNumberInputRef} placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
+          <label>Numero fattura<input ref={invoiceNumberInputRef} placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && repeatDate) { event.preventDefault(); taxableAmountInputRef.current?.focus() } }} /></label>
           <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Descrizione<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Imponibile<input inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
-          <label>IVA facoltativa<input inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Totale automatico<input readOnly value={money(invoiceTotal)} /></label>
-          <label>Venit totale<input disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
-          <label>Ricarico fattura<input readOnly value={`${invoiceMarkup}%`} /></label>
+          <label>Imponibile<input ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
+          <label>IVA facoltativa<input inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
+          <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
+          <label>Venit totale<input ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
+          <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
           <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
         <section className="invoice-lines-editor">
