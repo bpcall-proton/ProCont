@@ -455,6 +455,11 @@ export function normalizeStoredState(
       dataSettings: {
         ...state.dataSettings,
         language: state.dataSettings.language ?? 'it',
+        currency:
+          state.dataSettings.currency === 'MDL' ||
+          state.dataSettings.currency === 'USD'
+            ? state.dataSettings.currency
+            : 'EUR',
         driveFolder: state.dataSettings.driveFolder ?? '',
       },
       accounting: {

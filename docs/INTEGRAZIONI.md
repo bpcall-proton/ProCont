@@ -9,16 +9,17 @@ JSON.
 Google Drive è destinato ai backup e agli export, non al database
 transazionale.
 
-1. Crea una cartella dedicata, per esempio `Fatture Incassi Pro`.
-2. Copia l'URL della cartella o il Folder ID e salvalo in **Impostazioni →
-   Cartella Google Drive**.
-3. Nel progetto Google Cloud abilita Google Drive API.
-4. Configura OAuth 2.0 per l'account proprietario oppure un service account
-   dedicato e condividi con esso la cartella.
-5. Concedi solo lo scope necessario, preferibilmente `drive.file`.
-6. Salva le credenziali nel secret manager del backend, non nel repository.
-7. Il servizio userà il Folder ID nella proprietà `parents` di `files.create`
-   per caricare o aggiornare il backup.
+1. Installa e configura Google Drive per desktop.
+2. Crea una cartella sincronizzata, per esempio `Fatture Incassi Pro`.
+3. Nell'EXE apri **Impostazioni → Backup e conservazione**.
+4. Premi **Scegli cartella** e seleziona la cartella locale di Google Drive.
+5. Il programma aggiorna automaticamente un JSON separato per l'azienda
+   attiva dopo ogni modifica.
+6. **Sincronizza ora** permette di forzare subito il salvataggio.
+7. Google Drive per desktop trasferisce il file locale nell'account online.
+
+Il salvataggio diretto dalle versioni web e mobile richiederà invece un
+servizio OAuth Google Drive dedicato.
 
 Documentazione:
 - https://developers.google.com/workspace/drive/api/guides/folder

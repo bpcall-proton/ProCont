@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
@@ -42,6 +42,38 @@ ipcMain.handle('local-state:delete', async (_event, companyId) => {
     throw error
   }
 })
+
+ipcMain.handle('drive-backup:select-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Seleziona la cartella locale di Google Drive',
+  })
+  return result.canceled ? null : result.filePaths[0]
+})
+
+ipcMain.handle(
+  'drive-backup:save',
+  async (_event, folderPath, filename, content) => {
+    if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) {
+      throw new Error('Seleziona una cartella locale valida')
+    }
+    if (
+      typeof filename !== 'string' ||
+      !/^[a-zA-Z0-9._-]{1,180}\.json$/.test(filename)
+    ) {
+      throw new Error('Nome backup non valido')
+    }
+    if (typeof content !== 'string') {
+      throw new Error('Contenuto backup non valido')
+    }
+    const destination = path.join(folderPath, filename)
+    const temporary = `${destination}.tmp`
+    await fs.mkdir(folderPath, { recursive: true })
+    await fs.writeFile(temporary, content, 'utf8')
+    await fs.rename(temporary, destination)
+    return destination
+  },
+)
 
 function createWindow() {
   const window = new BrowserWindow({

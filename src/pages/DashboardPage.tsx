@@ -1,10 +1,6 @@
 import { StatCard } from '../components/StatCard'
+import { money } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
-
-const currency = new Intl.NumberFormat('it-IT', {
-  style: 'currency',
-  currency: 'EUR',
-})
 
 export function DashboardPage() {
   const { state } = useAppStore()
@@ -39,25 +35,25 @@ export function DashboardPage() {
           detail="Fatture approvate"
           label="Valore fatture"
           tone="violet"
-          value={currency.format(financial.invoiceValue)}
+          value={money(financial.invoiceValue)}
         />
         <StatCard
           detail="Vendita teorica prodotti"
           label="Venit complessivo"
           tone="cyan"
-          value={currency.format(financial.theoreticalRevenue)}
+          value={money(financial.theoreticalRevenue)}
         />
         <StatCard
           detail="Cash + POS + reale"
           label="Incassi reali"
           tone="green"
-          value={currency.format(financial.realTakings)}
+          value={money(financial.realTakings)}
         />
         <StatCard
           detail="Venit meno incassi reali"
           label="Venit stock"
           tone="amber"
-          value={currency.format(financial.stockRevenue)}
+          value={money(financial.stockRevenue)}
         />
       </section>
 
@@ -93,7 +89,7 @@ export function DashboardPage() {
                         {seller?.name ?? 'Venditrice non assegnata'}
                       </small>
                     </span>
-                    <span className="store-value">{currency.format(0)}</span>
+                    <span className="store-value">{money(0)}</span>
                   </div>
                 )
               })}

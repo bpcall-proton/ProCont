@@ -2,6 +2,7 @@ export type UserRole = 'owner' | 'accountant'
 export type DataMode = 'local' | 'cloud'
 export type InterfaceLanguage = 'it' | 'ro' | 'en'
 export type Locale = 'it' | 'ro' | 'en'
+export type Currency = 'EUR' | 'MDL' | 'USD'
 export type SyncState = 'idle' | 'saving' | 'saved' | 'error'
 export type PaymentMethod =
   | 'Bonifico'
@@ -68,6 +69,7 @@ export interface FinancialSummary {
 export interface DataSettings {
   mode: DataMode
   language: InterfaceLanguage
+  currency: Currency
   driveBackupAfterApproval: boolean
   driveFolder: string
   imageRetentionDays: number | null
