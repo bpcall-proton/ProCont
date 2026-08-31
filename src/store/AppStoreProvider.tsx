@@ -206,13 +206,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const saveDriveBackup = useCallback(async (next: AppState) => {
+    const driveFolder = next.dataSettings.driveFolder.trim()
     if (
       !window.desktopApp ||
       !next.dataSettings.driveBackupAfterApproval ||
-      !next.dataSettings.driveFolder
+      !driveFolder ||
+      /^https?:\/\//i.test(driveFolder)
     ) {
       setDriveSyncState('idle')
-      setDriveSyncMessage(null)
+      setDriveSyncMessage(
+        /^https?:\/\//i.test(driveFolder)
+          ? 'Usa “Scegli cartella”: un indirizzo web non è una cartella del computer.'
+          : null,
+      )
       return
     }
     setDriveSyncState('saving')
@@ -223,7 +229,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         ? createCompanyState(next, companyId)
         : next
       const destination = await window.desktopApp.saveDriveBackup(
-        next.dataSettings.driveFolder,
+        driveFolder,
         backupFilename(next),
         exportUnifiedState(backupState),
       )
@@ -588,6 +594,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         }
       },
       setDriveBackup: (enabled: boolean) => {
+        setDriveSyncState('idle')
+        setDriveSyncMessage(null)
         updateState((current) => ({
           ...current,
           dataSettings: {
@@ -623,6 +631,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               driveFolder: folder,
             },
           })
+          setDriveSyncState('idle')
+          setDriveSyncMessage(null)
           applyState(next)
           enqueueSave(next)
         } catch (error) {

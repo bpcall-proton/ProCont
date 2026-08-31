@@ -1172,13 +1172,6 @@ select {
   gap: 10px;
 }
 
-.drive-status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
 .drive-status {
   min-height: 66px;
   display: flex;
@@ -1224,6 +1217,37 @@ select {
 
 .drive-status-denied {
   color: var(--red);
+}
+
+.drive-backup-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(8, 12, 22, 0.58);
+}
+
+.drive-backup-summary > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.drive-backup-summary small {
+  font-size: 0.68rem;
+}
+
+.drive-folder-warning {
+  margin: 9px 0 0;
+  color: var(--amber);
+  font-size: 0.72rem;
+}
+
+.drive-folder-warning + label {
+  margin-top: 16px;
 }
 
 .archive-location-grid {
@@ -1380,8 +1404,7 @@ select {
 }
 
 @media (max-width: 620px) {
-  .drive-folder-form,
-  .drive-status-grid {
+  .drive-folder-form {
     grid-template-columns: 1fr;
   }
 
