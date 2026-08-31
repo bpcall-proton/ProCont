@@ -51,9 +51,11 @@ npm run desktop:pack
 
 ## Google Drive
 
-Compilare `VITE_DRIVE_SYNC_URL` in `.env.local` con l'indirizzo del servizio
-`drive_sync`. Senza servizio configurato l'applicazione resta in modalità
-locale. Il collegamento si esegue una volta per dispositivo da
+La build di produzione usa il Cloudflare Worker configurato in
+`.env.production`. Per lo sviluppo si può sovrascrivere
+`VITE_DRIVE_SYNC_URL` in `.env.local`. Senza servizio configurato
+l'applicazione resta in modalità locale. Il collegamento si esegue una volta
+per dispositivo da
 **Impostazioni → Accedi con Google Drive**; il refresh token resta cifrato nel
 servizio e non viene mai scritto nel backup contabile.
 

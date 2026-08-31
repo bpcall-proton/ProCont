@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "procont-drive-sync",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-08-30",
+  "workers_dev": true,
+  "kv_namespaces": [
+    {
+      "binding": "PROCONT_KV",
+      "id": "9cef1fa022c042079f5552e93879b717"
+    }
+  ]
+}
