@@ -1226,6 +1226,36 @@ select {
   color: var(--red);
 }
 
+.archive-location-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.storage-path-card {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(8, 12, 22, 0.58);
+}
+
+.storage-path-card small,
+.storage-path-card em {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.storage-path-card code {
+  overflow-wrap: anywhere;
+  color: var(--cyan);
+  font-size: 0.78rem;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -1292,6 +1322,12 @@ select {
   }
 
   .review-document-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .archive-location-grid {
     grid-template-columns: 1fr;
   }
 }
