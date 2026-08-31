@@ -24,13 +24,17 @@ contabile.
 
 ### Avvio del servizio
 
-Segreti richiesti dal servizio:
+Il servizio consigliato è il Cloudflare Worker in
+`drive_sync/cloudflare`. Usa il binding KV `PROCONT_KV` e questi segreti:
 
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
-- `PUBLIC_BASE_URL`
-- `TOKEN_ENCRYPTION_KEY` (chiave Fernet)
+- `TOKEN_ENCRYPTION_KEY` (32 byte in Base64)
 - `APP_SECRET`
+
+Il backend FastAPI in `drive_sync` resta disponibile come alternativa e
+richiede anche `PUBLIC_BASE_URL`; in questo caso `TOKEN_ENCRYPTION_KEY` è una
+chiave Fernet.
 
 Il frontend richiede solo `VITE_DRIVE_SYNC_URL` con l'indirizzo pubblico del
 servizio.
