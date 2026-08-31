@@ -152,7 +152,9 @@ export function SettingsPage() {
   const [newCompany, setNewCompany] =
     useState<AccountingCompanyInput>(emptyCompany)
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
+  const [driveMessage, setDriveMessage] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const driveFolderInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
       (item) => item.id === state.accounting.activeCompanyId,
@@ -176,6 +178,12 @@ export function SettingsPage() {
       result.ok ? 'Nuova azienda inserita e selezionata.' : result.error ?? null,
     )
     if (result.ok) setNewCompany(emptyCompany)
+  }
+
+  function saveDriveFolder(event: FormEvent) {
+    event.preventDefault()
+    setDriveFolder(driveFolderInput.current?.value.trim() ?? '')
+    setDriveMessage('Percorso Google Drive salvato.')
   }
 
   async function importJson(event: ChangeEvent<HTMLInputElement>) {
@@ -512,14 +520,26 @@ export function SettingsPage() {
               <span />
             </button>
           </div>
-          <label>
-            Cartella Google Drive
-            <input
-              onChange={(event) => setDriveFolder(event.target.value)}
-              placeholder="URL della cartella oppure Folder ID"
-              value={dataSettings.driveFolder}
-            />
-          </label>
+          <form className="drive-folder-form" onSubmit={saveDriveFolder}>
+            <label>
+              Cartella Google Drive
+              <input
+                defaultValue={dataSettings.driveFolder}
+                key={dataSettings.driveFolder}
+                onChange={() => setDriveMessage(null)}
+                placeholder="URL della cartella oppure Folder ID"
+                ref={driveFolderInput}
+              />
+            </label>
+            <button className="button button-primary" type="submit">
+              Salva
+            </button>
+          </form>
+          {driveMessage && (
+            <p aria-live="polite" className="import-message">
+              {driveMessage}
+            </p>
+          )}
           <label>
             Conservazione foto originali
             <select
@@ -540,8 +560,9 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Il percorso è salvato; il caricamento automatico richiederà
-            l'autorizzazione Google Drive del servizio di backup.
+            Il percorso salvato resta disponibile dopo la riapertura; il
+            caricamento automatico richiederà l'autorizzazione Google Drive
+            del servizio di backup.
           </p>
         </article>
 

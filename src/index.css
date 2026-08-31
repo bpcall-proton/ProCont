@@ -1157,6 +1157,13 @@ select {
   line-height: 1.5;
 }
 
+.drive-folder-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -1275,6 +1282,10 @@ select {
 }
 
 @media (max-width: 620px) {
+  .drive-folder-form {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     display: block;
     padding-bottom: 78px;
