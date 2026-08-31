@@ -6,7 +6,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { firebaseConfigured } from '../auth/firebase'
 import { useAuth } from '../auth/AuthContext'
 import {
   createId,
@@ -23,7 +22,11 @@ import type {
   InterfaceLanguage,
   SyncState,
 } from '../domain/types'
-import { CloudRepository } from '../data/cloudRepository'
+import { DriveRepository } from '../data/driveRepository'
+import {
+  driveServiceConfigured,
+  loadDriveSession,
+} from '../data/driveSession'
 import { LocalRepository } from '../data/localRepository'
 import type { AppRepository } from '../data/repository'
 import {
@@ -166,14 +169,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const sessionUser = user
   if (!sessionUser) throw new Error('Sessione utente richiesta')
-  const { companyId, preview } = sessionUser
+  const { companyId } = sessionUser
 
   const localRepository = useMemo(
     () => new LocalRepository(companyId),
     [companyId],
   )
   const cloudRepository = useMemo(
-    () => new CloudRepository(companyId),
+    () => new DriveRepository(companyId),
     [companyId],
   )
   const [state, setState] = useState<AppState>(() =>
@@ -185,6 +188,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [driveSyncState, setDriveSyncState] = useState<SyncState>('idle')
   const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null)
+  const [driveAccountEmail, setDriveAccountEmail] = useState(
+    () => loadDriveSession()?.email ?? null,
+  )
   const activeRepository = useRef<AppRepository>(localRepository)
   const saveQueue = useRef(Promise.resolve())
   const stateRef = useRef(state)
@@ -255,7 +261,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const requestedMode =
         readModePreference(companyId) ?? initial.dataSettings.mode
       const repository: AppRepository =
-        requestedMode === 'cloud' && firebaseConfigured
+        requestedMode === 'cloud' &&
+        driveServiceConfigured &&
+        loadDriveSession()
           ? cloudRepository
           : localRepository
       activeRepository.current = repository
@@ -315,7 +323,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncMessage,
       driveSyncState,
       driveSyncMessage,
-      cloudAvailable: firebaseConfigured && !preview,
+      driveAccountEmail,
+      cloudAvailable:
+        driveServiceConfigured && driveAccountEmail !== null,
+      refreshDriveConnection: () => {
+        setDriveAccountEmail(loadDriveSession()?.email ?? null)
+      },
       updateCompany: (patch: Partial<Company>) => {
         updateState((current) => ({
           ...current,
@@ -507,10 +520,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       },
       setDataMode: async (mode: DataMode) => {
         if (mode === state.dataSettings.mode) return
-        if (mode === 'cloud' && (!firebaseConfigured || preview)) {
+        if (
+          mode === 'cloud' &&
+          (!driveServiceConfigured || !loadDriveSession())
+        ) {
           setSyncState('error')
           setSyncMessage(
-            'Configura Firebase e accedi con un account reale per usare il cloud',
+            'Collega Google Drive nelle Impostazioni per usare il cloud',
           )
           return
         }
@@ -518,12 +534,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setSyncMessage('Migrazione archivio in corso')
         const destination: AppRepository =
           mode === 'cloud' ? cloudRepository : localRepository
-        const migrated = withTimestamp({
+        let migrated = withTimestamp({
           ...state,
           dataSettings: { ...state.dataSettings, mode },
         })
         try {
           await saveQueue.current
+          if (mode === 'cloud') {
+            const remote = await destination.load()
+            if (remote) {
+              migrated = withTimestamp({
+                ...remote,
+                dataSettings: { ...remote.dataSettings, mode },
+              })
+            }
+          }
           await destination.save(migrated)
           unsubscribe.current()
           activeRepository.current = destination
@@ -674,9 +699,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncState,
       driveSyncMessage,
       driveSyncState,
+      driveAccountEmail,
       updateState,
       companyId,
-      preview,
     ],
   )
 

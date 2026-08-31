@@ -4,9 +4,15 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react'
-import { useAuth } from '../auth/AuthContext'
 import type { AccountingCompany, Locale } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
+import {
+  createDrivePairing,
+  disconnectDriveSession,
+  driveServiceConfigured,
+  readDrivePairing,
+  type DrivePairing,
+} from '../data/driveSession'
 import {
   useAppStore,
   type AccountingCompanyInput,
@@ -133,15 +139,12 @@ function CompanyEditor({
 
 export function SettingsPage() {
   const {
-    user,
-    firebaseConfigured,
-    signInWithGoogle,
-  } = useAuth()
-  const {
     state,
     cloudAvailable,
+    driveAccountEmail,
     driveSyncMessage,
     driveSyncState,
+    refreshDriveConnection,
     updateCompany,
     setActiveAccountingCompany,
     addAccountingCompany,
@@ -164,6 +167,7 @@ export function SettingsPage() {
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
   const [googleMessage, setGoogleMessage] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [drivePairing, setDrivePairing] = useState<DrivePairing | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
@@ -182,13 +186,70 @@ export function SettingsPage() {
   )
   const driveFolderConfigured = dataSettings.driveFolder.trim().length > 0
 
-  async function connectGoogle() {
+  async function prepareGoogleConnection() {
     setGoogleBusy(true)
-    const error = await signInWithGoogle()
-    setGoogleMessage(
-      error ??
-        'Accesso Google collegato. Seleziona Cloud per sincronizzare i dispositivi.',
-    )
+    setGoogleMessage(null)
+    try {
+      const device = window.desktopApp
+        ? `Computer ${window.desktopApp.platform}`
+        : /Android/i.test(navigator.userAgent)
+          ? 'Android'
+          : /iPad|iPhone/i.test(navigator.userAgent)
+            ? 'iPhone o iPad'
+            : 'Browser web'
+      setDrivePairing(await createDrivePairing(device))
+      setGoogleMessage(
+        'Apri Google, autorizza Drive e lascia aperta questa schermata.',
+      )
+    } catch (error) {
+      setGoogleMessage(
+        error instanceof Error
+          ? error.message
+          : 'Preparazione accesso Google non riuscita',
+      )
+    }
+    setGoogleBusy(false)
+  }
+
+  async function waitForGoogleConnection() {
+    if (!drivePairing) return
+    setGoogleBusy(true)
+    try {
+      while (Date.now() / 1000 < drivePairing.expiresAt) {
+        const session = await readDrivePairing(drivePairing.pairingId)
+        if (session) {
+          refreshDriveConnection()
+          setDrivePairing(null)
+          setGoogleMessage(
+            `${session.email} collegato. Sincronizzazione Drive attiva.`,
+          )
+          if (dataSettings.mode !== 'cloud') {
+            await setDataMode('cloud')
+          }
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+      }
+      setGoogleMessage('Collegamento scaduto: riprova.')
+      setDrivePairing(null)
+    } catch (error) {
+      setGoogleMessage(
+        error instanceof Error
+          ? error.message
+          : 'Collegamento Google non riuscito',
+      )
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function disconnectGoogleDrive() {
+    setGoogleBusy(true)
+    if (dataSettings.mode === 'cloud') await setDataMode('local')
+    await disconnectDriveSession()
+    refreshDriveConnection()
+    setDrivePairing(null)
+    setGoogleMessage('Dispositivo scollegato da Google Drive.')
     setGoogleBusy(false)
   }
 
@@ -519,41 +580,65 @@ export function SettingsPage() {
           </div>
           {!cloudAvailable && (
             <p className="settings-note">
-              Il cloud sarà disponibile dopo la configurazione Firebase e
-              l'accesso con un account reale.
+              Collega Google Drive per attivare la sincronizzazione senza
+              Firebase.
             </p>
           )}
           <div className="setting-row google-account-row">
             <span>
-              <strong>Accesso Google</strong>
+              <strong>Accesso Google Drive</strong>
               <small>
-                {firebaseConfigured && !user?.preview
-                  ? `${user?.email ?? 'Account collegato'} · accesso conservato da Google`
-                  : 'Non configurato · nessuna password viene salvata nel JSON'}
+                {driveAccountEmail
+                  ? `${driveAccountEmail} · rinnovo automatico attivo`
+                  : 'Non collegato · token Google protetti dal servizio'}
               </small>
             </span>
             <button
               className="button button-secondary"
-              disabled={!firebaseConfigured || googleBusy}
-              onClick={() => void connectGoogle()}
+              disabled={!driveServiceConfigured || googleBusy}
+              onClick={() =>
+                driveAccountEmail
+                  ? void disconnectGoogleDrive()
+                  : void prepareGoogleConnection()
+              }
               type="button"
             >
               {googleBusy
                 ? 'Collegamento...'
-                : firebaseConfigured && !user?.preview
-                  ? 'Ricollega Google'
-                  : 'Accedi con Google'}
+                : driveAccountEmail
+                  ? 'Scollega dispositivo'
+                  : 'Accedi con Google Drive'}
             </button>
           </div>
+          {drivePairing && (
+            <a
+              className="button button-primary"
+              href={drivePairing.authorizationUrl}
+              onClick={() => void waitForGoogleConnection()}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Apri Google e autorizza
+            </a>
+          )}
           {googleMessage && (
             <p aria-live="polite" className="import-message">
               {googleMessage}
             </p>
           )}
           <p className="settings-note">
-            La modalità Cloud mantiene gli stessi dati su computer, web,
-            Android e iPhone. Google Drive resta il backup JSON separato.
+            I file JSON restano nel tuo Google Drive. Il programma conserva
+            sul dispositivo solo un codice revocabile, mai la password o il
+            token Google.
           </p>
+          <ol className="settings-steps">
+            <li>Premi “Accedi con Google Drive”.</li>
+            <li>Apri Google e autorizza l'accesso ai file dell'app.</li>
+            <li>Torna qui: la modalità Cloud si attiva automaticamente.</li>
+            <li>
+              Ripeti una sola volta su ogni nuovo PC, Android, iPhone o tablet.
+            </li>
+          </ol>
         </article>
 
         <article className="panel">
@@ -565,8 +650,8 @@ export function SettingsPage() {
           </div>
           <div className="setting-row">
             <span>
-              <strong>Backup Google Drive</strong>
-              <small>Dopo ogni modifica approvata</small>
+              <strong>Backup locale Drive per desktop</strong>
+              <small>Copia aggiuntiva nella cartella Google Drive del PC</small>
             </span>
             <button
               aria-pressed={dataSettings.driveBackupAfterApproval}
