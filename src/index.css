@@ -1164,6 +1164,60 @@ select {
   gap: 10px;
 }
 
+.drive-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.drive-status {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  background: rgba(8, 12, 22, 0.58);
+}
+
+.drive-status > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.drive-status small,
+.drive-status em {
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.drive-status small {
+  color: var(--muted);
+}
+
+.drive-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.drive-status-ok {
+  color: var(--green);
+}
+
+.drive-status-pending {
+  color: var(--amber);
+}
+
+.drive-status-denied {
+  color: var(--red);
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -1282,7 +1336,8 @@ select {
 }
 
 @media (max-width: 620px) {
-  .drive-folder-form {
+  .drive-folder-form,
+  .drive-status-grid {
     grid-template-columns: 1fr;
   }
 

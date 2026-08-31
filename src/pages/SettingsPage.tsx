@@ -170,6 +170,7 @@ export function SettingsPage() {
   const products = state.accounting.products.filter(
     (product) => product.companyId === companyId,
   )
+  const driveFolderConfigured = dataSettings.driveFolder.trim().length > 0
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
@@ -520,6 +521,50 @@ export function SettingsPage() {
               <span />
             </button>
           </div>
+          <div
+            aria-label="Stato Google Drive"
+            className="drive-status-grid"
+          >
+            <div
+              className={`drive-status ${
+                driveFolderConfigured
+                  ? 'drive-status-ok'
+                  : 'drive-status-denied'
+              }`}
+            >
+              <span className="drive-status-dot" />
+              <span>
+                <small>Collegamento</small>
+                <strong>
+                  {driveFolderConfigured ? 'Collegato' : 'Non collegato'}
+                </strong>
+              </span>
+            </div>
+            <div
+              className={`drive-status ${
+                driveFolderConfigured &&
+                dataSettings.driveBackupAfterApproval
+                  ? 'drive-status-pending'
+                  : 'drive-status-denied'
+              }`}
+            >
+              <span className="drive-status-dot" />
+              <span>
+                <small>Sincronizzazione</small>
+                <strong>
+                  {!driveFolderConfigured
+                    ? 'Non configurata'
+                    : dataSettings.driveBackupAfterApproval
+                      ? 'Da sincronizzare'
+                      : 'Negata'}
+                </strong>
+                {driveFolderConfigured &&
+                  dataSettings.driveBackupAfterApproval && (
+                    <em>Dati in attesa di ricezione</em>
+                  )}
+              </span>
+            </div>
+          </div>
           <form className="drive-folder-form" onSubmit={saveDriveFolder}>
             <label>
               Cartella Google Drive
@@ -560,9 +605,9 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Il percorso salvato resta disponibile dopo la riapertura; il
-            caricamento automatico richiederà l'autorizzazione Google Drive
-            del servizio di backup.
+            “Collegato” conferma che la cartella è salvata e resta disponibile
+            dopo la riapertura. La sincronizzazione diventerà verde soltanto
+            dopo la conferma del servizio Google Drive.
           </p>
         </article>
 
