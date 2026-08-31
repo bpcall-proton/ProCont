@@ -26,8 +26,8 @@ contabile.
 
 Segreti richiesti dal servizio:
 
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
 - `PUBLIC_BASE_URL`
 - `TOKEN_ENCRYPTION_KEY` (chiave Fernet)
 - `APP_SECRET`
