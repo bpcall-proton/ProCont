@@ -1934,6 +1934,46 @@ select {
   font-size: 1.08rem;
 }
 
+.entity-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.entity-stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.entity-stat-card:hover {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: var(--cyan-soft);
+}
+
+.entity-stat-card strong {
+  color: var(--cyan);
+  font-size: 1rem;
+}
+
+.entity-stat-card span:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.entity-stat-card em {
+  margin-top: 3px;
+  color: var(--lavender);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .report-green strong { color: var(--success); }
 .report-cyan strong { color: var(--cyan); }
 .report-violet strong { color: var(--lavender); }
@@ -2010,7 +2050,8 @@ select {
   .accounting-fields,
   .product-fields,
   .contact-columns,
-  .report-columns {
+  .report-columns,
+  .entity-stat-grid {
     grid-template-columns: 1fr;
   }
 

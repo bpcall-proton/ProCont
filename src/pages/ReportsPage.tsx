@@ -3,6 +3,7 @@ import {
   activeAccounting,
   addDays,
   allocatedExpense,
+  invoiceDueState,
   invoiceRemaining,
   money,
   officialTaking,
@@ -13,6 +14,10 @@ import {
 import { useAppStore } from '../store/AppStoreContext'
 
 type Period = 'week' | 'month' | 'year' | 'all'
+type ReportDetail =
+  | { type: 'seller'; id: string }
+  | { type: 'supplier'; id: string }
+  | null
 
 function rangeFor(period: Period, selected: string) {
   const date = new Date(`${selected}T00:00:00Z`)
@@ -73,6 +78,7 @@ export function ReportsPage() {
   const { state } = useAppStore()
   const [period, setPeriod] = useState<Period>('month')
   const [selected, setSelected] = useState(today())
+  const [detail, setDetail] = useState<ReportDetail>(null)
   const source = activeAccounting(state.accounting)
   const range = rangeFor(period, selected)
 
@@ -203,6 +209,25 @@ export function ReportsPage() {
       ),
     }
   })
+  const selectedSeller =
+    detail?.type === 'seller'
+      ? source.sellers.find((seller) => seller.id === detail.id)
+      : undefined
+  const selectedSupplier =
+    detail?.type === 'supplier'
+      ? source.suppliers.find((supplier) => supplier.id === detail.id)
+      : undefined
+  const sellerInvoices = selectedSeller
+    ? data.invoices.filter((invoice) => invoice.sellerId === selectedSeller.id)
+    : []
+  const sellerTakings = selectedSeller
+    ? data.takings.filter((taking) => taking.sellerId === selectedSeller.id)
+    : []
+  const supplierInvoices = selectedSupplier
+    ? data.invoices.filter(
+        (invoice) => invoice.supplierId === selectedSupplier.id,
+      )
+    : []
 
   const months = useMemo(() => {
     const grouped = new Map<
@@ -313,6 +338,225 @@ export function ReportsPage() {
     yearCosts -
     futureFixedCosts
 
+  if (selectedSeller) {
+    const sellerOfficial = sellerTakings.reduce(
+      (sum, item) => sum + officialTaking(item),
+      0,
+    )
+    const sellerReal = sellerTakings.reduce(
+      (sum, item) => sum + realTaking(item),
+      0,
+    )
+    const sellerTheoretical = sellerInvoices.reduce(
+      (sum, item) => sum + item.theoreticalRevenue,
+      0,
+    )
+    return (
+      <div className="page-stack">
+        <DetailHeader
+          eyebrow="STATISTICHE VENDITORE"
+          name={selectedSeller.name}
+          note={
+            [selectedSeller.phone, selectedSeller.email]
+              .filter(Boolean)
+              .join(' · ') || 'Nessun contatto indicato'
+          }
+          onBack={() => setDetail(null)}
+          period={period}
+          selected={selected}
+          setPeriod={setPeriod}
+          setSelected={setSelected}
+        />
+        <section className="report-kpis">
+          <ReportCard label="Incasso ufficiale" value={sellerOfficial} tone="green" />
+          <ReportCard label="Incasso reale" value={sellerReal} tone="cyan" />
+          <ReportCard label="Venit previsto" value={sellerTheoretical} tone="violet" />
+          <ReportCard
+            label="Venit stock"
+            value={sellerTheoretical - sellerReal}
+            tone="amber"
+          />
+          <ReportCard
+            label="Differenza reale/ufficiale"
+            value={sellerReal - sellerOfficial}
+            tone={sellerReal >= sellerOfficial ? 'cyan' : 'red'}
+          />
+        </section>
+        <section className="report-columns">
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">FATTURE ATTRIBUITE</span>
+                <h2>{sellerInvoices.length} fatture nel periodo</h2>
+              </div>
+            </div>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Data / N.</th>
+                    <th>Fornitore</th>
+                    <th>Costo</th>
+                    <th>Venit previsto</th>
+                    <th>Ricarico</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...sellerInvoices]
+                    .sort((left, right) => right.date.localeCompare(left.date))
+                    .map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>{invoice.date}<small>{invoice.number || 'Senza numero'}</small></td>
+                        <td>{invoice.supplierName || '—'}</td>
+                        <td>{money(invoice.total)}</td>
+                        <td>{money(invoice.theoreticalRevenue)}</td>
+                        <td>{invoice.markupPercent.toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">INCASSI REGISTRATI</span>
+                <h2>{sellerTakings.length} giornate nel periodo</h2>
+              </div>
+            </div>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Contanti</th>
+                    <th>POS</th>
+                    <th>Ufficiale</th>
+                    <th>Reale</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...sellerTakings]
+                    .sort((left, right) => right.date.localeCompare(left.date))
+                    .map((taking) => (
+                      <tr key={taking.id}>
+                        <td>{taking.date}</td>
+                        <td>{money(taking.cash)}</td>
+                        <td>{money(taking.pos)}</td>
+                        <td>{money(officialTaking(taking))}</td>
+                        <td>{money(realTaking(taking))}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </div>
+    )
+  }
+
+  if (selectedSupplier) {
+    const supplierTotal = supplierInvoices.reduce(
+      (sum, invoice) => sum + invoice.total,
+      0,
+    )
+    const supplierRemaining = supplierInvoices.reduce(
+      (sum, invoice) => sum + invoiceRemaining(invoice),
+      0,
+    )
+    const supplierOverdue = supplierInvoices.filter(
+      (invoice) => invoiceDueState(invoice) === 'overdue',
+    ).length
+    return (
+      <div className="page-stack">
+        <DetailHeader
+          eyebrow="STATISTICHE FORNITORE"
+          name={selectedSupplier.name}
+          note={`${selectedSupplier.paymentTermsDays} giorni per il pagamento${
+            selectedSupplier.phone ? ` · ${selectedSupplier.phone}` : ''
+          }`}
+          onBack={() => setDetail(null)}
+          period={period}
+          selected={selected}
+          setPeriod={setPeriod}
+          setSelected={setSelected}
+        />
+        <section className="report-kpis">
+          <CountCard label="Fatture" value={supplierInvoices.length} />
+          <ReportCard label="Totale acquistato" value={supplierTotal} tone="cyan" />
+          <ReportCard
+            label="Totale pagato"
+            value={supplierTotal - supplierRemaining}
+            tone="green"
+          />
+          <ReportCard label="Residuo" value={supplierRemaining} tone="amber" />
+          <CountCard label="Fatture scadute" value={supplierOverdue} tone="red" />
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">DETTAGLIO ACQUISTI E PAGAMENTI</span>
+              <h2>Fatture del periodo selezionato</h2>
+            </div>
+          </div>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Data / N.</th>
+                  <th>Venditore</th>
+                  <th>Totale</th>
+                  <th>Pagato</th>
+                  <th>Residuo</th>
+                  <th>Scadenza</th>
+                  <th>Pagamenti</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...supplierInvoices]
+                  .sort((left, right) => right.date.localeCompare(left.date))
+                  .map((invoice) => {
+                    const dueState = invoiceDueState(invoice)
+                    const stateLabel = {
+                      paid: 'Pagata',
+                      overdue: 'Scaduta',
+                      'due-soon': 'In scadenza',
+                      open: 'Aperta',
+                    }[dueState]
+                    return (
+                      <tr className={`invoice-row ${dueState}`} key={invoice.id}>
+                        <td>{invoice.date}<small>{invoice.number || 'Senza numero'}</small></td>
+                        <td>{invoice.sellerName || '—'}</td>
+                        <td>{money(invoice.total)}</td>
+                        <td>{money(invoice.total - invoiceRemaining(invoice))}</td>
+                        <td>{money(invoiceRemaining(invoice))}</td>
+                        <td>
+                          <span className={`record-status ${dueState}`}>
+                            {stateLabel}
+                          </span>
+                          <small>{invoice.dueDate || 'Non indicata'}</small>
+                        </td>
+                        <td>
+                          {invoice.payments.length > 0
+                            ? invoice.payments.map((payment) => (
+                                <small key={payment.id}>
+                                  {payment.date} · {money(payment.amount)} · {payment.method}
+                                </small>
+                              ))
+                            : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="page-stack">
       <header className="page-heading">
@@ -409,29 +653,21 @@ export function ReportsPage() {
               <h2>Rendimento venditori</h2>
             </div>
           </div>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Venditore</th>
-                  <th>Ufficiale</th>
-                  <th>Reale</th>
-                  <th>Venit previsto</th>
-                  <th>Venit stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sellerStats.map((seller) => (
-                  <tr key={seller.id}>
-                    <td><strong>{seller.name}</strong></td>
-                    <td>{money(seller.official)}</td>
-                    <td>{money(seller.real)}</td>
-                    <td>{money(seller.theoretical)}</td>
-                    <td>{money(seller.theoretical - seller.real)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="entity-stat-grid">
+            {sellerStats.map((seller) => (
+              <button
+                className="entity-stat-card"
+                key={seller.id}
+                onClick={() => setDetail({ type: 'seller', id: seller.id })}
+                type="button"
+              >
+                <span className="eyebrow">VENDITORE</span>
+                <strong>{seller.name}</strong>
+                <span>Reale {money(seller.real)}</span>
+                <span>Venit previsto {money(seller.theoretical)}</span>
+                <em>Apri valutazione dettagliata</em>
+              </button>
+            ))}
           </div>
         </article>
 
@@ -442,27 +678,21 @@ export function ReportsPage() {
               <h2>Acquisti e residui</h2>
             </div>
           </div>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Fornitore</th>
-                  <th>Fatture</th>
-                  <th>Totale</th>
-                  <th>Residuo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {supplierStats.map((supplier) => (
-                  <tr key={supplier.id}>
-                    <td><strong>{supplier.name}</strong></td>
-                    <td>{supplier.count}</td>
-                    <td>{money(supplier.total)}</td>
-                    <td>{money(supplier.remaining)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="entity-stat-grid">
+            {supplierStats.map((supplier) => (
+              <button
+                className="entity-stat-card"
+                key={supplier.id}
+                onClick={() => setDetail({ type: 'supplier', id: supplier.id })}
+                type="button"
+              >
+                <span className="eyebrow">FORNITORE</span>
+                <strong>{supplier.name}</strong>
+                <span>{supplier.count} fatture · {money(supplier.total)}</span>
+                <span>Residuo {money(supplier.remaining)}</span>
+                <em>Apri valutazione dettagliata</em>
+              </button>
+            ))}
           </div>
         </article>
       </section>
@@ -564,5 +794,73 @@ function ReportCard({
       <span>{label}</span>
       <strong>{money(value)}</strong>
     </article>
+  )
+}
+
+function CountCard({
+  label,
+  value,
+  tone = 'violet',
+}: {
+  label: string
+  value: number
+  tone?: 'violet' | 'red'
+}) {
+  return (
+    <article className={`report-card report-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  )
+}
+
+function DetailHeader({
+  eyebrow,
+  name,
+  note,
+  onBack,
+  period,
+  selected,
+  setPeriod,
+  setSelected,
+}: {
+  eyebrow: string
+  name: string
+  note: string
+  onBack: () => void
+  period: Period
+  selected: string
+  setPeriod: (period: Period) => void
+  setSelected: (selected: string) => void
+}) {
+  return (
+    <header className="page-heading">
+      <div>
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{name}</h1>
+        <p>{note}</p>
+        <button className="button button-secondary" onClick={onBack} type="button">
+          Torna alle statistiche
+        </button>
+      </div>
+      <div className="report-filter">
+        <select
+          value={period}
+          onChange={(event) => setPeriod(event.target.value as Period)}
+        >
+          <option value="week">Settimana</option>
+          <option value="month">Mese</option>
+          <option value="year">Anno</option>
+          <option value="all">Tutto</option>
+        </select>
+        {period !== 'all' && (
+          <input
+            type="date"
+            value={selected}
+            onChange={(event) => setSelected(event.target.value)}
+          />
+        )}
+      </div>
+    </header>
   )
 }
