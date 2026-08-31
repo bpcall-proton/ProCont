@@ -143,7 +143,6 @@ export function SettingsPage() {
     cloudAvailable,
     driveAccountEmail,
     driveSyncMessage,
-    driveSyncState,
     localStoragePaths,
     refreshDriveConnection,
     syncMessage,
@@ -192,28 +191,6 @@ export function SettingsPage() {
   )
   const driveFolderConfigured =
     dataSettings.driveFolder.trim().length > 0 && !driveFolderIsUrl
-  const driveBackupStatusClass = !dataSettings.driveBackupAfterApproval
-    ? ''
-    : driveSyncState === 'error'
-      ? 'drive-status-denied'
-      : driveSyncState === 'saving'
-        ? 'drive-status-pending'
-        : driveSyncState === 'saved'
-          ? 'drive-status-ok'
-          : ''
-  const driveBackupStatusLabel = !window.desktopApp
-    ? 'Disponibile solo nell’EXE'
-    : !dataSettings.driveBackupAfterApproval
-      ? 'Copia locale disattivata'
-      : !driveFolderConfigured
-        ? 'Seleziona una cartella locale'
-        : driveSyncState === 'error'
-          ? 'Errore nella copia locale'
-          : driveSyncState === 'saving'
-            ? 'Copia in corso'
-            : driveSyncState === 'saved'
-              ? 'Copia locale aggiornata'
-              : 'Pronta per il primo backup'
   const cloudStatusClass =
     !cloudAvailable || syncState === 'error'
       ? 'drive-status-denied'
@@ -628,7 +605,7 @@ export function SettingsPage() {
               Firebase.
             </p>
           )}
-          <div className="archive-location-grid">
+          <div className="archive-location-stack">
             <div className="storage-path-card">
               <small>Percorso JSON locale</small>
               <strong>
@@ -644,18 +621,19 @@ export function SettingsPage() {
                 <em>Archivio generale: {localStoragePaths.workspace}</em>
               )}
             </div>
-            <div className={`drive-status ${cloudStatusClass}`}>
+            <div
+              aria-label={`Sincronizzazione Cloud: ${cloudStatusLabel}`}
+              className={`cloud-status-compact ${cloudStatusClass}`}
+              title={
+                syncMessage ??
+                (dataSettings.mode === 'cloud'
+                  ? 'Google Drive collegato e senza dati in attesa'
+                  : 'Seleziona Cloud per sincronizzare i dati')
+              }
+            >
               <span className="drive-status-dot" />
-              <span>
-                <small>Sincronizzazione Cloud</small>
-                <strong>{cloudStatusLabel}</strong>
-                <em>
-                  {syncMessage ??
-                    (dataSettings.mode === 'cloud'
-                      ? 'Google Drive collegato e senza dati in attesa'
-                      : 'Seleziona Cloud per sincronizzare i dati')}
-                </em>
-              </span>
+              <small>Cloud</small>
+              <strong>{cloudStatusLabel}</strong>
             </div>
           </div>
           <div className="setting-row google-account-row">
@@ -741,13 +719,6 @@ export function SettingsPage() {
             >
               <span />
             </button>
-          </div>
-          <div className={`drive-backup-summary ${driveBackupStatusClass}`}>
-            <span className="drive-status-dot" />
-            <span>
-              <small>Stato copia locale</small>
-              <strong>{driveBackupStatusLabel}</strong>
-            </span>
           </div>
           <div className="drive-folder-form">
             <label>
