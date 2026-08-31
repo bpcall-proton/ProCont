@@ -134,13 +134,17 @@ export function SettingsPage() {
   const {
     state,
     cloudAvailable,
+    driveSyncMessage,
+    driveSyncState,
     updateCompany,
     setActiveAccountingCompany,
     addAccountingCompany,
     updateAccountingCompany,
     setDataMode,
     setDriveBackup,
-    setDriveFolder,
+    selectDriveFolder,
+    syncDriveBackup,
+    setCurrency,
     setImageRetention,
     setLanguage,
     importLegacyData,
@@ -152,9 +156,7 @@ export function SettingsPage() {
   const [newCompany, setNewCompany] =
     useState<AccountingCompanyInput>(emptyCompany)
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
-  const [driveMessage, setDriveMessage] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
-  const driveFolderInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
       (item) => item.id === state.accounting.activeCompanyId,
@@ -179,12 +181,6 @@ export function SettingsPage() {
       result.ok ? 'Nuova azienda inserita e selezionata.' : result.error ?? null,
     )
     if (result.ok) setNewCompany(emptyCompany)
-  }
-
-  function saveDriveFolder(event: FormEvent) {
-    event.preventDefault()
-    setDriveFolder(driveFolderInput.current?.value.trim() ?? '')
-    setDriveMessage('Percorso Google Drive salvato.')
   }
 
   async function importJson(event: ChangeEvent<HTMLInputElement>) {
@@ -449,6 +445,21 @@ export function SettingsPage() {
                 <option value="en">English</option>
               </select>
             </label>
+            <label>
+              Valuta
+              <select
+                onChange={(event) =>
+                  setCurrency(
+                    event.target.value as 'EUR' | 'MDL' | 'USD',
+                  )
+                }
+                value={dataSettings.currency}
+              >
+                <option value="EUR">Euro (EUR)</option>
+                <option value="MDL">Leu moldavo (MDL)</option>
+                <option value="USD">Dollaro USA (USD)</option>
+              </select>
+            </label>
           </div>
         </article>
 
@@ -527,25 +538,35 @@ export function SettingsPage() {
           >
             <div
               className={`drive-status ${
-                driveFolderConfigured
+                driveSyncState === 'saved'
                   ? 'drive-status-ok'
-                  : 'drive-status-denied'
+                  : driveSyncState === 'saving'
+                    ? 'drive-status-pending'
+                    : 'drive-status-denied'
               }`}
             >
               <span className="drive-status-dot" />
               <span>
                 <small>Collegamento</small>
                 <strong>
-                  {driveFolderConfigured ? 'Collegato' : 'Non collegato'}
+                  {driveSyncState === 'saved'
+                    ? 'Cartella raggiungibile'
+                    : driveSyncState === 'saving'
+                      ? 'Verifica in corso'
+                      : 'Non collegato'}
                 </strong>
+                {driveFolderConfigured && driveSyncState === 'idle' && (
+                  <em>Cartella salvata, backup non ancora eseguito</em>
+                )}
               </span>
             </div>
             <div
               className={`drive-status ${
-                driveFolderConfigured &&
-                dataSettings.driveBackupAfterApproval
-                  ? 'drive-status-pending'
-                  : 'drive-status-denied'
+                driveSyncState === 'saved'
+                  ? 'drive-status-ok'
+                  : driveSyncState === 'saving'
+                    ? 'drive-status-pending'
+                    : 'drive-status-denied'
               }`}
             >
               <span className="drive-status-dot" />
@@ -554,35 +575,50 @@ export function SettingsPage() {
                 <strong>
                   {!driveFolderConfigured
                     ? 'Non configurata'
-                    : dataSettings.driveBackupAfterApproval
-                      ? 'Da sincronizzare'
-                      : 'Negata'}
+                    : driveSyncState === 'saved'
+                      ? 'JSON aggiornato'
+                      : driveSyncState === 'saving'
+                        ? 'Sincronizzazione'
+                        : dataSettings.driveBackupAfterApproval
+                          ? 'Da sincronizzare'
+                          : 'Negata'}
                 </strong>
                 {driveFolderConfigured &&
+                  driveSyncState !== 'saved' &&
                   dataSettings.driveBackupAfterApproval && (
-                    <em>Dati in attesa di ricezione</em>
+                    <em>Dati in attesa di salvataggio</em>
                   )}
               </span>
             </div>
           </div>
-          <form className="drive-folder-form" onSubmit={saveDriveFolder}>
+          <div className="drive-folder-form">
             <label>
-              Cartella Google Drive
+              Cartella locale Google Drive
               <input
-                defaultValue={dataSettings.driveFolder}
-                key={dataSettings.driveFolder}
-                onChange={() => setDriveMessage(null)}
-                placeholder="URL della cartella oppure Folder ID"
-                ref={driveFolderInput}
+                placeholder="Seleziona la cartella sincronizzata sul computer"
+                readOnly
+                value={dataSettings.driveFolder}
               />
             </label>
-            <button className="button button-primary" type="submit">
-              Salva
+            <button
+              className="button button-primary"
+              onClick={() => void selectDriveFolder()}
+              type="button"
+            >
+              Scegli cartella
             </button>
-          </form>
-          {driveMessage && (
+            <button
+              className="button"
+              disabled={!driveFolderConfigured}
+              onClick={() => void syncDriveBackup()}
+              type="button"
+            >
+              Sincronizza ora
+            </button>
+          </div>
+          {driveSyncMessage && (
             <p aria-live="polite" className="import-message">
-              {driveMessage}
+              {driveSyncMessage}
             </p>
           )}
           <label>
@@ -605,9 +641,9 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            “Collegato” conferma che la cartella è salvata e resta disponibile
-            dopo la riapertura. La sincronizzazione diventerà verde soltanto
-            dopo la conferma del servizio Google Drive.
+            Nell’EXE seleziona una cartella gestita da Google Drive per
+            desktop. Il programma aggiorna automaticamente un JSON separato
+            per l’azienda attiva; Google Drive completa il caricamento online.
           </p>
         </article>
 

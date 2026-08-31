@@ -4,6 +4,7 @@ import type {
   AccountingProduct,
   AccountingState,
   AccountingTaking,
+  Currency,
 } from './types'
 
 export const paymentMethods = [
@@ -25,6 +26,11 @@ export const expenseCategories = [
 ]
 
 export const defaultPaymentTermsDays = 10
+let activeCurrency: Currency = 'EUR'
+
+export function setMoneyCurrency(currency: Currency) {
+  activeCurrency = currency
+}
 
 export function today() {
   return new Date().toISOString().slice(0, 10)
@@ -39,7 +45,7 @@ export function addDays(iso: string, days: number) {
 export function money(value: number) {
   return new Intl.NumberFormat('it-IT', {
     style: 'currency',
-    currency: 'EUR',
+    currency: activeCurrency,
   }).format(value)
 }
 

@@ -4,6 +4,7 @@ import type {
   AccountingState,
   AppState,
   Company,
+  Currency,
   DataMode,
   InterfaceLanguage,
   ReviewDocument,
@@ -26,6 +27,8 @@ export interface AppStoreContextValue {
   loading: boolean
   syncState: SyncState
   syncMessage: string | null
+  driveSyncState: SyncState
+  driveSyncMessage: string | null
   cloudAvailable: boolean
   updateCompany: (patch: Partial<Company>) => void
   setActiveAccountingCompany: (companyId: string) => void
@@ -45,6 +48,9 @@ export interface AppStoreContextValue {
   setDataMode: (mode: DataMode) => Promise<void>
   setDriveBackup: (enabled: boolean) => void
   setDriveFolder: (folder: string) => void
+  selectDriveFolder: () => Promise<void>
+  syncDriveBackup: () => Promise<void>
+  setCurrency: (currency: Currency) => void
   setImageRetention: (days: number | null) => void
   setLanguage: (language: InterfaceLanguage) => void
   updateAccounting: (

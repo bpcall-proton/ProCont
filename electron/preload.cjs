@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld('desktopApp', {
     ipcRenderer.invoke('local-state:save', companyId, content),
   deleteLocalState: (companyId) =>
     ipcRenderer.invoke('local-state:delete', companyId),
+  selectDriveBackupFolder: () =>
+    ipcRenderer.invoke('drive-backup:select-folder'),
+  saveDriveBackup: (folderPath, filename, content) =>
+    ipcRenderer.invoke('drive-backup:save', folderPath, filename, content),
 })

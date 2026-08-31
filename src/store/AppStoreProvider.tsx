@@ -18,6 +18,7 @@ import type {
   AccountingCompany,
   AppState,
   Company,
+  Currency,
   DataMode,
   InterfaceLanguage,
   SyncState,
@@ -32,6 +33,7 @@ import {
 } from '../data/migrations'
 import { createCompanyState } from '../data/companyState'
 import { normalizeSenderPhone } from '../domain/senderRouting'
+import { setMoneyCurrency } from '../domain/accounting'
 import {
   AppStoreContext,
   type AccountingCompanyInput,
@@ -147,6 +149,19 @@ function validateAccountingCompany(
   return null
 }
 
+function backupFilename(state: AppState) {
+  const company = state.accounting.companies.find(
+    (item) => item.id === state.accounting.activeCompanyId,
+  )
+  const name =
+    company?.name
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'azienda'
+  return `fatture-incassi-pro-${name}.json`
+}
+
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const sessionUser = user
@@ -164,9 +179,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() =>
     createInitialState(companyId),
   )
+  setMoneyCurrency(state.dataSettings.currency)
   const [loading, setLoading] = useState(true)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [driveSyncState, setDriveSyncState] = useState<SyncState>('idle')
+  const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null)
   const activeRepository = useRef<AppRepository>(localRepository)
   const saveQueue = useRef(Promise.resolve())
   const stateRef = useRef(state)
@@ -178,19 +196,56 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState(summarized)
   }, [])
 
+  const saveDriveBackup = useCallback(async (next: AppState) => {
+    if (
+      !window.desktopApp ||
+      !next.dataSettings.driveBackupAfterApproval ||
+      !next.dataSettings.driveFolder
+    ) {
+      setDriveSyncState('idle')
+      setDriveSyncMessage(null)
+      return
+    }
+    setDriveSyncState('saving')
+    setDriveSyncMessage('Salvataggio JSON in corso')
+    try {
+      const companyId = next.accounting.activeCompanyId
+      const backupState = companyId
+        ? createCompanyState(next, companyId)
+        : next
+      const destination = await window.desktopApp.saveDriveBackup(
+        next.dataSettings.driveFolder,
+        backupFilename(next),
+        exportUnifiedState(backupState),
+      )
+      setDriveSyncState('saved')
+      setDriveSyncMessage(`JSON aggiornato: ${destination}`)
+    } catch (error) {
+      setDriveSyncState('error')
+      setDriveSyncMessage(
+        error instanceof Error
+          ? error.message
+          : 'Backup Google Drive non riuscito',
+      )
+    }
+  }, [])
+
   const enqueueSave = useCallback((next: AppState) => {
     setSyncState('saving')
     setSyncMessage(null)
     saveQueue.current = saveQueue.current
       .then(() => activeRepository.current.save(next))
-      .then(() => setSyncState('saved'))
+      .then(async () => {
+        setSyncState('saved')
+        await saveDriveBackup(next)
+      })
       .catch((error: unknown) => {
         setSyncState('error')
         setSyncMessage(
           error instanceof Error ? error.message : 'Salvataggio non riuscito',
         )
       })
-  }, [])
+  }, [saveDriveBackup])
 
   useEffect(() => {
     let cancelled = false
@@ -258,6 +313,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       loading,
       syncState,
       syncMessage,
+      driveSyncState,
+      driveSyncMessage,
       cloudAvailable: firebaseConfigured && !preview,
       updateCompany: (patch: Partial<Company>) => {
         updateState((current) => ({
@@ -502,6 +559,48 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           },
         }))
       },
+      selectDriveFolder: async () => {
+        if (!window.desktopApp) {
+          setDriveSyncState('error')
+          setDriveSyncMessage(
+            'La scelta della cartella è disponibile nell’EXE Windows',
+          )
+          return
+        }
+        try {
+          const folder = await window.desktopApp.selectDriveBackupFolder()
+          if (!folder) return
+          const next = withTimestamp({
+            ...stateRef.current,
+            dataSettings: {
+              ...stateRef.current.dataSettings,
+              driveFolder: folder,
+            },
+          })
+          applyState(next)
+          enqueueSave(next)
+        } catch (error) {
+          setDriveSyncState('error')
+          setDriveSyncMessage(
+            error instanceof Error
+              ? error.message
+              : 'Scelta della cartella non riuscita',
+          )
+        }
+      },
+      syncDriveBackup: async () => {
+        await saveQueue.current
+        await saveDriveBackup(stateRef.current)
+      },
+      setCurrency: (currency: Currency) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            currency,
+          },
+        }))
+      },
       setImageRetention: (days: number | null) => {
         updateState((current) => ({
           ...current,
@@ -566,11 +665,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [
       cloudRepository,
       applyState,
+      enqueueSave,
       loading,
       localRepository,
+      saveDriveBackup,
       state,
       syncMessage,
       syncState,
+      driveSyncMessage,
+      driveSyncState,
       updateState,
       companyId,
       preview,
