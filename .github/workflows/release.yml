@@ -20,7 +20,7 @@ env:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -37,11 +37,54 @@ jobs:
       - name: Package Windows
         run: npm run build && npx electron-builder --win nsis --x64 --publish never
 
+      - name: Scan Windows artifacts with Microsoft Defender
+        shell: pwsh
+        run: |
+          $defender = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $defender)) {
+            throw "Microsoft Defender command-line scanner is unavailable"
+          }
+
+          & $defender -SignatureUpdate
+          if ($LASTEXITCODE -ne 0) {
+            throw "Microsoft Defender signatures could not be updated"
+          }
+
+          @(
+            "release\win-unpacked",
+            (Get-ChildItem "release\Fatture-Incassi-Pro-Setup-*.exe").FullName
+          ) | ForEach-Object {
+            & $defender -Scan -ScanType 3 -File $_ -DisableRemediation
+            if ($LASTEXITCODE -eq 2) {
+              throw "Microsoft Defender detected a threat in $_"
+            }
+            if ($LASTEXITCODE -ne 0) {
+              throw "Microsoft Defender could not scan $_"
+            }
+          }
+
+      - name: Create portable archive and checksums
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $archive = "release\Fatture-Incassi-Pro-Portable-$version-Windows-x64.zip"
+          Compress-Archive -Path "release\win-unpacked\*" -DestinationPath $archive
+
+          Get-ChildItem "release\Fatture-Incassi-Pro-Setup-*.exe", $archive |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object {
+              "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))"
+            } |
+            Set-Content "release\SHA256SUMS-Windows.txt"
+
       - name: Publish Windows
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          Get-ChildItem "release/Fatture-Incassi-Pro-Setup-*.exe" |
+          Get-ChildItem `
+            "release/Fatture-Incassi-Pro-Setup-*.exe", `
+            "release/Fatture-Incassi-Pro-Portable-*.zip", `
+            "release/SHA256SUMS-Windows.txt" |
             ForEach-Object {
               gh release upload "$env:RELEASE_TAG" $_.FullName --clobber
             }
