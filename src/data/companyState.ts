@@ -37,6 +37,7 @@ export function createWorkspaceState(state: AppState): AppState {
       expenses: [],
       productionSettings: [],
       productionEntries: [],
+      productionViewSettings: [],
     },
   }
 }
@@ -98,6 +99,9 @@ export function createCompanyState(
       productionEntries: state.accounting.productionEntries.filter(
         (entry) => entry.companyId === companyId,
       ),
+      productionViewSettings: state.accounting.productionViewSettings.filter(
+        (settings) => settings.companyId === companyId,
+      ),
     },
   }
 }
@@ -128,6 +132,9 @@ export function mergeCompanyStates(
       ),
       productionEntries: companies.flatMap(
         (state) => state.accounting.productionEntries,
+      ),
+      productionViewSettings: companies.flatMap(
+        (state) => state.accounting.productionViewSettings,
       ),
     },
   }

@@ -14,6 +14,7 @@ export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
 export type ProductionEntryPeriod = 'day' | 'week'
+export type ProductionReportPeriod = 'day' | 'week' | 'month'
 export type ReviewDocumentStatus =
   | 'pending'
   | 'unrecognized'
@@ -234,6 +235,8 @@ export interface ProductionSettings {
   productName: string
   salePrice: number
   sellerIds: string[]
+  expenseIds: string[]
+  workerIds: string[]
 }
 
 export interface ProductionEntry {
@@ -243,6 +246,11 @@ export interface ProductionEntry {
   period: ProductionEntryPeriod
   date: string
   quantity: number
+}
+
+export interface ProductionViewSettings {
+  companyId: string
+  reportPeriod: ProductionReportPeriod
 }
 
 export interface AccountingState {
@@ -258,6 +266,7 @@ export interface AccountingState {
   expenses: AccountingExpense[]
   productionSettings: ProductionSettings[]
   productionEntries: ProductionEntry[]
+  productionViewSettings: ProductionViewSettings[]
 }
 
 export interface ReviewInvoiceSuggestion {
@@ -283,7 +292,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 8
+  schemaVersion: 9
   company: Company
   stores: Store[]
   sellers: Seller[]

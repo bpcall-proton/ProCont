@@ -15,6 +15,7 @@ import type {
   PaymentMethod,
   ProductionEntry,
   ProductionSettings,
+  ProductionViewSettings,
   Rental,
 } from '../domain/types'
 
@@ -330,18 +331,39 @@ function legacyProductionProductId(companyId: string) {
 function mapProductionSettings(
   value: JsonRecord,
   fallbackCompanyId: string,
+  expenses: AccountingExpense[],
 ): ProductionSettings {
   const companyId = text(value.companyId, fallbackCompanyId)
+  const sellerIds = Array.isArray(value.sellerIds)
+    ? value.sellerIds.filter(
+        (sellerId): sellerId is string => typeof sellerId === 'string',
+      )
+    : []
   return {
     id: text(value.id, legacyProductionProductId(companyId)),
     companyId,
     productName: text(value.productName),
     salePrice: amount(value.salePrice),
-    sellerIds: Array.isArray(value.sellerIds)
-      ? value.sellerIds.filter(
-          (sellerId): sellerId is string => typeof sellerId === 'string',
+    sellerIds,
+    expenseIds: Array.isArray(value.expenseIds)
+      ? value.expenseIds.filter(
+          (expenseId): expenseId is string => typeof expenseId === 'string',
         )
-      : [],
+      : expenses
+          .filter(
+            (expense) =>
+              expense.companyId === companyId &&
+              expense.type !== 'stipendio' &&
+              expense.recurrence === 'monthly' &&
+              expense.sellerId !== null &&
+              sellerIds.includes(expense.sellerId),
+          )
+          .map((expense) => expense.id),
+    workerIds: Array.isArray(value.workerIds)
+      ? value.workerIds.filter(
+          (workerId): workerId is string => typeof workerId === 'string',
+        )
+      : sellerIds,
   }
 }
 
@@ -360,6 +382,19 @@ function mapProductionEntry(
     period: value.period === 'week' ? 'week' : 'day',
     date: text(value.date),
     quantity: Math.max(0, amount(value.quantity)),
+  }
+}
+
+function mapProductionViewSettings(
+  value: JsonRecord,
+  fallbackCompanyId: string,
+): ProductionViewSettings {
+  return {
+    companyId: text(value.companyId, fallbackCompanyId),
+    reportPeriod:
+      value.reportPeriod === 'day' || value.reportPeriod === 'week'
+        ? value.reportPeriod
+        : 'month',
   }
 }
 
@@ -385,6 +420,7 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     expenses: records(candidate.stipendiTasse).map(mapExpense),
     productionSettings: [],
     productionEntries: [],
+    productionViewSettings: [],
   }
 }
 
@@ -400,7 +436,8 @@ export function normalizeStoredState(
       value.schemaVersion === 5 ||
       value.schemaVersion === 6 ||
       value.schemaVersion === 7 ||
-      value.schemaVersion === 8) &&
+      value.schemaVersion === 8 ||
+      value.schemaVersion === 9) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -474,9 +511,15 @@ export function normalizeStoredState(
           markupPercent(invoice.total, invoice.theoreticalRevenue),
       }
     })
+    const expenses = (accounting.expenses ?? []).map((expense) => ({
+      ...expense,
+      companyId: expense.companyId || fallbackCompanyId,
+      recurrence: expense.recurrence ?? 'once',
+      recurrenceEndDate: expense.recurrenceEndDate ?? null,
+    }))
     return {
       ...state,
-      schemaVersion: 8,
+      schemaVersion: 9,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -535,17 +578,18 @@ export function normalizeStoredState(
           markupPercent: product.markupPercent ?? 0,
           notes: product.notes ?? '',
         })),
-        expenses: (accounting.expenses ?? []).map((expense) => ({
-          ...expense,
-          companyId: expense.companyId || fallbackCompanyId,
-          recurrence: expense.recurrence ?? 'once',
-          recurrenceEndDate: expense.recurrenceEndDate ?? null,
-        })),
+        expenses,
         productionSettings: records(accounting.productionSettings).map(
-          (settings) => mapProductionSettings(settings, fallbackCompanyId),
+          (settings) =>
+            mapProductionSettings(settings, fallbackCompanyId, expenses),
         ),
         productionEntries: records(accounting.productionEntries).map(
           (entry) => mapProductionEntry(entry, fallbackCompanyId),
+        ),
+        productionViewSettings: records(
+          accounting.productionViewSettings,
+        ).map((settings) =>
+          mapProductionViewSettings(settings, fallbackCompanyId),
         ),
         takings: (accounting.takings ?? []).map((taking) => ({
           ...taking,
@@ -633,6 +677,15 @@ export function importLegacyIntoState(
       current.accounting.productionEntries,
       accounting.productionEntries,
     ),
+    productionViewSettings: [
+      ...current.accounting.productionViewSettings.filter(
+        (settings) =>
+          !accounting.productionViewSettings.some(
+            (imported) => imported.companyId === settings.companyId,
+          ),
+      ),
+      ...accounting.productionViewSettings,
+    ],
   }
   return {
     ...current,
@@ -696,6 +749,9 @@ export function importLegacyIntoActiveCompany(
       companyId: targetCompanyId,
       productId: productionProductId(entry.productId),
     }))
+  const productionViewSettings = companyRecords(
+    imported.accounting.productionViewSettings,
+  )
 
   return {
     ...current,
@@ -755,6 +811,14 @@ export function importLegacyIntoActiveCompany(
             ...productionEntries,
           ]
         : current.accounting.productionEntries,
+      productionViewSettings: productionViewSettings.length
+        ? [
+            ...current.accounting.productionViewSettings.filter(
+              (settings) => settings.companyId !== targetCompanyId,
+            ),
+            ...productionViewSettings,
+          ]
+        : current.accounting.productionViewSettings,
     },
   }
 }
@@ -763,7 +827,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 8,
+      version: 9,
       exportedAt: new Date().toISOString(),
       data: state,
     },

@@ -1666,6 +1666,39 @@ select {
   gap: 18px;
 }
 
+.production-stat-button {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.production-stat-button:hover,
+.production-stat-button.active {
+  border-color: rgba(34, 211, 238, 0.58);
+  transform: translateY(-1px);
+}
+
+.production-card-detail,
+.production-detail-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.production-card-detail .panel-heading {
+  margin-bottom: 0;
+}
+
+.production-detail-groups > div {
+  display: grid;
+  gap: 10px;
+}
+
+.production-detail-groups h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .production-settings-fields,
 .production-entry-fields {
   display: grid;
