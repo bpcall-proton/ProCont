@@ -363,7 +363,7 @@ function mapProductionSettings(
       ? value.workerIds.filter(
           (workerId): workerId is string => typeof workerId === 'string',
         )
-      : sellerIds,
+      : [],
   }
 }
 
