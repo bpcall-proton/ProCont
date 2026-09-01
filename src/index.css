@@ -1373,7 +1373,7 @@ select {
 
   .app-shell {
     display: block;
-    padding-bottom: 78px;
+    padding-bottom: calc(98px + env(safe-area-inset-bottom));
   }
 
   .sidebar {
@@ -1384,9 +1384,9 @@ select {
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 70px;
+    height: calc(88px + env(safe-area-inset-bottom));
     display: block;
-    padding: 8px 12px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     border-right: 0;
   }
@@ -1403,11 +1403,20 @@ select {
   }
 
   .sidebar nav button {
-    min-height: 52px;
+    min-height: 70px;
     flex-direction: column;
-    gap: 3px;
-    border-radius: 10px;
-    font-size: 0.62rem;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 8px;
+    border-radius: 12px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .sidebar nav button svg {
+    width: 25px;
+    height: 25px;
   }
 
   .sidebar nav span {
@@ -1628,6 +1637,78 @@ select {
 
 .product-fields {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.production-filter {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(180px, 0.55fr));
+  align-items: end;
+  gap: 18px;
+}
+
+.production-filter > div {
+  display: grid;
+  gap: 4px;
+}
+
+.production-filter .eyebrow {
+  margin-bottom: 0;
+}
+
+.production-filter strong {
+  font-size: 1.05rem;
+}
+
+.production-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.production-settings-fields,
+.production-entry-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.production-entry-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.production-sellers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+.production-sellers legend {
+  padding: 0 7px;
+  color: #cad5e5;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.production-sellers p,
+.production-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.production-breakdown {
+  display: grid;
+  gap: 18px;
+}
+
+.production-breakdown .panel-heading {
+  margin-bottom: 0;
 }
 
 .wide-field {
@@ -2077,6 +2158,10 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .production-grid {
+    grid-template-columns: 1fr;
+  }
+
   .accounting-fields,
   .product-fields,
   .contact-columns,
@@ -2117,13 +2202,30 @@ select {
 @media (max-width: 620px) {
   .sidebar nav {
     display: flex;
+    gap: 4px;
     overflow-x: auto;
     scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
   }
 
   .sidebar nav button {
-    min-width: 78px;
-    flex: 1 0 78px;
+    min-width: 104px;
+    flex: 1 0 104px;
+    scroll-snap-align: start;
+  }
+
+  .production-filter,
+  .production-grid,
+  .production-settings-fields,
+  .production-entry-fields,
+  .production-sellers {
+    grid-template-columns: 1fr;
   }
 
   .stats-strip,

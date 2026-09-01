@@ -8,6 +8,7 @@ import {
   LogoutIcon,
   PaidInvoicesIcon,
   ProductIcon,
+  ProductionIcon,
   ReportsIcon,
   ScanIcon,
   SettingsIcon,
@@ -21,6 +22,7 @@ import { InvoiceArchivePage } from './pages/InvoiceArchivePage'
 import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
 import { ProductsPage } from './pages/ProductsPage'
+import { ProductionPage } from './pages/ProductionPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -35,6 +37,7 @@ type Page =
   | 'invoiceArchive'
   | 'paidInvoices'
   | 'products'
+  | 'production'
   | 'reports'
   | 'stores'
   | 'review'
@@ -62,6 +65,16 @@ const navigation: {
     id: 'products',
     label: { it: 'Prodotti', ro: 'Produse', en: 'Products' },
     icon: ProductIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'production',
+    label: {
+      it: 'Costo prodotto',
+      ro: 'Cost producție',
+      en: 'Product cost',
+    },
+    icon: ProductionIcon,
     permission: 'manageAccounting',
   },
   {
@@ -167,6 +180,7 @@ function Workspace() {
       <InvoiceArchivePage onBack={() => setPage('accounting')} />
     ),
     products: <ProductsPage />,
+    production: <ProductionPage key={activeCompany?.id} />,
     paidInvoices: <PaidInvoicesPage />,
     reports: <ReportsPage />,
     stores: <StoresPage />,
