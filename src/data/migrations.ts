@@ -323,12 +323,18 @@ function mapExpense(value: JsonRecord): AccountingExpense {
   }
 }
 
+function legacyProductionProductId(companyId: string) {
+  return `production-product-${companyId}`
+}
+
 function mapProductionSettings(
   value: JsonRecord,
   fallbackCompanyId: string,
 ): ProductionSettings {
+  const companyId = text(value.companyId, fallbackCompanyId)
   return {
-    companyId: text(value.companyId, fallbackCompanyId),
+    id: text(value.id, legacyProductionProductId(companyId)),
+    companyId,
     productName: text(value.productName),
     salePrice: amount(value.salePrice),
     sellerIds: Array.isArray(value.sellerIds)
@@ -343,9 +349,14 @@ function mapProductionEntry(
   value: JsonRecord,
   fallbackCompanyId: string,
 ): ProductionEntry {
+  const companyId = text(value.companyId, fallbackCompanyId)
   return {
     id: text(value.id, crypto.randomUUID()),
-    companyId: text(value.companyId, fallbackCompanyId),
+    companyId,
+    productId: text(
+      value.productId,
+      legacyProductionProductId(companyId),
+    ),
     period: value.period === 'week' ? 'week' : 'day',
     date: text(value.date),
     quantity: Math.max(0, amount(value.quantity)),
@@ -388,7 +399,8 @@ export function normalizeStoredState(
       value.schemaVersion === 4 ||
       value.schemaVersion === 5 ||
       value.schemaVersion === 6 ||
-      value.schemaVersion === 7) &&
+      value.schemaVersion === 7 ||
+      value.schemaVersion === 8) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -464,7 +476,7 @@ export function normalizeStoredState(
     })
     return {
       ...state,
-      schemaVersion: 7,
+      schemaVersion: 8,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -613,15 +625,10 @@ export function importLegacyIntoState(
       accounting.accountantInvoices,
     ),
     expenses: mergeById(current.accounting.expenses, accounting.expenses),
-    productionSettings: [
-      ...current.accounting.productionSettings.filter(
-        (settings) =>
-          !accounting.productionSettings.some(
-            (imported) => imported.companyId === settings.companyId,
-          ),
-      ),
-      ...accounting.productionSettings,
-    ],
+    productionSettings: mergeById(
+      current.accounting.productionSettings,
+      accounting.productionSettings,
+    ),
     productionEntries: mergeById(
       current.accounting.productionEntries,
       accounting.productionEntries,
@@ -671,6 +678,24 @@ export function importLegacyIntoActiveCompany(
     items
       .filter((item) => item.companyId === sourceCompanyId)
       .map((item) => ({ ...item, companyId: targetCompanyId }))
+  const productionProductId = (productId: string) =>
+    sourceCompanyId === targetCompanyId
+      ? productId
+      : `${productId}-${targetCompanyId}`
+  const productionSettings = imported.accounting.productionSettings
+    .filter((settings) => settings.companyId === sourceCompanyId)
+    .map((settings) => ({
+      ...settings,
+      id: productionProductId(settings.id),
+      companyId: targetCompanyId,
+    }))
+  const productionEntries = imported.accounting.productionEntries
+    .filter((entry) => entry.companyId === sourceCompanyId)
+    .map((entry) => ({
+      ...entry,
+      companyId: targetCompanyId,
+      productId: productionProductId(entry.productId),
+    }))
 
   return {
     ...current,
@@ -714,20 +739,22 @@ export function importLegacyIntoActiveCompany(
         current.accounting.expenses,
         companyRecords(imported.accounting.expenses),
       ),
-      productionSettings: imported.accounting.productionSettings.some(
-        (settings) => settings.companyId === sourceCompanyId,
-      )
+      productionSettings: productionSettings.length
         ? [
             ...current.accounting.productionSettings.filter(
               (settings) => settings.companyId !== targetCompanyId,
             ),
-            ...companyRecords(imported.accounting.productionSettings),
+            ...productionSettings,
           ]
         : current.accounting.productionSettings,
-      productionEntries: mergeById(
-        current.accounting.productionEntries,
-        companyRecords(imported.accounting.productionEntries),
-      ),
+      productionEntries: productionSettings.length
+        ? [
+            ...current.accounting.productionEntries.filter(
+              (entry) => entry.companyId !== targetCompanyId,
+            ),
+            ...productionEntries,
+          ]
+        : current.accounting.productionEntries,
     },
   }
 }
@@ -736,7 +763,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 7,
+      version: 8,
       exportedAt: new Date().toISOString(),
       data: state,
     },
