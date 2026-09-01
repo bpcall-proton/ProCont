@@ -25,11 +25,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $targets = @(
-  "release\win-unpacked",
-  (Get-ChildItem "release\Fatture-Incassi-Pro-Setup-*.exe").FullName
-)
+  Get-ChildItem "release\Fatture-Incassi-Pro-Setup-*.exe" -File
+  Get-ChildItem "release\Fatture-Incassi-Pro-Portable-*.zip" -File -ErrorAction SilentlyContinue
+  Get-ChildItem "release\win-unpacked" -File -Recurse
+) | Select-Object -ExpandProperty FullName
 
 foreach ($target in $targets) {
+  Write-Host "Scanning $target"
   & $defender -Scan -ScanType 3 -File $target -DisableRemediation
   $scanExitCode = $LASTEXITCODE
   if ($scanExitCode -ne 0) {
