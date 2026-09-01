@@ -39,29 +39,7 @@ jobs:
 
       - name: Scan Windows artifacts with Microsoft Defender
         shell: pwsh
-        run: |
-          $defender = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
-          if (-not (Test-Path $defender)) {
-            throw "Microsoft Defender command-line scanner is unavailable"
-          }
-
-          & $defender -SignatureUpdate
-          if ($LASTEXITCODE -ne 0) {
-            throw "Microsoft Defender signatures could not be updated"
-          }
-
-          @(
-            "release\win-unpacked",
-            (Get-ChildItem "release\Fatture-Incassi-Pro-Setup-*.exe").FullName
-          ) | ForEach-Object {
-            & $defender -Scan -ScanType 3 -File $_ -DisableRemediation
-            if ($LASTEXITCODE -eq 2) {
-              throw "Microsoft Defender detected a threat in $_"
-            }
-            if ($LASTEXITCODE -ne 0) {
-              throw "Microsoft Defender could not scan $_"
-            }
-          }
+        run: ./scripts/scan-windows-artifacts.ps1
 
       - name: Create portable archive and checksums
         shell: pwsh

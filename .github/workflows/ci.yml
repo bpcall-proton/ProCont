@@ -51,6 +51,10 @@ jobs:
       - name: Package Windows installer
         run: npm run desktop:win
 
+      - name: Scan Windows artifacts with Microsoft Defender
+        shell: pwsh
+        run: ./scripts/scan-windows-artifacts.ps1
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
