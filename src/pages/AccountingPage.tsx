@@ -34,6 +34,10 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function normalizeIban(value: string) {
+  return value.trim().toUpperCase()
+}
+
 function mutateCompany(
   state: AccountingState,
   updater: (activeId: string) => AccountingState,
@@ -271,6 +275,11 @@ export function InvoicesPanel({
   const invoiceRevenue =
     lines.length > 0 ? lineRevenue : numberValue(form.theoreticalRevenue)
   const invoiceMarkup = markupPercentage(invoiceTotal, invoiceRevenue)
+  const paymentSupplier = paymentTarget
+    ? data.suppliers.find(
+        (supplier) => supplier.id === paymentTarget.supplierId,
+      )
+    : undefined
 
   function selectProduct(productId: string) {
     const product = data.products.find((item) => item.id === productId)
@@ -807,7 +816,7 @@ export function InvoicesPanel({
 
       {paymentTarget && (
         <form className="panel payment-panel" onSubmit={addPayment}>
-          <div><strong>Pagamento parziale o saldo fattura {paymentTarget.number}</strong><small>Inserisci un acconto oppure l'intero residuo di {money(invoiceRemaining(paymentTarget))}</small></div>
+          <div><strong>Pagamento parziale o saldo fattura {paymentTarget.number}</strong><small>Inserisci un acconto oppure l'intero residuo di {money(invoiceRemaining(paymentTarget))}</small>{paymentSupplier?.iban && <small>IBAN fornitore: {paymentSupplier.iban}</small>}</div>
           <input inputMode="decimal" max={invoiceRemaining(paymentTarget)} placeholder="Importo pagato" required value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
           <input type="date" required value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
           <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{paymentMethods.map((item) => <option key={item}>{item}</option>)}</select>
@@ -918,8 +927,10 @@ function ContactsPanel() {
   const data = activeAccounting(state.accounting)
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
+  const [sellerIban, setSellerIban] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
+  const [supplierIban, setSupplierIban] = useState('')
   const [supplierPaymentTerms, setSupplierPaymentTerms] = useState(
     String(defaultPaymentTermsDays),
   )
@@ -936,6 +947,7 @@ function ContactsPanel() {
             name: sellerName.trim(),
             email: '',
             phone: sellerPhone.trim(),
+            iban: sellerIban.trim().toUpperCase(),
             city: '',
             notes: '',
           },
@@ -945,6 +957,7 @@ function ContactsPanel() {
     )
     setSellerName('')
     setSellerPhone('')
+    setSellerIban('')
   }
 
   function addSupplier(event: FormEvent) {
@@ -960,6 +973,7 @@ function ContactsPanel() {
             taxId: supplierTaxId.trim(),
             email: '',
             phone: '',
+            iban: supplierIban.trim().toUpperCase(),
             city: '',
             notes: '',
             paymentTermsDays: Math.max(
@@ -973,6 +987,7 @@ function ContactsPanel() {
     )
     setSupplierName('')
     setSupplierTaxId('')
+    setSupplierIban('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
   }
 
@@ -991,24 +1006,46 @@ function ContactsPanel() {
     }))
   }
 
+  function updateSellerIban(sellerId: string, value: string) {
+    updateAccounting((current) => ({
+      ...current,
+      sellers: current.sellers.map((seller) =>
+        seller.id === sellerId
+          ? { ...seller, iban: normalizeIban(value) }
+          : seller,
+      ),
+    }))
+  }
+
+  function updateSupplierIban(supplierId: string, value: string) {
+    updateAccounting((current) => ({
+      ...current,
+      suppliers: current.suppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? { ...supplier, iban: normalizeIban(value) }
+          : supplier,
+      ),
+    }))
+  }
+
   return (
     <section className="contact-columns">
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Venditori</h2></div><span className="count-pill">{data.sellers.length}</span></div>
-        <form className="inline-create-form" onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className="inline-create-form contact-create-form" onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><input autoCapitalize="characters" placeholder="IBAN stipendio" value={sellerIban} onChange={(event) => setSellerIban(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + (item.realTotal > 0 ? item.realTotal : item.cash + item.pos), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
+          return <div className="record-card contact-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><label className="contact-iban">IBAN stipendio<input aria-label={`IBAN stipendio ${seller.name}`} autoCapitalize="characters" defaultValue={seller.iban} onBlur={(event) => updateSellerIban(seller.id, event.target.value)} placeholder="IBAN" /></label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Fornitori</h2></div><span className="count-pill">{data.suppliers.length}</span></div>
-        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input autoCapitalize="characters" placeholder="IBAN pagamenti" value={supplierIban} onChange={(event) => setSupplierIban(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
           const total = invoices.reduce((sum, item) => sum + item.total, 0)
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="contact-iban">IBAN pagamenti<input aria-label={`IBAN pagamenti ${supplier.name}`} autoCapitalize="characters" defaultValue={supplier.iban} onBlur={(event) => updateSupplierIban(supplier.id, event.target.value)} placeholder="IBAN" /></label><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
     </section>
@@ -1032,6 +1069,12 @@ function ExpensesPanel() {
   const [rentalTotal, setRentalTotal] = useState('')
   const [accountantDescription, setAccountantDescription] = useState('')
   const [accountantTotal, setAccountantTotal] = useState('')
+  const selectedExpenseSeller = data.sellers.find(
+    (seller) => seller.id === expenseSellerId,
+  )
+  const sellerIbans = new Map(
+    data.sellers.map((seller) => [seller.id, seller.iban]),
+  )
 
   function addExpense(event: FormEvent) {
     event.preventDefault()
@@ -1169,10 +1212,13 @@ function ExpensesPanel() {
         <form className="inline-create-form vertical-form" onSubmit={addExpense}>
           <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as AccountingExpense['type'])}><option value="tassa">Tassa</option><option value="stipendio">Stipendio</option><option value="contabile">Costo contabile</option><option value="altra">Altra spesa</option></select>
           {expenseType === 'stipendio' && (
-            <select value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
-              <option value="">Dipendente / venditrice</option>
-              {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
-            </select>
+            <>
+              <select value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
+                <option value="">Dipendente / venditrice</option>
+                {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+              </select>
+              {selectedExpenseSeller?.iban && <small className="payment-destination">IBAN stipendio: {selectedExpenseSeller.iban}</small>}
+            </>
           )}
           <input placeholder="Descrizione" required value={expenseDescription} onChange={(event) => setExpenseDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Importo" required value={expenseAmount} onChange={(event) => setExpenseAmount(event.target.value)} />
@@ -1189,7 +1235,7 @@ function ExpensesPanel() {
             <button className="button button-primary" type="submit">{editingExpenseId ? 'Salva modifica' : 'Registra'}</button>
           </div>
         </form>
-        <ExpenseList items={data.expenses} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} />
+        <ExpenseList items={data.expenses} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} sellerIbans={sellerIbans} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2></div></div>
@@ -1217,12 +1263,17 @@ function ExpenseList({
   items,
   onEdit,
   onUpdate,
+  sellerIbans,
 }: {
   items: AccountingExpense[]
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
+  sellerIbans: Map<string, string>
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => onUpdate(items.filter((current) => current.id !== item.id))}>Elimina</button></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => {
+    const sellerIban = item.sellerId ? sellerIbans.get(item.sellerId) : ''
+    return <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small>{sellerIban && <small>IBAN stipendio: {sellerIban}</small>}</span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => onUpdate(items.filter((current) => current.id !== item.id))}>Elimina</button></span></div>
+  })}</div>
 }
 
 function SettlementList({

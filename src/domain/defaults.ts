@@ -109,6 +109,7 @@ export function createStoreWithSeller(input: {
     name: seller.name,
     email: '',
     phone: seller.phone,
+    iban: '',
     city: store.city,
     notes: `Responsabile del punto vendita ${store.name}`,
   }

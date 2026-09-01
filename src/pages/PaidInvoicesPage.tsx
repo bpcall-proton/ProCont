@@ -19,6 +19,9 @@ export function PaidInvoicesPage() {
   const sellers = state.accounting.sellers.filter(
     (seller) => seller.companyId === companyId,
   )
+  const supplierIbans = new Map(
+    suppliers.map((supplier) => [supplier.id, supplier.iban]),
+  )
 
   const invoices = useMemo(
     () =>
@@ -159,6 +162,9 @@ export function PaidInvoicesPage() {
                   <td>
                     {invoice.supplierName || '—'}
                     <small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small>
+                    {invoice.supplierId && supplierIbans.get(invoice.supplierId) && (
+                      <small>IBAN: {supplierIbans.get(invoice.supplierId)}</small>
+                    )}
                   </td>
                   <td>{money(invoice.total)}</td>
                   <td>
