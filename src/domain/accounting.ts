@@ -164,5 +164,8 @@ export function activeAccounting(state: AccountingState) {
     productionEntries: state.productionEntries.filter(
       (item) => item.companyId === id,
     ),
+    productionViewSettings:
+      state.productionViewSettings.find((item) => item.companyId === id) ??
+      null,
   }
 }

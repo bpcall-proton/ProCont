@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   activeAccounting,
   allocatedExpense,
@@ -7,11 +7,15 @@ import {
   today,
 } from '../domain/accounting'
 import { createId } from '../domain/defaults'
-import type { ProductionEntryPeriod } from '../domain/types'
+import type {
+  ProductionEntryPeriod,
+  ProductionReportPeriod,
+} from '../domain/types'
 import { useAppStore } from '../store/AppStoreContext'
 
-type ReportPeriod = 'day' | 'week' | 'month'
-const noSellerIds: string[] = []
+type SelectedProductId = string | 'all' | null
+type DetailCard = 'quantity' | 'costs' | 'unit-cost' | 'profit'
+const noIds: string[] = []
 
 function settingsFormFor(
   settings:
@@ -19,6 +23,8 @@ function settingsFormFor(
         productName: string
         salePrice: number
         sellerIds: string[]
+        expenseIds: string[]
+        workerIds: string[]
       }
     | null,
 ) {
@@ -26,6 +32,8 @@ function settingsFormFor(
     productName: settings?.productName ?? '',
     salePrice: settings ? String(settings.salePrice) : '',
     sellerIds: settings?.sellerIds ?? [],
+    expenseIds: settings?.expenseIds ?? [],
+    workerIds: settings?.workerIds ?? [],
   }
 }
 
@@ -47,7 +55,7 @@ function addDays(value: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
-function rangeFor(period: ReportPeriod, selected: string) {
+function rangeFor(period: ProductionReportPeriod, selected: string) {
   if (period === 'day') return { start: selected, end: selected }
   if (period === 'week') {
     const start = startOfWeek(selected)
@@ -75,13 +83,15 @@ export function ProductionPage() {
   const data = activeAccounting(state.accounting)
   const companyId = state.accounting.activeCompanyId
   const firstProduct = data.productionSettings[0] ?? null
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+  const [selectedProductId, setSelectedProductId] = useState<SelectedProductId>(
     firstProduct?.id ?? null,
   )
   const savedSettings =
-    data.productionSettings.find(
-      (settings) => settings.id === selectedProductId,
-    ) ?? null
+    selectedProductId === 'all'
+      ? null
+      : (data.productionSettings.find(
+          (settings) => settings.id === selectedProductId,
+        ) ?? null)
   const [settingsForm, setSettingsForm] = useState(() =>
     settingsFormFor(firstProduct),
   )
@@ -94,68 +104,154 @@ export function ProductionPage() {
     date: today(),
     quantity: '',
   })
-  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('month')
+  const [reportPeriod, setReportPeriod] = useState<ProductionReportPeriod>(
+    data.productionViewSettings?.reportPeriod ?? 'month',
+  )
   const [selectedDate, setSelectedDate] = useState(today())
   const [formError, setFormError] = useState('')
+  const [detailCard, setDetailCard] = useState<DetailCard>('costs')
   const range = rangeFor(reportPeriod, selectedDate)
-  const selectedSellerIds = savedSettings?.sellerIds ?? noSellerIds
+  const selectedSellerIds = savedSettings?.sellerIds ?? noIds
+  const selectedWorkerIds = savedSettings?.workerIds ?? noIds
 
-  const results = useMemo(() => {
+  const results = (() => {
     const inRange = (date: string) => date >= range.start && date <= range.end
-    const invoices = data.invoices.filter(
-      (invoice) =>
-        invoice.sellerId !== null &&
-        selectedSellerIds.includes(invoice.sellerId) &&
-        inRange(invoice.date),
-    )
-    const fixedExpenses = data.expenses.filter(
-      (expense) =>
-        expense.recurrence === 'monthly' &&
-        expense.sellerId !== null &&
-        selectedSellerIds.includes(expense.sellerId),
-    )
-    const productionEntries = data.productionEntries.filter(
-      (entry) =>
-        entry.productId === selectedProductId &&
-        inRange(entry.date) &&
-        (reportPeriod !== 'day' || entry.period === 'day'),
-    )
-    const invoiceCosts = invoices.reduce(
-      (total, invoice) => total + invoice.total,
+    const products =
+      selectedProductId === 'all'
+        ? data.productionSettings
+        : data.productionSettings.filter(
+            (product) => product.id === selectedProductId,
+          )
+    const productsResults = products.map((product) => {
+      const invoices = data.invoices.filter(
+        (invoice) =>
+          invoice.sellerId !== null &&
+          product.sellerIds.includes(invoice.sellerId) &&
+          inRange(invoice.date),
+      )
+      const fixedExpenses = data.expenses
+        .filter(
+          (expense) =>
+            expense.type !== 'stipendio' &&
+            expense.recurrence === 'monthly' &&
+            product.expenseIds.includes(expense.id),
+        )
+        .map((expense) => ({
+          expense,
+          amount: roundMoney(
+            allocatedExpense(expense, range.start, range.end) /
+              Math.max(
+                1,
+                data.productionSettings.filter(
+                  (configuredProduct) =>
+                    configuredProduct.expenseIds.includes(expense.id),
+                ).length,
+              ),
+          ),
+        }))
+        .filter((item) => item.amount > 0)
+      const salaryExpenses = data.expenses
+        .filter(
+          (expense) =>
+            expense.type === 'stipendio' &&
+            expense.sellerId !== null &&
+            product.workerIds.includes(expense.sellerId),
+        )
+        .map((expense) => ({
+          expense,
+          amount: roundMoney(
+            allocatedExpense(expense, range.start, range.end) /
+              Math.max(
+                1,
+                data.productionSettings.filter(
+                  (configuredProduct) =>
+                    expense.sellerId !== null &&
+                    configuredProduct.workerIds.includes(expense.sellerId),
+                ).length,
+              ),
+          ),
+        }))
+        .filter((item) => item.amount > 0)
+      const productionEntries = data.productionEntries.filter(
+        (entry) =>
+          entry.productId === product.id &&
+          inRange(entry.date) &&
+          (reportPeriod !== 'day' || entry.period === 'day'),
+      )
+      const invoiceCosts = invoices.reduce(
+        (total, invoice) => total + invoice.total,
+        0,
+      )
+      const fixedCosts = fixedExpenses.reduce(
+        (total, item) => total + item.amount,
+        0,
+      )
+      const salaryCosts = salaryExpenses.reduce(
+        (total, item) => total + item.amount,
+        0,
+      )
+      const quantity = productionEntries.reduce(
+        (total, entry) => total + entry.quantity,
+        0,
+      )
+      const totalCosts = invoiceCosts + fixedCosts + salaryCosts
+      const revenue = quantity * product.salePrice
+      return {
+        product,
+        invoices,
+        fixedExpenses,
+        salaryExpenses,
+        productionEntries,
+        invoiceCosts: roundMoney(invoiceCosts),
+        fixedCosts: roundMoney(fixedCosts),
+        salaryCosts: roundMoney(salaryCosts),
+        quantity,
+        totalCosts: roundMoney(totalCosts),
+        unitCost: quantity > 0 ? roundMoney(totalCosts / quantity) : 0,
+        revenue: roundMoney(revenue),
+        profit: roundMoney(revenue - totalCosts),
+      }
+    })
+    const invoiceCosts = productsResults.reduce(
+      (total, product) => total + product.invoiceCosts,
       0,
     )
-    const fixedCosts = fixedExpenses.reduce(
-      (total, expense) =>
-        total + allocatedExpense(expense, range.start, range.end),
+    const fixedCosts = productsResults.reduce(
+      (total, product) => total + product.fixedCosts,
       0,
     )
-    const quantity = productionEntries.reduce(
-      (total, entry) => total + entry.quantity,
+    const salaryCosts = productsResults.reduce(
+      (total, product) => total + product.salaryCosts,
       0,
     )
-    const totalCosts = invoiceCosts + fixedCosts
-    const revenue = quantity * (savedSettings?.salePrice ?? 0)
+    const quantity = productsResults.reduce(
+      (total, product) => total + product.quantity,
+      0,
+    )
+    const totalCosts = productsResults.reduce(
+      (total, product) => total + product.totalCosts,
+      0,
+    )
+    const revenue = productsResults.reduce(
+      (total, product) => total + product.revenue,
+      0,
+    )
     return {
       invoiceCosts: roundMoney(invoiceCosts),
       fixedCosts: roundMoney(fixedCosts),
+      salaryCosts: roundMoney(salaryCosts),
       quantity,
       totalCosts: roundMoney(totalCosts),
       unitCost: quantity > 0 ? roundMoney(totalCosts / quantity) : 0,
       revenue: roundMoney(revenue),
       profit: roundMoney(revenue - totalCosts),
-      invoices: invoices.length,
+      invoices: productsResults.reduce(
+        (total, product) => total + product.invoices.length,
+        0,
+      ),
+      products: productsResults,
     }
-  }, [
-    data.expenses,
-    data.invoices,
-    data.productionEntries,
-    range.end,
-    range.start,
-    reportPeriod,
-    savedSettings?.salePrice,
-    selectedProductId,
-    selectedSellerIds,
-  ])
+  })()
 
   function selectProduct(productId: string) {
     const product =
@@ -163,6 +259,12 @@ export function ProductionPage() {
       null
     setSelectedProductId(productId)
     setSettingsForm(settingsFormFor(product))
+    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setFormError('')
+  }
+
+  function selectAllProducts() {
+    setSelectedProductId('all')
     setEntryForm((current) => ({ ...current, quantity: '' }))
     setFormError('')
   }
@@ -183,6 +285,38 @@ export function ProductionPage() {
     }))
   }
 
+  function toggleWorker(workerId: string) {
+    setSettingsForm((current) => ({
+      ...current,
+      workerIds: current.workerIds.includes(workerId)
+        ? current.workerIds.filter((id) => id !== workerId)
+        : [...current.workerIds, workerId],
+    }))
+  }
+
+  function toggleExpense(expenseId: string) {
+    setSettingsForm((current) => ({
+      ...current,
+      expenseIds: current.expenseIds.includes(expenseId)
+        ? current.expenseIds.filter((id) => id !== expenseId)
+        : [...current.expenseIds, expenseId],
+    }))
+  }
+
+  function changeReportPeriod(reportPeriod: ProductionReportPeriod) {
+    setReportPeriod(reportPeriod)
+    if (!companyId) return
+    updateAccounting((current) => ({
+      ...current,
+      productionViewSettings: [
+        ...current.productionViewSettings.filter(
+          (settings) => settings.companyId !== companyId,
+        ),
+        { companyId, reportPeriod },
+      ],
+    }))
+  }
+
   function saveSettings(event: FormEvent) {
     event.preventDefault()
     if (!companyId) return
@@ -197,6 +331,8 @@ export function ProductionPage() {
       productName: settingsForm.productName.trim(),
       salePrice: numberValue(settingsForm.salePrice),
       sellerIds: settingsForm.sellerIds,
+      expenseIds: settingsForm.expenseIds,
+      workerIds: settingsForm.workerIds,
     }
     updateAccounting((current) => ({
       ...current,
@@ -319,9 +455,56 @@ export function ProductionPage() {
     .filter((seller) => selectedSellerIds.includes(seller.id))
     .map((seller) => seller.name)
     .join(', ')
+  const workerNames = data.sellers
+    .filter((seller) => selectedWorkerIds.includes(seller.id))
+    .map((seller) => seller.name)
+    .join(', ')
   const entries = data.productionEntries
-    .filter((entry) => entry.productId === selectedProductId)
+    .filter(
+      (entry) =>
+        selectedProductId === 'all' ||
+        entry.productId === selectedProductId,
+    )
     .sort((left, right) => right.date.localeCompare(left.date))
+  const quantityDetails = results.products.flatMap((product) =>
+    product.productionEntries.map((entry) => ({
+      entry,
+      productId: product.product.id,
+      productName: product.product.productName,
+    })),
+  )
+  const invoiceDetails = results.products.flatMap((product) =>
+    product.invoices.map((invoice) => ({
+      invoice,
+      productId: product.product.id,
+      productName: product.product.productName,
+    })),
+  )
+  const fixedExpenseDetails = results.products.flatMap((product) =>
+    product.fixedExpenses.map((item) => ({
+      ...item,
+      productId: product.product.id,
+      productName: product.product.productName,
+    })),
+  )
+  const salaryDetails = results.products.flatMap((product) =>
+    product.salaryExpenses.map((item) => ({
+      ...item,
+      productId: product.product.id,
+      productName: product.product.productName,
+    })),
+  )
+  const productNames = new Map(
+    data.productionSettings.map((product) => [
+      product.id,
+      product.productName,
+    ]),
+  )
+  const availableFixedExpenses = data.expenses.filter(
+    (expense) =>
+      expense.type !== 'stipendio' &&
+      expense.recurrence === 'monthly',
+  )
 
   return (
     <div className="page-stack">
@@ -345,6 +528,13 @@ export function ProductionPage() {
 
       {data.productionSettings.length > 0 && (
         <nav aria-label="Prodotti da analizzare" className="section-tabs">
+          <button
+            className={selectedProductId === 'all' ? 'active' : ''}
+            onClick={selectAllProducts}
+            type="button"
+          >
+            Tutti i prodotti
+          </button>
           {data.productionSettings.map((product) => (
             <button
               className={product.id === selectedProductId ? 'active' : ''}
@@ -370,7 +560,9 @@ export function ProductionPage() {
           Visualizzazione
           <select
             onChange={(event) =>
-              setReportPeriod(event.target.value as ReportPeriod)
+              changeReportPeriod(
+                event.target.value as ProductionReportPeriod,
+              )
             }
             value={reportPeriod}
           >
@@ -390,37 +582,235 @@ export function ProductionPage() {
       </section>
 
       <section className="stats-grid production-stats">
-        <article className="stat-card stat-cyan">
+        <button
+          className={`stat-card stat-cyan production-stat-button ${
+            detailCard === 'quantity' ? 'active' : ''
+          }`}
+          onClick={() => setDetailCard('quantity')}
+          type="button"
+        >
           <span className="stat-glow" />
           <span className="stat-label">Pezzi prodotti</span>
           <strong>{results.quantity.toLocaleString('it-IT')}</strong>
           <span className="stat-detail">
-            {savedSettings?.productName || 'Prodotto non configurato'}
+            {selectedProductId === 'all'
+              ? `${results.products.length} prodotti`
+              : savedSettings?.productName || 'Prodotto non configurato'}
           </span>
-        </article>
-        <article className="stat-card stat-violet">
+        </button>
+        <button
+          className={`stat-card stat-violet production-stat-button ${
+            detailCard === 'costs' ? 'active' : ''
+          }`}
+          onClick={() => setDetailCard('costs')}
+          type="button"
+        >
           <span className="stat-glow" />
           <span className="stat-label">Costo complessivo</span>
           <strong>{money(results.totalCosts)}</strong>
           <span className="stat-detail">{results.invoices} fatture incluse</span>
-        </article>
-        <article className="stat-card stat-amber">
+        </button>
+        <button
+          className={`stat-card stat-amber production-stat-button ${
+            detailCard === 'unit-cost' ? 'active' : ''
+          }`}
+          onClick={() => setDetailCard('unit-cost')}
+          type="button"
+        >
           <span className="stat-glow" />
           <span className="stat-label">Costo prodotto finito</span>
           <strong>{money(results.unitCost)}</strong>
-          <span className="stat-detail">Costo per pezzo prodotto</span>
-        </article>
-        <article className="stat-card stat-green">
+          <span className="stat-detail">
+            {selectedProductId === 'all'
+              ? 'Costo medio per pezzo'
+              : 'Costo per pezzo prodotto'}
+          </span>
+        </button>
+        <button
+          className={`stat-card stat-green production-stat-button ${
+            detailCard === 'profit' ? 'active' : ''
+          }`}
+          onClick={() => setDetailCard('profit')}
+          type="button"
+        >
           <span className="stat-glow" />
           <span className="stat-label">Guadagno</span>
           <strong>{money(results.profit)}</strong>
           <span className="stat-detail">
             Ricavi {money(results.revenue)}
           </span>
-        </article>
+        </button>
       </section>
 
-      <section className="production-grid">
+      <section className="panel production-card-detail">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">DETTAGLIO DELLA CARD</span>
+            <h2>
+              {detailCard === 'quantity' && 'Pezzi prodotti'}
+              {detailCard === 'costs' && 'Costo complessivo'}
+              {detailCard === 'unit-cost' && 'Costo prodotto finito'}
+              {detailCard === 'profit' && 'Guadagno'}
+            </h2>
+          </div>
+        </div>
+
+        {detailCard === 'quantity' &&
+          (quantityDetails.length === 0 ? (
+            <div className="empty-state compact-empty">
+              <strong>Nessuna quantità nel periodo</strong>
+            </div>
+          ) : (
+            <div className="record-list">
+              {quantityDetails.map(({ entry, productId, productName }) => (
+                <div
+                  className="record-card"
+                  key={`${productId}-${entry.id}`}
+                >
+                  <span>
+                    <strong>{productName}</strong>
+                    <small>
+                      {entry.period === 'day'
+                        ? formatDate(entry.date)
+                        : `Settimana dal ${formatDate(entry.date)}`}
+                    </small>
+                  </span>
+                  <strong>
+                    {entry.quantity.toLocaleString('it-IT')} pezzi
+                  </strong>
+                </div>
+              ))}
+            </div>
+          ))}
+
+        {detailCard === 'costs' && (
+          <div className="production-detail-groups">
+            <div>
+              <h3>Fatture incluse</h3>
+              {invoiceDetails.length === 0 ? (
+                <p className="production-help">Nessuna fattura nel periodo.</p>
+              ) : (
+                <div className="record-list">
+                  {invoiceDetails.map(
+                    ({ invoice, productId, productName }) => (
+                      <div
+                        className="record-card"
+                        key={`${productId}-${invoice.id}`}
+                      >
+                        <span>
+                          <strong>
+                            {invoice.supplierName || 'Fornitore non indicato'}
+                          </strong>
+                          <small>
+                            {productName} · {formatDate(invoice.date)} · Fattura{' '}
+                            {invoice.number || 'senza numero'}
+                          </small>
+                        </span>
+                        <strong>{money(invoice.total)}</strong>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3>Spese fisse incluse</h3>
+              {fixedExpenseDetails.length === 0 ? (
+                <p className="production-help">
+                  Nessuna spesa fissa nel periodo.
+                </p>
+              ) : (
+                <div className="record-list">
+                  {fixedExpenseDetails.map(
+                    ({ expense, amount, productId, productName }) => (
+                      <div
+                        className="record-card"
+                        key={`${productId}-${expense.id}`}
+                      >
+                        <span>
+                          <strong>{expense.description}</strong>
+                          <small>
+                            {productName}
+                            {expense.sellerName &&
+                              ` · ${expense.sellerName}`}
+                          </small>
+                        </span>
+                        <strong>{money(amount)}</strong>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3>Stipendi produzione</h3>
+              {salaryDetails.length === 0 ? (
+                <p className="production-help">
+                  Nessuno stipendio incluso nel periodo.
+                </p>
+              ) : (
+                <div className="record-list">
+                  {salaryDetails.map(
+                    ({ expense, amount, productId, productName }) => (
+                      <div
+                        className="record-card"
+                        key={`${productId}-${expense.id}`}
+                      >
+                        <span>
+                          <strong>
+                            {expense.sellerName || expense.description}
+                          </strong>
+                          <small>
+                            {productName} · {expense.description}
+                          </small>
+                        </span>
+                        <strong>{money(amount)}</strong>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {detailCard === 'unit-cost' && (
+          <div className="record-list">
+            {results.products.map((product) => (
+              <div className="record-card" key={product.product.id}>
+                <span>
+                  <strong>{product.product.productName}</strong>
+                  <small>
+                    {money(product.totalCosts)} ÷{' '}
+                    {product.quantity.toLocaleString('it-IT')} pezzi
+                  </small>
+                </span>
+                <strong>{money(product.unitCost)}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {detailCard === 'profit' && (
+          <div className="record-list">
+            {results.products.map((product) => (
+              <div className="record-card" key={product.product.id}>
+                <span>
+                  <strong>{product.product.productName}</strong>
+                  <small>
+                    Ricavi {money(product.revenue)} · Costi{' '}
+                    {money(product.totalCosts)}
+                  </small>
+                </span>
+                <strong>{money(product.profit)}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {selectedProductId !== 'all' && (
+        <section className="production-grid">
         <form className="panel accounting-form" onSubmit={saveSettings}>
           <div className="panel-heading">
             <div>
@@ -489,13 +879,50 @@ export function ProductionPage() {
               ))
             )}
           </fieldset>
+          <fieldset className="production-sellers">
+            <legend>Spese fisse mensili da includere</legend>
+            {availableFixedExpenses.length === 0 ? (
+              <p>Nessuna spesa fissa mensile disponibile.</p>
+            ) : (
+              availableFixedExpenses.map((expense) => (
+                <label className="checkbox-row" key={expense.id}>
+                  <input
+                    checked={settingsForm.expenseIds.includes(expense.id)}
+                    onChange={() => toggleExpense(expense.id)}
+                    type="checkbox"
+                  />
+                  {expense.description} · {money(expense.amount)}/mese
+                </label>
+              ))
+            )}
+          </fieldset>
+          <fieldset className="production-sellers">
+            <legend>Lavoratrici della produzione</legend>
+            {data.sellers.length === 0 ? (
+              <p>Nessuna lavoratrice disponibile nell’azienda attiva.</p>
+            ) : (
+              data.sellers.map((seller) => (
+                <label className="checkbox-row" key={seller.id}>
+                  <input
+                    checked={settingsForm.workerIds.includes(seller.id)}
+                    onChange={() => toggleWorker(seller.id)}
+                    type="checkbox"
+                  />
+                  {seller.name}
+                </label>
+              ))
+            )}
+          </fieldset>
           <p className="production-help">
-            Le fatture dei venditori selezionati e le loro spese mensili
-            ricorrenti formano il costo del prodotto.
+            Le fatture dei venditori, le spese mensili e le lavoratrici
+            selezionate formano il costo del prodotto. Se una spesa o una
+            lavoratrice riguarda più prodotti, il suo costo viene ripartito in
+            parti uguali senza duplicarlo nel totale.
           </p>
           <p className="production-help">
-            Se selezioni lo stesso venditore in più prodotti, le sue fatture e
-            spese saranno incluse nel calcolo di ciascun prodotto.
+            Se selezioni lo stesso venditore in più prodotti, le sue fatture
+            saranno incluse in ciascun prodotto. Spese fisse e stipendi
+            condivisi vengono invece ripartiti senza duplicarli nel totale.
           </p>
           <button className="button button-primary" type="submit">
             Salva impostazioni pagina
@@ -567,7 +994,8 @@ export function ProductionPage() {
             Registra quantità
           </button>
         </form>
-      </section>
+        </section>
+      )}
 
       {formError && <p className="form-error">{formError}</p>}
 
@@ -588,19 +1016,23 @@ export function ProductionPage() {
             <strong>{money(results.fixedCosts)}</strong>
           </div>
           <div>
-            <span>Prezzo di vendita</span>
-            <strong>{money(savedSettings?.salePrice ?? 0)}</strong>
+            <span>Stipendi produzione</span>
+            <strong>{money(results.salaryCosts)}</strong>
           </div>
           <div>
-            <span>Venditori inclusi</span>
-            <strong>{selectedSellerIds.length}</strong>
+            <span>Prodotti inclusi</span>
+            <strong>{results.products.length}</strong>
           </div>
         </div>
-        <p className="production-help">
-          {sellerNames
-            ? `Costi calcolati per: ${sellerNames}.`
-            : 'Salva le impostazioni e seleziona almeno un venditore.'}
-        </p>
+        {selectedProductId !== 'all' && (
+          <p className="production-help">
+            {sellerNames
+              ? `Fatture e spese calcolate per: ${sellerNames}.`
+              : 'Salva le impostazioni e seleziona almeno un venditore.'}
+            {workerNames &&
+              ` Stipendi di produzione calcolati per: ${workerNames}.`}
+          </p>
+        )}
       </section>
 
       <section className="panel">
@@ -630,6 +1062,8 @@ export function ProductionPage() {
                     {entry.period === 'day'
                       ? 'Totale giornaliero'
                       : 'Totale settimanale'}
+                    {selectedProductId === 'all' &&
+                      ` · ${productNames.get(entry.productId) ?? 'Prodotto'}`}
                   </small>
                 </span>
                 <span>
