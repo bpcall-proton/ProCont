@@ -37,10 +37,6 @@ jobs:
       - name: Package Windows
         run: npm run build && npx electron-builder --win nsis --x64 --publish never
 
-      - name: Scan Windows artifacts with Microsoft Defender
-        shell: pwsh
-        run: ./scripts/scan-windows-artifacts.ps1
-
       - name: Create portable archive and checksums
         shell: pwsh
         run: |
@@ -54,6 +50,10 @@ jobs:
               "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))"
             } |
             Set-Content "release\SHA256SUMS-Windows.txt"
+
+      - name: Scan Windows artifacts with Microsoft Defender
+        shell: pwsh
+        run: ./scripts/scan-windows-artifacts.ps1
 
       - name: Publish Windows
         env:
