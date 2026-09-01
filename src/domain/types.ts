@@ -229,6 +229,7 @@ export interface AccountingExpense {
 }
 
 export interface ProductionSettings {
+  id: string
   companyId: string
   productName: string
   salePrice: number
@@ -238,6 +239,7 @@ export interface ProductionSettings {
 export interface ProductionEntry {
   id: string
   companyId: string
+  productId: string
   period: ProductionEntryPeriod
   date: string
   quantity: number
@@ -281,7 +283,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 7
+  schemaVersion: 8
   company: Company
   stores: Store[]
   sellers: Seller[]

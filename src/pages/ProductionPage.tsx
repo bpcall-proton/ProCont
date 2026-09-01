@@ -13,6 +13,22 @@ import { useAppStore } from '../store/AppStoreContext'
 type ReportPeriod = 'day' | 'week' | 'month'
 const noSellerIds: string[] = []
 
+function settingsFormFor(
+  settings:
+    | {
+        productName: string
+        salePrice: number
+        sellerIds: string[]
+      }
+    | null,
+) {
+  return {
+    productName: settings?.productName ?? '',
+    salePrice: settings ? String(settings.salePrice) : '',
+    sellerIds: settings?.sellerIds ?? [],
+  }
+}
+
 function numberValue(value: string) {
   const parsed = Number(value.replace(',', '.'))
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
@@ -58,12 +74,17 @@ export function ProductionPage() {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const companyId = state.accounting.activeCompanyId
-  const savedSettings = data.productionSettings
-  const [settingsForm, setSettingsForm] = useState(() => ({
-    productName: savedSettings?.productName ?? '',
-    salePrice: savedSettings ? String(savedSettings.salePrice) : '',
-    sellerIds: savedSettings?.sellerIds ?? [],
-  }))
+  const firstProduct = data.productionSettings[0] ?? null
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+    firstProduct?.id ?? null,
+  )
+  const savedSettings =
+    data.productionSettings.find(
+      (settings) => settings.id === selectedProductId,
+    ) ?? null
+  const [settingsForm, setSettingsForm] = useState(() =>
+    settingsFormFor(firstProduct),
+  )
   const [entryForm, setEntryForm] = useState<{
     period: ProductionEntryPeriod
     date: string
@@ -95,6 +116,7 @@ export function ProductionPage() {
     )
     const productionEntries = data.productionEntries.filter(
       (entry) =>
+        entry.productId === selectedProductId &&
         inRange(entry.date) &&
         (reportPeriod !== 'day' || entry.period === 'day'),
     )
@@ -131,8 +153,26 @@ export function ProductionPage() {
     range.start,
     reportPeriod,
     savedSettings?.salePrice,
+    selectedProductId,
     selectedSellerIds,
   ])
+
+  function selectProduct(productId: string) {
+    const product =
+      data.productionSettings.find((settings) => settings.id === productId) ??
+      null
+    setSelectedProductId(productId)
+    setSettingsForm(settingsFormFor(product))
+    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setFormError('')
+  }
+
+  function startAddingProduct() {
+    setSelectedProductId(null)
+    setSettingsForm(settingsFormFor(null))
+    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setFormError('')
+  }
 
   function toggleSeller(sellerId: string) {
     setSettingsForm((current) => ({
@@ -150,26 +190,35 @@ export function ProductionPage() {
       setFormError('Seleziona almeno un venditore da includere nei costi.')
       return
     }
+    const productId = savedSettings?.id ?? createId('production-product')
+    const nextSettings = {
+      id: productId,
+      companyId,
+      productName: settingsForm.productName.trim(),
+      salePrice: numberValue(settingsForm.salePrice),
+      sellerIds: settingsForm.sellerIds,
+    }
     updateAccounting((current) => ({
       ...current,
-      productionSettings: [
-        ...current.productionSettings.filter(
-          (settings) => settings.companyId !== companyId,
-        ),
-        {
-          companyId,
-          productName: settingsForm.productName.trim(),
-          salePrice: numberValue(settingsForm.salePrice),
-          sellerIds: settingsForm.sellerIds,
-        },
-      ],
+      productionSettings: current.productionSettings.some(
+        (settings) => settings.id === productId,
+      )
+        ? current.productionSettings.map((settings) =>
+            settings.id === productId ? nextSettings : settings,
+          )
+        : [...current.productionSettings, nextSettings],
     }))
+    setSelectedProductId(productId)
     setFormError('')
   }
 
   function saveEntry(event: FormEvent) {
     event.preventDefault()
     if (!companyId) return
+    if (!savedSettings) {
+      setFormError('Salva prima le impostazioni del prodotto.')
+      return
+    }
     const quantity = numberValue(entryForm.quantity)
     if (quantity <= 0) {
       setFormError('Inserisci una quantità prodotta maggiore di zero.')
@@ -181,7 +230,9 @@ export function ProductionPage() {
         : entryForm.date
     const weekStart = startOfWeek(date)
     const weekEnd = addDays(weekStart, 6)
-    const companyEntries = data.productionEntries
+    const companyEntries = data.productionEntries.filter(
+      (entry) => entry.productId === savedSettings.id,
+    )
     const hasConflict =
       entryForm.period === 'week'
         ? companyEntries.some(
@@ -214,6 +265,7 @@ export function ProductionPage() {
             {
               id: createId('production'),
               companyId,
+              productId: savedSettings.id,
               period: entryForm.period,
               date,
               quantity,
@@ -235,13 +287,41 @@ export function ProductionPage() {
     }))
   }
 
+  function removeProduct() {
+    if (!savedSettings) return
+    if (
+      !window.confirm(
+        `Eliminare "${savedSettings.productName}" e tutte le quantità registrate?`,
+      )
+    ) {
+      return
+    }
+    const remainingProducts = data.productionSettings.filter(
+      (settings) => settings.id !== savedSettings.id,
+    )
+    updateAccounting((current) => ({
+      ...current,
+      productionSettings: current.productionSettings.filter(
+        (settings) => settings.id !== savedSettings.id,
+      ),
+      productionEntries: current.productionEntries.filter(
+        (entry) => entry.productId !== savedSettings.id,
+      ),
+    }))
+    const nextProduct = remainingProducts[0] ?? null
+    setSelectedProductId(nextProduct?.id ?? null)
+    setSettingsForm(settingsFormFor(nextProduct))
+    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setFormError('')
+  }
+
   const sellerNames = data.sellers
     .filter((seller) => selectedSellerIds.includes(seller.id))
     .map((seller) => seller.name)
     .join(', ')
-  const entries = [...data.productionEntries].sort((left, right) =>
-    right.date.localeCompare(left.date),
-  )
+  const entries = data.productionEntries
+    .filter((entry) => entry.productId === selectedProductId)
+    .sort((left, right) => right.date.localeCompare(left.date))
 
   return (
     <div className="page-stack">
@@ -254,7 +334,29 @@ export function ProductionPage() {
             e quantità prodotte.
           </p>
         </div>
+        <button
+          className="button button-primary"
+          onClick={startAddingProduct}
+          type="button"
+        >
+          + Aggiungi
+        </button>
       </header>
+
+      {data.productionSettings.length > 0 && (
+        <nav aria-label="Prodotti da analizzare" className="section-tabs">
+          {data.productionSettings.map((product) => (
+            <button
+              className={product.id === selectedProductId ? 'active' : ''}
+              key={product.id}
+              onClick={() => selectProduct(product.id)}
+              type="button"
+            >
+              {product.productName || 'Prodotto senza nome'}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <section className="panel production-filter">
         <div>
@@ -323,8 +425,19 @@ export function ProductionPage() {
           <div className="panel-heading">
             <div>
               <span className="eyebrow">IMPOSTAZIONI DELLA PAGINA</span>
-              <h2>Prodotto e costi inclusi</h2>
+              <h2>
+                {savedSettings ? 'Prodotto e costi inclusi' : 'Nuovo prodotto'}
+              </h2>
             </div>
+            {savedSettings && (
+              <button
+                className="danger-text"
+                onClick={removeProduct}
+                type="button"
+              >
+                Elimina prodotto
+              </button>
+            )}
           </div>
           <div className="production-settings-fields">
             <label>
@@ -353,6 +466,8 @@ export function ProductionPage() {
                   })
                 }
                 required
+                step="0.01"
+                type="number"
                 value={settingsForm.salePrice}
               />
             </label>
@@ -377,6 +492,10 @@ export function ProductionPage() {
           <p className="production-help">
             Le fatture dei venditori selezionati e le loro spese mensili
             ricorrenti formano il costo del prodotto.
+          </p>
+          <p className="production-help">
+            Se selezioni lo stesso venditore in più prodotti, le sue fatture e
+            spese saranno incluse nel calcolo di ciascun prodotto.
           </p>
           <button className="button button-primary" type="submit">
             Salva impostazioni pagina
@@ -430,6 +549,8 @@ export function ProductionPage() {
                   })
                 }
                 required
+                step="1"
+                type="number"
                 value={entryForm.quantity}
               />
             </label>
@@ -438,7 +559,11 @@ export function ProductionPage() {
             Un totale settimanale sostituisce gli inserimenti giornalieri della
             stessa settimana ed è visibile nei filtri settimana e mese.
           </p>
-          <button className="button button-primary" type="submit">
+          <button
+            className="button button-primary"
+            disabled={!savedSettings}
+            type="submit"
+          >
             Registra quantità
           </button>
         </form>
