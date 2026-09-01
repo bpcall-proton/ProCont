@@ -108,3 +108,11 @@ export function ProductIcon(props: IconProps) {
     </Svg>
   )
 }
+
+export function ProductionIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 20V9l5 3V9l5 3V4h4v16H4Zm3-3h2m3 0h2m3 0h1" />
+    </Svg>
+  )
+}

@@ -158,5 +158,10 @@ export function activeAccounting(state: AccountingState) {
       (item) => item.companyId === id,
     ),
     expenses: state.expenses.filter((item) => item.companyId === id),
+    productionSettings:
+      state.productionSettings.find((item) => item.companyId === id) ?? null,
+    productionEntries: state.productionEntries.filter(
+      (item) => item.companyId === id,
+    ),
   }
 }

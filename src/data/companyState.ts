@@ -35,6 +35,8 @@ export function createWorkspaceState(state: AppState): AppState {
       rentals: [],
       accountantInvoices: [],
       expenses: [],
+      productionSettings: [],
+      productionEntries: [],
     },
   }
 }
@@ -90,6 +92,12 @@ export function createCompanyState(
       expenses: state.accounting.expenses.filter(
         (expense) => expense.companyId === companyId,
       ),
+      productionSettings: state.accounting.productionSettings.filter(
+        (settings) => settings.companyId === companyId,
+      ),
+      productionEntries: state.accounting.productionEntries.filter(
+        (entry) => entry.companyId === companyId,
+      ),
     },
   }
 }
@@ -115,6 +123,12 @@ export function mergeCompanyStates(
         (state) => state.accounting.accountantInvoices,
       ),
       expenses: companies.flatMap((state) => state.accounting.expenses),
+      productionSettings: companies.flatMap(
+        (state) => state.accounting.productionSettings,
+      ),
+      productionEntries: companies.flatMap(
+        (state) => state.accounting.productionEntries,
+      ),
     },
   }
 }

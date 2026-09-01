@@ -13,6 +13,7 @@ export type PaymentMethod =
 export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
+export type ProductionEntryPeriod = 'day' | 'week'
 export type ReviewDocumentStatus =
   | 'pending'
   | 'unrecognized'
@@ -227,6 +228,21 @@ export interface AccountingExpense {
   settled: boolean
 }
 
+export interface ProductionSettings {
+  companyId: string
+  productName: string
+  salePrice: number
+  sellerIds: string[]
+}
+
+export interface ProductionEntry {
+  id: string
+  companyId: string
+  period: ProductionEntryPeriod
+  date: string
+  quantity: number
+}
+
 export interface AccountingState {
   companies: AccountingCompany[]
   activeCompanyId: string | null
@@ -238,6 +254,8 @@ export interface AccountingState {
   rentals: Rental[]
   accountantInvoices: AccountantInvoice[]
   expenses: AccountingExpense[]
+  productionSettings: ProductionSettings[]
+  productionEntries: ProductionEntry[]
 }
 
 export interface ReviewInvoiceSuggestion {
@@ -263,7 +281,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 6
+  schemaVersion: 7
   company: Company
   stores: Store[]
   sellers: Seller[]
