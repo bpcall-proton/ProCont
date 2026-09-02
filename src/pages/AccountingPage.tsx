@@ -34,6 +34,72 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function amountExpression(value: string) {
+  const expression = value
+    .trim()
+    .replace(/^=/, '')
+    .replaceAll(',', '.')
+    .replaceAll('×', '*')
+    .replaceAll('÷', '/')
+    .replace(/\s+/g, '')
+  if (!expression) return 0
+
+  let index = 0
+
+  function parseExpression(): number | null {
+    let value = parseTerm()
+    if (value === null) return null
+    while (expression[index] === '+' || expression[index] === '-') {
+      const operator = expression[index]
+      index += 1
+      const right = parseTerm()
+      if (right === null) return null
+      value = operator === '+' ? value + right : value - right
+    }
+    return value
+  }
+
+  function parseTerm(): number | null {
+    let value = parseFactor()
+    if (value === null) return null
+    while (expression[index] === '*' || expression[index] === '/') {
+      const operator = expression[index]
+      index += 1
+      const right = parseFactor()
+      if (right === null || (operator === '/' && right === 0)) return null
+      value = operator === '*' ? value * right : value / right
+    }
+    return value
+  }
+
+  function parseFactor(): number | null {
+    if (expression[index] === '+' || expression[index] === '-') {
+      const operator = expression[index]
+      index += 1
+      const value = parseFactor()
+      if (value === null) return null
+      return operator === '-' ? -value : value
+    }
+    if (expression[index] === '(') {
+      index += 1
+      const value = parseExpression()
+      if (value === null || expression[index] !== ')') return null
+      index += 1
+      return value
+    }
+    const match = expression.slice(index).match(/^(?:\d+\.?\d*|\.\d+)/)
+    if (!match) return null
+    index += match[0].length
+    return Number(match[0])
+  }
+
+  const result = parseExpression()
+  if (result === null || index !== expression.length || !Number.isFinite(result)) {
+    return null
+  }
+  return roundMoney(result)
+}
+
 function mutateCompany(
   state: AccountingState,
   updater: (activeId: string) => AccountingState,
@@ -834,6 +900,7 @@ function TakingsPanel() {
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyTaking)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   const official = data.takings.reduce(
     (sum, item) => sum + item.cash + item.pos,
     0,
@@ -846,6 +913,19 @@ function TakingsPanel() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    const cash = amountExpression(form.cash)
+    const pos = amountExpression(form.pos)
+    if (cash === null || pos === null) {
+      setFormError(
+        'Operazione non valida: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
+      )
+      return
+    }
+    const vat = numberValue(form.vat)
+    if (vat > cash + pos) {
+      setFormError("L'IVA inclusa non può superare Cash + POS.")
+      return
+    }
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const seller = data.sellers.find((item) => item.id === form.sellerId)
@@ -855,10 +935,10 @@ function TakingsPanel() {
           date: form.date,
           sellerId: seller?.id ?? null,
           sellerName: seller?.name ?? '',
-          cash: numberValue(form.cash),
-          pos: numberValue(form.pos),
+          cash,
+          pos,
           withdrawal: numberValue(form.withdrawal),
-          vat: numberValue(form.vat),
+          vat,
           realTotal: numberValue(form.realTotal),
         }
         return {
@@ -873,6 +953,19 @@ function TakingsPanel() {
     )
     setEditingId(null)
     setForm(emptyTaking)
+    setFormError(null)
+  }
+
+  function calculateField(field: 'cash' | 'pos') {
+    const result = amountExpression(form[field])
+    if (result === null) {
+      setFormError(
+        'Operazione non valida: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
+      )
+      return
+    }
+    setForm((current) => ({ ...current, [field]: String(result) }))
+    setFormError(null)
   }
 
   return (
@@ -888,23 +981,24 @@ function TakingsPanel() {
         <div className="form-grid accounting-fields">
           <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Cash<input inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
-          <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
+          <label>Cash<input inputMode="text" placeholder="Es. =1000+2000" value={form.cash} onBlur={() => calculateField('cash')} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
+          <label>POS<input inputMode="text" placeholder="Es. =500+250" value={form.pos} onBlur={() => calculateField('pos')} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
-          <label>IVA incassi<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
+          <label>IVA inclusa in Cash + POS<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
           <label>Incasso reale (compreso non dichiarato)<input inputMode="decimal" value={form.realTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
         </div>
+        {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
-          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyTaking) }}>Annulla</button>}
+          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyTaking); setFormError(null) }}>Annulla</button>}
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra incasso'}</button>
         </div>
       </form>
       <section className="panel">
         <h2>Storico incassi</h2>
         <div className="data-table-wrap">
-          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>Reale</th><th>Azioni</th></tr></thead>
+          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
             <tbody>{data.takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos)}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos)}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
         </div>

@@ -2,7 +2,7 @@ interface StatCardProps {
   label: string
   value: string
   detail: string
-  tone: 'cyan' | 'violet' | 'green' | 'amber'
+  tone: 'cyan' | 'violet' | 'green' | 'amber' | 'red'
 }
 
 export function StatCard({ label, value, detail, tone }: StatCardProps) {
