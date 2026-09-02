@@ -803,6 +803,25 @@ select {
   margin: 2px 0 0;
 }
 
+.dashboard-seller-heading-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.dashboard-seller-date-filter {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.dashboard-seller-date-filter input {
+  width: 165px;
+  padding: 8px 10px;
+}
+
 .dashboard-seller-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1623,6 +1642,24 @@ select {
 
   .dashboard-seller-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel-heading:has(.dashboard-seller-heading-controls) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-seller-heading-controls {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-seller-date-filter {
+    flex: 1 1 180px;
+  }
+
+  .dashboard-seller-date-filter input {
+    width: 100%;
   }
 
   .stat-card {
