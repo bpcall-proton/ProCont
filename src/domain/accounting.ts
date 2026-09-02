@@ -49,6 +49,17 @@ export function money(value: number) {
   }).format(value)
 }
 
+export function sellerColorClass(sellerName: string) {
+  const normalizedName = sellerName.trim().toLocaleLowerCase()
+  if (!normalizedName) return ''
+
+  let hash = 0
+  for (const character of normalizedName) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  }
+  return `seller-color-${hash % 8}`
+}
+
 export function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }

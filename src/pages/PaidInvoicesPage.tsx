@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react'
-import { invoiceDueState, invoiceRemaining, money } from '../domain/accounting'
+import {
+  invoiceDueState,
+  invoiceRemaining,
+  money,
+  sellerColorClass,
+} from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
 type PaymentFilter = 'paid' | 'partial' | 'all'
@@ -158,7 +163,12 @@ export function PaidInvoicesPage() {
                   </td>
                   <td>
                     {invoice.supplierName || '—'}
-                    <small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small>
+                    <small>
+                      <span className={`seller-name ${sellerColorClass(invoice.sellerName)}`}>
+                        {invoice.sellerName || 'Venditore non indicato'}
+                      </span>
+                      {' · '}{invoice.description}
+                    </small>
                   </td>
                   <td>{money(invoice.total)}</td>
                   <td>

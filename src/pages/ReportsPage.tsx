@@ -8,6 +8,7 @@ import {
   money,
   officialTaking,
   realTaking,
+  sellerColorClass,
   today,
 } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
@@ -523,7 +524,11 @@ export function ReportsPage() {
                     return (
                       <tr className={`invoice-row ${dueState}`} key={invoice.id}>
                         <td>{invoice.date}<small>{invoice.number || 'Senza numero'}</small></td>
-                        <td>{invoice.sellerName || '—'}</td>
+                        <td>
+                          <span className={`seller-name ${sellerColorClass(invoice.sellerName)}`}>
+                            {invoice.sellerName || '—'}
+                          </span>
+                        </td>
                         <td>{money(invoice.total)}</td>
                         <td>{money(invoice.total - invoiceRemaining(invoice))}</td>
                         <td>{money(invoiceRemaining(invoice))}</td>
