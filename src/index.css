@@ -728,6 +728,22 @@ select {
   font-weight: 800;
 }
 
+.dashboard-stats-grid .stat-cyan strong {
+  color: var(--cyan);
+}
+
+.dashboard-stats-grid .stat-violet strong {
+  color: var(--violet);
+}
+
+.dashboard-stats-grid .stat-green strong {
+  color: var(--green);
+}
+
+.dashboard-stats-grid .stat-amber strong {
+  color: var(--amber);
+}
+
 .dashboard-stats-grid .stat-detail {
   font-size: 0.68rem;
 }
