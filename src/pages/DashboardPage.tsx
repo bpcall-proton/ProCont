@@ -476,7 +476,7 @@ export function DashboardPage() {
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: sellerTheoretical,
-      stock: sellerTheoretical - sellerReal,
+      stockResidual: sellerTheoretical - sellerReal,
     }
   })
   const unassignedInvoices = accounting.invoices.filter(
@@ -524,7 +524,7 @@ export function DashboardPage() {
       real: unassignedReal,
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: unassignedTheoretical,
-      stock: unassignedTheoretical - unassignedReal,
+      stockResidual: unassignedTheoretical - unassignedReal,
     })
   }
 
@@ -837,9 +837,9 @@ export function DashboardPage() {
                     <span>Cash in mano attuale</span>
                     <strong>{money(seller.cashResidual)}</strong>
                   </div>
-                  <div>
-                    <span>Venit stock</span>
-                    <strong>{money(seller.stock)}</strong>
+                  <div className="seller-stock-residual">
+                    <span>Stock residuo</span>
+                    <strong>{money(seller.stockResidual)}</strong>
                   </div>
                 </div>
               </article>
