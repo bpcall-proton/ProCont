@@ -16,12 +16,11 @@ import { useAppStore } from '../store/AppStoreContext'
 type Period = 'week' | 'month' | 'year' | 'all'
 type MetricKey =
   | 'official'
-  | 'undeclared'
-  | 'actual'
+  | 'real'
   | 'purchases'
   | 'fixed-costs'
   | 'official-profit'
-  | 'actual-profit'
+  | 'real-profit'
   | 'input-vat'
   | 'output-vat'
   | 'vat-balance'
@@ -145,11 +144,10 @@ export function ReportsPage() {
     (sum, item) => sum + officialTaking(item),
     0,
   )
-  const undeclared = data.takings.reduce(
+  const real = data.takings.reduce(
     (sum, item) => sum + realTaking(item),
     0,
   )
-  const totalTakings = official + undeclared
   const purchases = data.invoices.reduce(
     (sum, item) => sum + item.total,
     0,
@@ -213,10 +211,7 @@ export function ReportsPage() {
         (sum, item) => sum + officialTaking(item),
         0,
       ),
-      actual: takings.reduce(
-        (sum, item) => sum + officialTaking(item) + realTaking(item),
-        0,
-      ),
+      real: takings.reduce((sum, item) => sum + realTaking(item), 0),
       theoretical: invoices.reduce(
         (sum, item) => sum + item.theoreticalRevenue,
         0,
@@ -262,13 +257,13 @@ export function ReportsPage() {
   const months = useMemo(() => {
     const grouped = new Map<
       string,
-      { official: number; actual: number; costs: number }
+      { official: number; real: number; costs: number }
     >()
     const month = (date: string) => date.slice(0, 7)
     const ensure = (key: string) => {
       const existing = grouped.get(key)
       if (existing) return existing
-      const created = { official: 0, actual: 0, costs: 0 }
+      const created = { official: 0, real: 0, costs: 0 }
       grouped.set(key, created)
       return created
     }
@@ -280,7 +275,7 @@ export function ReportsPage() {
     source.takings.forEach((item) => {
       const target = ensure(month(item.date))
       target.official += officialTaking(item)
-      target.actual += officialTaking(item) + realTaking(item)
+      target.real += realTaking(item)
     })
     source.invoices.forEach((item) => {
       ensure(month(item.date)).costs += item.total
@@ -319,7 +314,7 @@ export function ReportsPage() {
     1,
     ...months.flatMap(([, values]) => [
       values.official,
-      values.actual,
+      values.real,
       values.costs,
     ]),
   )
@@ -328,12 +323,12 @@ export function ReportsPage() {
     inRange(item.date, currentYearStart, today()),
   )
   const allTakingDays = new Set(yearTakings.map((item) => item.date)).size
-  const allActualTakings = yearTakings.reduce(
-    (sum, item) => sum + officialTaking(item) + realTaking(item),
+  const allRealTakings = yearTakings.reduce(
+    (sum, item) => sum + realTaking(item),
     0,
   )
   const averageDailyTaking =
-    allTakingDays > 0 ? allActualTakings / allTakingDays : 0
+    allTakingDays > 0 ? allRealTakings / allTakingDays : 0
   const defaultSeasonEnd = `${new Date().getFullYear()}-12-31`
   const seasonEnd = source.company?.seasonEndDate ?? defaultSeasonEnd
   const remainingDays =
@@ -363,7 +358,7 @@ export function ReportsPage() {
           )
       : 0
   const seasonForecast =
-    allActualTakings +
+    allRealTakings +
     averageDailyTaking * remainingDays -
     yearCosts -
     futureFixedCosts
@@ -374,19 +369,12 @@ export function ReportsPage() {
     reference: `Cash ${money(item.cash)} · POS ${money(item.pos)}`,
     amount: officialTaking(item),
   }))
-  const undeclaredRows: MetricDetailRow[] = data.takings.map((item) => ({
+  const realRows: MetricDetailRow[] = data.takings.map((item) => ({
     date: item.date,
-    category: 'Incasso non fiscale',
+    category: 'Incasso reale',
     description: item.sellerName || 'Venditore non indicato',
-    reference: item.supplierName || 'Nessun fornitore indicato',
+    reference: `Incasso fiscale registrato ${money(officialTaking(item))}`,
     amount: realTaking(item),
-  }))
-  const actualRows: MetricDetailRow[] = data.takings.map((item) => ({
-    date: item.date,
-    category: 'Totale incasso reale',
-    description: item.sellerName || 'Venditore non indicato',
-    reference: `Fiscale ${money(officialTaking(item))} · Non fiscale ${money(realTaking(item))}`,
-    amount: officialTaking(item) + realTaking(item),
   }))
   const purchaseRows: MetricDetailRow[] = data.invoices.map((item) => ({
     date: item.date,
@@ -485,18 +473,11 @@ export function ReportsPage() {
       rows: officialRows,
       tone: 'green',
     },
-    undeclared: {
-      title: 'Incasso non fiscale',
-      note: 'Importi aggiuntivi inseriti manualmente nel campo Incasso reale.',
-      value: undeclared,
-      rows: undeclaredRows,
-      tone: 'cyan',
-    },
-    actual: {
-      title: 'Totale incasso reale',
-      note: 'Totale effettivo: incasso fiscale più incasso non fiscale.',
-      value: totalTakings,
-      rows: actualRows,
+    real: {
+      title: 'Incasso reale',
+      note: 'Totale effettivamente incassato, separato dall’incasso fiscale.',
+      value: real,
+      rows: realRows,
       tone: 'violet',
     },
     purchases: {
@@ -520,12 +501,12 @@ export function ReportsPage() {
       rows: [...officialRows, ...negativeOperatingRows],
       tone: official - operatingCosts >= 0 ? 'green' : 'red',
     },
-    'actual-profit': {
+    'real-profit': {
       title: 'Utile reale',
-      note: 'Totale incasso reale meno fatture fornitori e spese fisse.',
-      value: totalTakings - operatingCosts,
-      rows: [...actualRows, ...negativeOperatingRows],
-      tone: totalTakings - operatingCosts >= 0 ? 'cyan' : 'red',
+      note: 'Incasso reale meno fatture fornitori e spese fisse.',
+      value: real - operatingCosts,
+      rows: [...realRows, ...negativeOperatingRows],
+      tone: real - operatingCosts >= 0 ? 'cyan' : 'red',
     },
     'input-vat': {
       title: 'IVA a credito',
@@ -553,8 +534,8 @@ export function ReportsPage() {
     },
     stock: {
       title: 'Venit stock',
-      note: 'Venit teorico delle fatture meno il totale incasso reale.',
-      value: theoretical - totalTakings,
+      note: 'Venit teorico delle fatture meno l’incasso reale.',
+      value: theoretical - real,
       rows: [
         ...data.invoices.map((item) => ({
           date: item.date,
@@ -563,7 +544,7 @@ export function ReportsPage() {
           reference: item.number || 'Senza numero',
           amount: item.theoreticalRevenue,
         })),
-        ...actualRows.map((row) => ({ ...row, amount: -row.amount })),
+        ...realRows.map((row) => ({ ...row, amount: -row.amount })),
       ],
       tone: 'violet',
     },
@@ -577,7 +558,7 @@ export function ReportsPage() {
           category: 'Incassi reali acquisiti',
           description: 'Totale dall’inizio dell’anno',
           reference: `${allTakingDays} giornate con incassi`,
-          amount: allActualTakings,
+          amount: allRealTakings,
         },
         {
           date: seasonEnd,
@@ -656,9 +637,7 @@ export function ReportsPage() {
           Cash: taking.cash,
           POS: taking.pos,
           'Incasso fiscale': officialTaking(taking),
-          'Incasso non fiscale': realTaking(taking),
-          'Totale incasso reale':
-            officialTaking(taking) + realTaking(taking),
+          'Incasso reale': realTaking(taking),
           'IVA inclusa': taking.vat,
         })),
       ),
@@ -766,11 +745,10 @@ export function ReportsPage() {
       (sum, item) => sum + officialTaking(item),
       0,
     )
-    const sellerUndeclared = sellerTakings.reduce(
+    const sellerReal = sellerTakings.reduce(
       (sum, item) => sum + realTaking(item),
       0,
     )
-    const sellerActual = sellerOfficial + sellerUndeclared
     const sellerTheoretical = sellerInvoices.reduce(
       (sum, item) => sum + item.theoreticalRevenue,
       0,
@@ -795,19 +773,14 @@ export function ReportsPage() {
         <section className="report-kpis">
           <ReportCard label="Incasso fiscale" value={sellerOfficial} tone="green" />
           <ReportCard
-            label="Incasso non fiscale"
-            value={sellerUndeclared}
-            tone="cyan"
-          />
-          <ReportCard
-            label="Totale incasso reale"
-            value={sellerActual}
+            label="Incasso reale"
+            value={sellerReal}
             tone="cyan"
           />
           <ReportCard label="Venit previsto" value={sellerTheoretical} tone="violet" />
           <ReportCard
             label="Venit stock"
-            value={sellerTheoretical - sellerActual}
+            value={sellerTheoretical - sellerReal}
             tone="amber"
           />
         </section>
@@ -861,8 +834,7 @@ export function ReportsPage() {
                     <th>Contanti</th>
                     <th>POS</th>
                     <th>Fiscale</th>
-                    <th>Non fiscale</th>
-                    <th>Totale reale</th>
+                    <th>Reale</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -875,9 +847,6 @@ export function ReportsPage() {
                         <td>{money(taking.pos)}</td>
                         <td>{money(officialTaking(taking))}</td>
                         <td>{money(realTaking(taking))}</td>
-                        <td>
-                          {money(officialTaking(taking) + realTaking(taking))}
-                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -1034,16 +1003,10 @@ export function ReportsPage() {
           onClick={() => setDetail({ type: 'metric', metric: 'official' })}
         />
         <ReportCard
-          label="Incasso non fiscale"
-          value={undeclared}
-          tone="cyan"
-          onClick={() => setDetail({ type: 'metric', metric: 'undeclared' })}
-        />
-        <ReportCard
-          label="Totale incasso reale"
-          value={totalTakings}
+          label="Incasso reale"
+          value={real}
           tone="violet"
-          onClick={() => setDetail({ type: 'metric', metric: 'actual' })}
+          onClick={() => setDetail({ type: 'metric', metric: 'real' })}
         />
         <ReportCard
           label="Costi totali (fatture)"
@@ -1067,10 +1030,10 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Utile reale"
-          value={totalTakings - operatingCosts}
-          tone={totalTakings - operatingCosts >= 0 ? 'cyan' : 'red'}
+          value={real - operatingCosts}
+          tone={real - operatingCosts >= 0 ? 'cyan' : 'red'}
           onClick={() =>
-            setDetail({ type: 'metric', metric: 'actual-profit' })
+            setDetail({ type: 'metric', metric: 'real-profit' })
           }
         />
         <ReportCard
@@ -1093,7 +1056,7 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Venit stock"
-          value={theoretical - totalTakings}
+          value={theoretical - real}
           tone="violet"
           onClick={() => setDetail({ type: 'metric', metric: 'stock' })}
         />
@@ -1141,7 +1104,7 @@ export function ReportsPage() {
               >
                 <span className="eyebrow">VENDITORE</span>
                 <strong>{seller.name}</strong>
-                <span>Reale totale {money(seller.actual)}</span>
+                <span>Incasso reale {money(seller.real)}</span>
                 <span>Venit previsto {money(seller.theoretical)}</span>
                 <em>Apri valutazione dettagliata</em>
               </button>
@@ -1193,7 +1156,7 @@ export function ReportsPage() {
                 />
                 <span
                   className="bar real"
-                  style={{ width: `${(values.actual / maxChart) * 100}%` }}
+                  style={{ width: `${(values.real / maxChart) * 100}%` }}
                 />
                 <span
                   className="bar costs"
@@ -1201,7 +1164,7 @@ export function ReportsPage() {
                 />
               </div>
               <small>
-                F {money(values.official)} · R {money(values.actual)} · C{' '}
+                F {money(values.official)} · R {money(values.real)} · C{' '}
                 {money(values.costs)}
               </small>
             </div>
