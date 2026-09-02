@@ -686,6 +686,14 @@ select {
   background: var(--amber);
 }
 
+.stat-red .stat-glow {
+  background: var(--red);
+}
+
+.stat-red strong {
+  color: var(--red);
+}
+
 .stat-label,
 .stat-detail {
   color: var(--muted);
@@ -703,6 +711,59 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.8fr);
   gap: 18px;
+}
+
+.dashboard-seller-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-seller-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.dashboard-seller-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-seller-heading h3 {
+  margin: 2px 0 0;
+}
+
+.dashboard-seller-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-seller-metrics div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(19, 27, 46, 0.78);
+}
+
+.dashboard-seller-metrics span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.dashboard-seller-metrics strong {
+  overflow: hidden;
+  color: var(--cyan);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-grid {
@@ -1356,6 +1417,7 @@ select {
   }
 
   .dashboard-grid,
+  .dashboard-seller-grid,
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -1451,6 +1513,10 @@ select {
   .store-grid,
   .mode-options {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-seller-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stat-card {
