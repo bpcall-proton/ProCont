@@ -56,6 +56,7 @@ function filenamePart(value: string) {
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
+  const [sellerAsOfDate, setSellerAsOfDate] = useState('')
   const { review } = state
   const companyId = state.accounting.activeCompanyId
   const activeCompany = state.accounting.companies.find(
@@ -436,12 +437,18 @@ export function DashboardPage() {
     },
   }
   const selectedMetric = detail ? metrics[detail] : null
+  const sellerInvoices = accounting.invoices.filter(
+    (invoice) => !sellerAsOfDate || invoice.date <= sellerAsOfDate,
+  )
+  const sellerTakings = accounting.takings.filter(
+    (taking) => !sellerAsOfDate || taking.date <= sellerAsOfDate,
+  )
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
   const sellerSummaries = accounting.sellers.map((seller) => {
-    const invoices = accounting.invoices.filter(
+    const invoices = sellerInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
     )
-    const takings = accounting.takings.filter(
+    const takings = sellerTakings.filter(
       (taking) => taking.sellerId === seller.id,
     )
     const sellerOfficial = takings.reduce(
@@ -479,10 +486,10 @@ export function DashboardPage() {
       stockResidual: sellerTheoretical - sellerReal,
     }
   })
-  const unassignedInvoices = accounting.invoices.filter(
+  const unassignedInvoices = sellerInvoices.filter(
     (invoice) => !invoice.sellerId || !knownSellerIds.has(invoice.sellerId),
   )
-  const unassignedTakings = accounting.takings.filter(
+  const unassignedTakings = sellerTakings.filter(
     (taking) => !taking.sellerId || !knownSellerIds.has(taking.sellerId),
   )
   if (unassignedInvoices.length > 0 || unassignedTakings.length > 0) {
@@ -780,7 +787,26 @@ export function DashboardPage() {
             <span className="eyebrow">DETTAGLIO VENDITORI</span>
             <h2>Situazione separata per venditore</h2>
           </div>
-          <span className="count-pill">{sellerSummaries.length}</span>
+          <div className="dashboard-seller-heading-controls">
+            <label className="dashboard-seller-date-filter">
+              <span>Situazione al (data compresa)</span>
+              <input
+                type="date"
+                value={sellerAsOfDate}
+                onChange={(event) => setSellerAsOfDate(event.target.value)}
+              />
+            </label>
+            {sellerAsOfDate && (
+              <button
+                className="text-button"
+                onClick={() => setSellerAsOfDate('')}
+                type="button"
+              >
+                Tutto lo storico
+              </button>
+            )}
+            <span className="count-pill">{sellerSummaries.length}</span>
+          </div>
         </div>
         {sellerSummaries.length === 0 ? (
           <div className="empty-state compact-empty">
