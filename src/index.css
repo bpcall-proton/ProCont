@@ -2252,6 +2252,30 @@ select {
   font-size: 1.08rem;
 }
 
+.report-card-button {
+  width: 100%;
+  color: var(--text);
+  text-align: left;
+}
+
+.report-card-button:hover {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: var(--surface-hover);
+}
+
+.report-card-button em {
+  color: var(--lavender);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.detail-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
 .entity-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
