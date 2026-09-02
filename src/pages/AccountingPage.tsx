@@ -10,6 +10,7 @@ import {
   money,
   paymentMethods,
   productSalePrice,
+  realTaking,
   roundMoney,
   splitVat,
   today,
@@ -906,21 +907,21 @@ function TakingsPanel() {
     0,
   )
   const real = data.takings.reduce(
-    (sum, item) =>
-      sum + (item.realTotal > 0 ? item.realTotal : item.cash + item.pos),
+    (sum, item) => sum + realTaking(item),
     0,
   )
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const cash = amountExpression(form.cash)
-    const pos = amountExpression(form.pos)
-    if (cash === null || pos === null) {
+    const realTotal = amountExpression(form.realTotal)
+    if (realTotal === null) {
       setFormError(
-        'Operazione non valida: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
+        'Incasso reale non valido: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
       )
       return
     }
+    const cash = numberValue(form.cash)
+    const pos = numberValue(form.pos)
     const vat = numberValue(form.vat)
     if (vat > cash + pos) {
       setFormError("L'IVA inclusa non può superare Cash + POS.")
@@ -939,7 +940,7 @@ function TakingsPanel() {
           pos,
           withdrawal: numberValue(form.withdrawal),
           vat,
-          realTotal: numberValue(form.realTotal),
+          realTotal,
         }
         return {
           ...current,
@@ -956,15 +957,15 @@ function TakingsPanel() {
     setFormError(null)
   }
 
-  function calculateField(field: 'cash' | 'pos') {
-    const result = amountExpression(form[field])
+  function calculateRealTotal() {
+    const result = amountExpression(form.realTotal)
     if (result === null) {
       setFormError(
-        'Operazione non valida: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
+        'Incasso reale non valido: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
       )
       return
     }
-    setForm((current) => ({ ...current, [field]: String(result) }))
+    setForm((current) => ({ ...current, realTotal: String(result) }))
     setFormError(null)
   }
 
@@ -973,7 +974,7 @@ function TakingsPanel() {
       <section className="stats-strip">
         <div><span>Ufficiale</span><strong>{money(official)}</strong></div>
         <div><span>Reale</span><strong>{money(real)}</strong></div>
-        <div><span>Di cui non dichiarato</span><strong>{money(Math.max(0, real - official))}</strong></div>
+        <div><span>Totale incassi</span><strong>{money(official + real)}</strong></div>
         <div><span>Ritiri cash</span><strong>{money(data.takings.reduce((sum, item) => sum + item.withdrawal, 0))}</strong></div>
       </section>
       <form className="panel accounting-form" onSubmit={submit}>
@@ -981,11 +982,11 @@ function TakingsPanel() {
         <div className="form-grid accounting-fields">
           <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Cash<input inputMode="text" placeholder="Es. =1000+2000" value={form.cash} onBlur={() => calculateField('cash')} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
-          <label>POS<input inputMode="text" placeholder="Es. =500+250" value={form.pos} onBlur={() => calculateField('pos')} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
+          <label>Cash<input inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
+          <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
           <label>IVA inclusa in Cash + POS<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Incasso reale (compreso non dichiarato)<input inputMode="decimal" value={form.realTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
+          <label>Incasso reale (in nero)<input inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
@@ -998,7 +999,7 @@ function TakingsPanel() {
         <div className="data-table-wrap">
           <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
             <tbody>{data.takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos)}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -1092,7 +1093,7 @@ function ContactsPanel() {
         <form className="inline-create-form" onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
-          const total = takings.reduce((sum, item) => sum + (item.realTotal > 0 ? item.realTotal : item.cash + item.pos), 0)
+          const total = takings.reduce((sum, item) => sum + item.cash + item.pos + realTaking(item), 0)
           return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
