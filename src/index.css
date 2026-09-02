@@ -858,6 +858,20 @@ select {
   color: var(--green);
 }
 
+.dashboard-seller-metrics .seller-stock-residual {
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-stock-residual span,
+.dashboard-seller-metrics .seller-stock-residual strong {
+  font-weight: 800;
+}
+
+.dashboard-seller-metrics .seller-stock-residual strong {
+  color: var(--amber);
+}
+
 .settings-grid {
   align-items: start;
 }
