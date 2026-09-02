@@ -408,7 +408,7 @@ export function SettingsPage() {
           POS: taking.pos,
           Ritiro: taking.withdrawal,
           IVA: taking.vat,
-          Reale: taking.realTotal,
+          'Incasso reale (in nero)': taking.realTotal,
         })),
       ),
       'Incassi',

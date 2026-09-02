@@ -36,7 +36,11 @@ import {
 } from '../data/migrations'
 import { createCompanyState } from '../data/companyState'
 import { normalizeSenderPhone } from '../domain/senderRouting'
-import { setMoneyCurrency } from '../domain/accounting'
+import {
+  officialTaking,
+  realTaking,
+  setMoneyCurrency,
+} from '../domain/accounting'
 import {
   AppStoreContext,
   type AccountingCompanyInput,
@@ -66,8 +70,7 @@ function withActiveCompanySummaries(state: AppState): AppState {
   )
   const realTakings = takings.reduce(
     (total, taking) =>
-      total +
-      (taking.realTotal > 0 ? taking.realTotal : taking.cash + taking.pos),
+      total + officialTaking(taking) + realTaking(taking),
     0,
   )
   const review = reviewDocuments.reduce(

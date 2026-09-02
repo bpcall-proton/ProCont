@@ -5,7 +5,6 @@ import {
   money,
   officialTaking,
   realTaking,
-  undeclaredTaking,
 } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
@@ -63,10 +62,7 @@ export function DashboardPage() {
     (sum, taking) => sum + realTaking(taking),
     0,
   )
-  const undeclared = accounting.takings.reduce(
-    (sum, taking) => sum + undeclaredTaking(taking),
-    0,
-  )
+  const totalTakings = official + real
   const theoretical = accounting.invoices.reduce(
     (sum, invoice) => sum + invoice.theoreticalRevenue,
     0,
@@ -115,13 +111,9 @@ export function DashboardPage() {
       pos: takings.reduce((sum, taking) => sum + taking.pos, 0),
       official: sellerOfficial,
       real: sellerReal,
-      undeclared: takings.reduce(
-        (sum, taking) => sum + undeclaredTaking(taking),
-        0,
-      ),
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: sellerTheoretical,
-      stock: sellerTheoretical - sellerReal,
+      stock: sellerTheoretical - sellerOfficial - sellerReal,
     }
   })
   const unassignedInvoices = accounting.invoices.filter(
@@ -154,13 +146,9 @@ export function DashboardPage() {
       pos: unassignedTakings.reduce((sum, taking) => sum + taking.pos, 0),
       official: unassignedOfficial,
       real: unassignedReal,
-      undeclared: unassignedTakings.reduce(
-        (sum, taking) => sum + undeclaredTaking(taking),
-        0,
-      ),
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: unassignedTheoretical,
-      stock: unassignedTheoretical - unassignedReal,
+      stock: unassignedTheoretical - unassignedOfficial - unassignedReal,
     })
   }
 
@@ -248,16 +236,16 @@ export function DashboardPage() {
           value={money(official)}
         />
         <StatCard
-          detail="Comprende l’incasso non dichiarato"
+          detail="Importo non dichiarato inserito manualmente"
           label="Incasso reale"
           tone="cyan"
           value={money(real)}
         />
         <StatCard
-          detail="Differenza tra incasso reale e registrato"
-          label="Non dichiarato"
+          detail="Cash + POS + incasso reale"
+          label="Totale incassi"
           tone="violet"
-          value={money(undeclared)}
+          value={money(totalTakings)}
         />
         <StatCard
           detail="Cash prelevato dai punti vendita"
@@ -272,10 +260,10 @@ export function DashboardPage() {
           value={money(theoretical)}
         />
         <StatCard
-          detail="Venit teorico meno incasso reale"
+          detail="Venit teorico meno tutti gli incassi"
           label="Venit stock"
           tone="amber"
-          value={money(theoretical - real)}
+          value={money(theoretical - totalTakings)}
         />
         <StatCard
           detail="Fatture, affitti, contabile e spese registrate"
@@ -284,10 +272,10 @@ export function DashboardPage() {
           value={money(totalCosts)}
         />
         <StatCard
-          detail="Incasso reale meno costi registrati"
+          detail="Tutti gli incassi meno i costi registrati"
           label="Risultato reale"
-          tone={real - totalCosts >= 0 ? 'green' : 'red'}
-          value={money(real - totalCosts)}
+          tone={totalTakings - totalCosts >= 0 ? 'green' : 'red'}
+          value={money(totalTakings - totalCosts)}
         />
       </section>
 
@@ -347,8 +335,8 @@ export function DashboardPage() {
                     <strong>{money(seller.vat)}</strong>
                   </div>
                   <div>
-                    <span>Non dichiarato</span>
-                    <strong>{money(seller.undeclared)}</strong>
+                    <span>Totale incassi</span>
+                    <strong>{money(seller.official + seller.real)}</strong>
                   </div>
                   <div>
                     <span>Venit stock</span>

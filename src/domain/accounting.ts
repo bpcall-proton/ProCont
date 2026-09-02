@@ -82,11 +82,7 @@ export function officialTaking(taking: AccountingTaking) {
 }
 
 export function realTaking(taking: AccountingTaking) {
-  return taking.realTotal > 0 ? taking.realTotal : officialTaking(taking)
-}
-
-export function undeclaredTaking(taking: AccountingTaking) {
-  return Math.max(0, realTaking(taking) - officialTaking(taking))
+  return Math.max(0, taking.realTotal)
 }
 
 export function invoiceRemaining(invoice: AccountingInvoice) {

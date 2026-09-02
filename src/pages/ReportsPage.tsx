@@ -9,7 +9,6 @@ import {
   officialTaking,
   realTaking,
   today,
-  undeclaredTaking,
 } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
@@ -114,10 +113,7 @@ export function ReportsPage() {
     0,
   )
   const real = data.takings.reduce((sum, item) => sum + realTaking(item), 0)
-  const undeclared = data.takings.reduce(
-    (sum, item) => sum + undeclaredTaking(item),
-    0,
-  )
+  const totalTakings = official + real
   const purchases = data.invoices.reduce(
     (sum, item) => sum + item.total,
     0,
@@ -299,7 +295,7 @@ export function ReportsPage() {
   )
   const allTakingDays = new Set(yearTakings.map((item) => item.date)).size
   const allRealTakings = yearTakings.reduce(
-    (sum, item) => sum + realTaking(item),
+    (sum, item) => sum + officialTaking(item) + realTaking(item),
     0,
   )
   const averageDailyTaking =
@@ -373,13 +369,13 @@ export function ReportsPage() {
           <ReportCard label="Venit previsto" value={sellerTheoretical} tone="violet" />
           <ReportCard
             label="Venit stock"
-            value={sellerTheoretical - sellerReal}
+            value={sellerTheoretical - sellerOfficial - sellerReal}
             tone="amber"
           />
           <ReportCard
-            label="Differenza reale/ufficiale"
-            value={sellerReal - sellerOfficial}
-            tone={sellerReal >= sellerOfficial ? 'cyan' : 'red'}
+            label="Totale incassi"
+            value={sellerOfficial + sellerReal}
+            tone="cyan"
           />
         </section>
         <section className="report-columns">
@@ -591,7 +587,7 @@ export function ReportsPage() {
       <section className="report-kpis">
         <ReportCard label="Incasso ufficiale" value={official} tone="green" />
         <ReportCard label="Incasso reale" value={real} tone="cyan" />
-        <ReportCard label="Non dichiarato" value={undeclared} tone="violet" />
+        <ReportCard label="Totale incassi" value={totalTakings} tone="violet" />
         <ReportCard label="Costi totali" value={costs} tone="amber" />
         <ReportCard
           label="Spese fisse ripartite"
@@ -605,8 +601,8 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Utile reale"
-          value={real - costs}
-          tone={real - costs >= 0 ? 'cyan' : 'red'}
+          value={totalTakings - costs}
+          tone={totalTakings - costs >= 0 ? 'cyan' : 'red'}
         />
         <ReportCard label="IVA a credito" value={inputVat} tone="cyan" />
         <ReportCard label="IVA a debito" value={outputVat} tone="amber" />
@@ -617,7 +613,7 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Venit stock"
-          value={theoretical - real}
+          value={theoretical - totalTakings}
           tone="violet"
         />
         <ReportCard
