@@ -901,7 +901,12 @@ function TakingsPanel() {
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyTaking)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [repeatDate, setRepeatDate] = useState(false)
+  const [repeatSeller, setRepeatSeller] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
+  const sellerInputRef = useRef<HTMLSelectElement>(null)
+  const cashInputRef = useRef<HTMLInputElement>(null)
   const official = data.takings.reduce(
     (sum, item) => sum + item.cash + item.pos,
     0,
@@ -952,9 +957,28 @@ function TakingsPanel() {
         }
       }),
     )
+    const wasEditing = editingId !== null
     setEditingId(null)
-    setForm(emptyTaking)
+    setForm(
+      wasEditing
+        ? { ...emptyTaking, date: today() }
+        : {
+            ...emptyTaking,
+            date: repeatDate ? form.date : today(),
+            sellerId: repeatSeller ? form.sellerId : '',
+          },
+    )
     setFormError(null)
+    if (!wasEditing) {
+      window.requestAnimationFrame(() => {
+        const nextInput = !repeatDate
+          ? dateInputRef.current
+          : !repeatSeller
+            ? sellerInputRef.current
+            : cashInputRef.current
+        nextInput?.focus()
+      })
+    }
   }
 
   function calculateRealTotal() {
@@ -978,11 +1002,36 @@ function TakingsPanel() {
         <div><span>Ritiri cash</span><strong>{money(data.takings.reduce((sum, item) => sum + item.withdrawal, 0))}</strong></div>
       </section>
       <form className="panel accounting-form" onSubmit={submit}>
-        <div className="panel-heading"><div><span className="eyebrow">INSERIMENTO MANUALE</span><h2>{editingId ? 'Modifica incasso' : 'Nuovo incasso'}</h2></div></div>
+        <div className="panel-heading invoice-form-heading">
+          <div>
+            <span className="eyebrow">INSERIMENTO MANUALE</span>
+            <h2>{editingId ? 'Modifica incasso' : 'Nuovo incasso'}</h2>
+          </div>
+          {!editingId && (
+            <div className="invoice-entry-options">
+              <label className="checkbox-row">
+                <input
+                  checked={repeatDate}
+                  onChange={(event) => setRepeatDate(event.target.checked)}
+                  type="checkbox"
+                />
+                Mantieni ultima data
+              </label>
+              <label className="checkbox-row">
+                <input
+                  checked={repeatSeller}
+                  onChange={(event) => setRepeatSeller(event.target.checked)}
+                  type="checkbox"
+                />
+                Mantieni venditore
+              </label>
+            </div>
+          )}
+        </div>
         <div className="form-grid accounting-fields">
-          <label>Data<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
-          <label>Venditore<select value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Cash<input inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
+          <label>Data<input ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+          <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Cash<input ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
           <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
           <label>IVA inclusa in Cash + POS<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
