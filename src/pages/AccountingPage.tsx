@@ -1,4 +1,10 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react'
 import {
   activeAccounting,
   addDays,
@@ -100,6 +106,16 @@ function amountExpression(value: string) {
     return null
   }
   return roundMoney(result)
+}
+
+function filenamePart(value: string) {
+  return (
+    value
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'azienda'
+  )
 }
 
 function mutateCompany(
@@ -261,6 +277,8 @@ export function InvoicesPanel({
   const [repeatDate, setRepeatDate] = useState(false)
   const [lines, setLines] = useState<InvoiceLine[]>([])
   const [lineForm, setLineForm] = useState(emptyInvoiceLine)
+  const invoiceFormRef = useRef<HTMLFormElement>(null)
+  const submitAfterValidationRef = useRef(false)
   const dateInputRef = useRef<HTMLInputElement>(null)
   const supplierInputRef = useRef<HTMLSelectElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
@@ -340,6 +358,46 @@ export function InvoicesPanel({
     lines.length > 0 ? lineRevenue : numberValue(form.theoreticalRevenue)
   const invoiceMarkup = markupPercentage(invoiceTotal, invoiceRevenue)
 
+  function handleInvoiceEnter(event: KeyboardEvent<HTMLFormElement>) {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return
+    }
+    const target = event.target
+    if (
+      !(target instanceof HTMLInputElement) &&
+      !(target instanceof HTMLSelectElement)
+    ) {
+      return
+    }
+    if (!target.matches('[data-invoice-entry]')) return
+
+    event.preventDefault()
+    const invoiceForm = invoiceFormRef.current
+    if (!invoiceForm) return
+    if (submitAfterValidationRef.current) {
+      invoiceForm.requestSubmit()
+      return
+    }
+
+    const fields = Array.from(
+      invoiceForm.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        '[data-invoice-entry]',
+      ),
+    ).filter((field) => !field.disabled)
+    const nextField = fields[fields.indexOf(target) + 1]
+    if (nextField) {
+      nextField.focus()
+      return
+    }
+
+    submitAfterValidationRef.current = true
+    invoiceForm.requestSubmit()
+  }
+
   function selectProduct(productId: string) {
     const product = data.products.find((item) => item.id === productId)
     if (!product) {
@@ -400,6 +458,7 @@ export function InvoicesPanel({
   }
 
   function resetInvoiceForm() {
+    submitAfterValidationRef.current = false
     setEditingId(null)
     setForm({ ...emptyInvoice, date: today() })
     setLines([])
@@ -408,6 +467,7 @@ export function InvoicesPanel({
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    submitAfterValidationRef.current = false
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const supplier = data.suppliers.find(
@@ -487,6 +547,7 @@ export function InvoicesPanel({
   }
 
   function edit(invoice: AccountingInvoice) {
+    submitAfterValidationRef.current = false
     const vat = invoice.vat ?? 0
     const taxableAmount =
       (invoice.taxableAmount ?? 0) === 0 && vat === 0 && invoice.total > 0
@@ -598,6 +659,37 @@ export function InvoicesPanel({
     setAdvanceAmount('')
   }
 
+  async function exportInvoicesExcel() {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        invoices.map((invoice) => ({
+          Data: invoice.date,
+          Numero: invoice.number,
+          Fornitore: invoice.supplierName,
+          Venditore: invoice.sellerName,
+          Descrizione: invoice.description,
+          Categoria: invoice.category,
+          Imponibile: invoice.taxableAmount,
+          IVA: invoice.vat,
+          Totale: invoice.total,
+          Venit: invoice.theoreticalRevenue,
+          'Ricarico %': invoice.markupPercent,
+          Pagata: invoice.settled ? 'Sì' : 'No',
+          Residuo: invoiceRemaining(invoice),
+          Scadenza: invoice.dueDate,
+        })),
+      ),
+      'Fatture',
+    )
+    XLSX.writeFile(
+      workbook,
+      `fatture-${filenamePart(data.company?.name ?? '')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    )
+  }
+
   return (
     <>
       {!archiveOnly && (
@@ -610,7 +702,15 @@ export function InvoicesPanel({
       )}
 
       {(!archiveOnly || editingId) && (
-      <form className="panel accounting-form" onSubmit={submit}>
+      <form
+        className="panel accounting-form"
+        onInvalidCapture={() => {
+          submitAfterValidationRef.current = true
+        }}
+        onKeyDown={handleInvoiceEnter}
+        onSubmit={submit}
+        ref={invoiceFormRef}
+      >
         <div className="panel-heading invoice-form-heading">
           <div className="invoice-form-title">
             <div>
@@ -664,16 +764,16 @@ export function InvoicesPanel({
           </div>
         </div>
         <div className="form-grid accounting-fields">
-          <label>Data<input ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
-          <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Fornitore<select ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Numero fattura<input placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
-          <label>Descrizione<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Imponibile<input ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
-          <label>IVA facoltativa<input inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
+          <label>Data<input data-invoice-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+          <label>Venditore<select data-invoice-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Numero fattura<input data-invoice-entry placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
+          <label>Descrizione<input data-invoice-entry value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+          <label>Categoria<select data-invoice-entry value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Imponibile<input data-invoice-entry ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
+          <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
           <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
-          <label>Venit totale<input ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
+          <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
           <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
@@ -831,6 +931,7 @@ export function InvoicesPanel({
               {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
             <input aria-label="Filtra per mese fattura" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+            <button className="button button-secondary" disabled={invoices.length === 0} onClick={() => void exportInvoicesExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
         <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ''}`}>
@@ -898,6 +999,7 @@ export function InvoicesPanel({
 const emptyTaking = {
   date: today(),
   sellerId: '',
+  supplierId: '',
   cash: '',
   pos: '',
   withdrawal: '',
@@ -913,6 +1015,9 @@ function TakingsPanel() {
   const [repeatDate, setRepeatDate] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [sellerFilter, setSellerFilter] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
   const cashInputRef = useRef<HTMLInputElement>(null)
@@ -924,6 +1029,29 @@ function TakingsPanel() {
     (sum, item) => sum + realTaking(item),
     0,
   )
+  const activeSellerFilter = data.sellers.some(
+    (seller) => seller.id === sellerFilter,
+  )
+    ? sellerFilter
+    : ''
+  const activeSupplierFilter = data.suppliers.some(
+    (supplier) => supplier.id === supplierFilter,
+  )
+    ? supplierFilter
+    : ''
+  const takings = data.takings
+    .filter(
+      (taking) =>
+        !activeSellerFilter || taking.sellerId === activeSellerFilter,
+    )
+    .filter(
+      (taking) =>
+        !activeSupplierFilter || taking.supplierId === activeSupplierFilter,
+    )
+    .filter(
+      (taking) => !monthFilter || taking.date.slice(0, 7) === monthFilter,
+    )
+    .sort((left, right) => right.date.localeCompare(left.date))
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -944,12 +1072,17 @@ function TakingsPanel() {
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const seller = data.sellers.find((item) => item.id === form.sellerId)
+        const supplier = data.suppliers.find(
+          (item) => item.id === form.supplierId,
+        )
         const taking: AccountingTaking = {
           id: editingId ?? createId('taking'),
           companyId,
           date: form.date,
           sellerId: seller?.id ?? null,
           sellerName: seller?.name ?? '',
+          supplierId: supplier?.id ?? null,
+          supplierName: supplier?.name ?? '',
           cash,
           pos,
           withdrawal: numberValue(form.withdrawal),
@@ -1002,6 +1135,31 @@ function TakingsPanel() {
     setFormError(null)
   }
 
+  async function exportTakingsExcel() {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        takings.map((taking) => ({
+          Data: taking.date,
+          Venditore: taking.sellerName,
+          Fornitore: taking.supplierName,
+          Cash: taking.cash,
+          POS: taking.pos,
+          'Cash ritirato': taking.withdrawal,
+          'IVA inclusa': taking.vat,
+          'Incasso reale (in nero)': taking.realTotal,
+        })),
+      ),
+      'Incassi',
+    )
+    XLSX.writeFile(
+      workbook,
+      `incassi-${filenamePart(data.company?.name ?? '')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    )
+  }
+
   return (
     <>
       <section className="stats-strip">
@@ -1040,6 +1198,7 @@ function TakingsPanel() {
         <div className="form-grid accounting-fields">
           <label>Data<input ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Fornitore<select value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Cash<input ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
           <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
@@ -1053,13 +1212,28 @@ function TakingsPanel() {
         </div>
       </form>
       <section className="panel">
-        <h2>Storico incassi</h2>
+        <div className="table-toolbar invoice-table-toolbar">
+          <h2>Storico incassi</h2>
+          <div className="invoice-filters">
+            <select aria-label="Filtra incassi per venditore" value={activeSellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+              <option value="">Tutti i venditori</option>
+              {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+            </select>
+            <select aria-label="Filtra incassi per fornitore" value={activeSupplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+              <option value="">Tutti i fornitori</option>
+              {data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+            <input aria-label="Filtra incassi per mese" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+            <button className="button button-secondary" disabled={takings.length === 0} onClick={() => void exportTakingsExcel()} type="button">Esporta Excel</button>
+          </div>
+        </div>
         <div className="data-table-wrap">
-          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
-            <tbody>{data.takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Fornitore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
+            <tbody>{takings.map((taking) => (
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{taking.supplierName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', supplierId: taking.supplierId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
+          {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}
         </div>
       </section>
     </>

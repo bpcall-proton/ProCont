@@ -1962,12 +1962,24 @@ select {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 9px;
+  gap: 7px;
 }
 
 .invoice-filters input,
 .invoice-filters select {
-  min-width: 155px;
+  width: auto;
+  min-width: 128px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 9px;
+  font-size: 0.76rem;
+}
+
+.invoice-filters .button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 0.76rem;
 }
 
 .integration-steps {
@@ -2422,10 +2434,22 @@ select {
     flex-direction: column;
   }
 
-  .invoice-filters,
+  .invoice-table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invoice-filters {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
   .invoice-filters input,
   .invoice-filters select {
-    width: 100%;
+    width: auto;
+    flex: 0 0 128px;
   }
 
   .supplier-create-form,

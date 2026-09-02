@@ -404,6 +404,7 @@ export function SettingsPage() {
         takings.map((taking) => ({
           Data: taking.date,
           Venditore: taking.sellerName,
+          Fornitore: taking.supplierName,
           Cash: taking.cash,
           POS: taking.pos,
           Ritiro: taking.withdrawal,
