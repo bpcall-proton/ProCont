@@ -12,6 +12,7 @@ import {
   productSalePrice,
   realTaking,
   roundMoney,
+  sellerColorClass,
   splitVat,
   today,
 } from '../domain/accounting'
@@ -841,7 +842,15 @@ export function InvoicesPanel({
                 return (
                 <tr className={`invoice-row ${dueState}`} key={invoice.id}>
                   <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
-                  <td>{invoice.supplierName || '—'}<small>{invoice.sellerName || 'Venditore non indicato'} · {invoice.description}</small></td>
+                  <td>
+                    {invoice.supplierName || '—'}
+                    <small>
+                      <span className={`seller-name ${sellerColorClass(invoice.sellerName)}`}>
+                        {invoice.sellerName || 'Venditore non indicato'}
+                      </span>
+                      {' · '}{invoice.description}
+                    </small>
+                  </td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
                   <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe</small></td>
                   <td>

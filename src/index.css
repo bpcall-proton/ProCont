@@ -2043,6 +2043,20 @@ select {
   font-size: 0.83rem;
 }
 
+.seller-name {
+  display: inline;
+  font-weight: 800;
+}
+
+.seller-color-0 { color: #ff6b81; }
+.seller-color-1 { color: #59a7ff; }
+.seller-color-2 { color: #ffd166; }
+.seller-color-3 { color: #2dd4bf; }
+.seller-color-4 { color: #c084fc; }
+.seller-color-5 { color: #fb923c; }
+.seller-color-6 { color: #4ade80; }
+.seller-color-7 { color: #f472b6; }
+
 .invoice-row {
   transition:
     background-color 160ms ease,
