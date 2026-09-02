@@ -1149,7 +1149,7 @@ function TakingsPanel() {
           POS: taking.pos,
           'Cash ritirato': taking.withdrawal,
           'IVA inclusa': taking.vat,
-          'Incasso reale (in nero)': taking.realTotal,
+          'Incasso reale': taking.realTotal,
         })),
       ),
       'Incassi',
@@ -1165,7 +1165,6 @@ function TakingsPanel() {
       <section className="stats-strip">
         <div><span>Ufficiale</span><strong>{money(official)}</strong></div>
         <div><span>Reale</span><strong>{money(real)}</strong></div>
-        <div><span>Totale incassi</span><strong>{money(official + real)}</strong></div>
         <div><span>Ritiri cash</span><strong>{money(data.takings.reduce((sum, item) => sum + item.withdrawal, 0))}</strong></div>
       </section>
       <form className="panel accounting-form" onSubmit={submit}>
@@ -1203,7 +1202,7 @@ function TakingsPanel() {
           <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
           <label>IVA inclusa in Cash + POS<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Incasso reale (in nero)<input inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
+          <label>Incasso reale totale<input inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
@@ -1325,7 +1324,7 @@ function ContactsPanel() {
         <form className="inline-create-form" onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
-          const total = takings.reduce((sum, item) => sum + item.cash + item.pos + realTaking(item), 0)
+          const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
           return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>

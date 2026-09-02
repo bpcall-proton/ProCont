@@ -62,7 +62,6 @@ export function DashboardPage() {
     (sum, taking) => sum + realTaking(taking),
     0,
   )
-  const totalTakings = official + real
   const cashResidual = Math.max(0, real - pos - withdrawals)
   const theoretical = accounting.invoices.reduce(
     (sum, invoice) => sum + invoice.theoreticalRevenue,
@@ -121,7 +120,7 @@ export function DashboardPage() {
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: sellerTheoretical,
-      stock: sellerTheoretical - sellerOfficial - sellerReal,
+      stock: sellerTheoretical - sellerReal,
     }
   })
   const unassignedInvoices = accounting.invoices.filter(
@@ -169,7 +168,7 @@ export function DashboardPage() {
       real: unassignedReal,
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: unassignedTheoretical,
-      stock: unassignedTheoretical - unassignedOfficial - unassignedReal,
+      stock: unassignedTheoretical - unassignedReal,
     })
   }
 
@@ -257,16 +256,10 @@ export function DashboardPage() {
           value={money(official)}
         />
         <StatCard
-          detail="Importo non dichiarato inserito manualmente"
+          detail="Totale effettivamente incassato"
           label="Incasso reale"
           tone="cyan"
           value={money(real)}
-        />
-        <StatCard
-          detail="Cash + POS + incasso reale"
-          label="Totale incassi"
-          tone="violet"
-          value={money(totalTakings)}
         />
         <StatCard
           detail="Cash prelevato dai punti vendita"
@@ -287,10 +280,10 @@ export function DashboardPage() {
           value={money(theoretical)}
         />
         <StatCard
-          detail="Venit teorico meno tutti gli incassi"
+          detail="Venit teorico meno incasso reale"
           label="Venit stock"
           tone="amber"
-          value={money(theoretical - totalTakings)}
+          value={money(theoretical - real)}
         />
         <StatCard
           detail="Fatture, affitti, contabile e spese registrate"
@@ -299,10 +292,10 @@ export function DashboardPage() {
           value={money(totalCosts)}
         />
         <StatCard
-          detail="Tutti gli incassi meno i costi registrati"
+          detail="Incasso reale meno i costi registrati"
           label="Risultato reale"
-          tone={totalTakings - totalCosts >= 0 ? 'green' : 'red'}
-          value={money(totalTakings - totalCosts)}
+          tone={real - totalCosts >= 0 ? 'green' : 'red'}
+          value={money(real - totalCosts)}
         />
       </section>
 
@@ -360,10 +353,6 @@ export function DashboardPage() {
                   <div>
                     <span>IVA inclusa</span>
                     <strong>{money(seller.vat)}</strong>
-                  </div>
-                  <div>
-                    <span>Totale incassi</span>
-                    <strong>{money(seller.official + seller.real)}</strong>
                   </div>
                   <div className="seller-cash-metric seller-cash-withdrawn">
                     <span>Cash ritirato</span>

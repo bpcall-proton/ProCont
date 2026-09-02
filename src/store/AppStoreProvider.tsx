@@ -37,7 +37,6 @@ import {
 import { createCompanyState } from '../data/companyState'
 import { normalizeSenderPhone } from '../domain/senderRouting'
 import {
-  officialTaking,
   realTaking,
   setMoneyCurrency,
 } from '../domain/accounting'
@@ -69,8 +68,7 @@ function withActiveCompanySummaries(state: AppState): AppState {
     0,
   )
   const realTakings = takings.reduce(
-    (total, taking) =>
-      total + officialTaking(taking) + realTaking(taking),
+    (total, taking) => total + realTaking(taking),
     0,
   )
   const review = reviewDocuments.reduce(

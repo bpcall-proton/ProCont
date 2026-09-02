@@ -19,7 +19,7 @@ verso l'azienda e il punto vendita corretti.
 - inserimento manuale, modifica e cancellazione di fatture e incassi;
 - acconti, saldi e distribuzione a cascata dei pagamenti fornitore;
 - pagina fatture pagate con ricerca per fornitore o numero;
-- incassi cash, POS, ritiri e totale reale comprensivo del non dichiarato;
+- incassi cash, POS, ritiri e totale reale effettivamente incassato;
 - anagrafiche venditori e fornitori;
 - affitti, fatture del contabile, stipendi, tasse e altre spese;
 - spese fisse mensili ripartite nel periodo selezionato;
