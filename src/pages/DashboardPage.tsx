@@ -63,6 +63,7 @@ export function DashboardPage() {
     0,
   )
   const totalTakings = official + real
+  const cashResidual = Math.max(0, real - pos - withdrawals)
   const theoretical = accounting.invoices.reduce(
     (sum, invoice) => sum + invoice.theoreticalRevenue,
     0,
@@ -96,6 +97,11 @@ export function DashboardPage() {
       (sum, taking) => sum + realTaking(taking),
       0,
     )
+    const sellerPos = takings.reduce((sum, taking) => sum + taking.pos, 0)
+    const sellerWithdrawals = takings.reduce(
+      (sum, taking) => sum + taking.withdrawal,
+      0,
+    )
     const sellerTheoretical = invoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
@@ -108,7 +114,9 @@ export function DashboardPage() {
         0,
       ),
       cash: takings.reduce((sum, taking) => sum + taking.cash, 0),
-      pos: takings.reduce((sum, taking) => sum + taking.pos, 0),
+      pos: sellerPos,
+      withdrawals: sellerWithdrawals,
+      cashResidual: Math.max(0, sellerReal - sellerPos - sellerWithdrawals),
       official: sellerOfficial,
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
@@ -131,6 +139,14 @@ export function DashboardPage() {
       (sum, taking) => sum + realTaking(taking),
       0,
     )
+    const unassignedPos = unassignedTakings.reduce(
+      (sum, taking) => sum + taking.pos,
+      0,
+    )
+    const unassignedWithdrawals = unassignedTakings.reduce(
+      (sum, taking) => sum + taking.withdrawal,
+      0,
+    )
     const unassignedTheoretical = unassignedInvoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
@@ -143,7 +159,12 @@ export function DashboardPage() {
         0,
       ),
       cash: unassignedTakings.reduce((sum, taking) => sum + taking.cash, 0),
-      pos: unassignedTakings.reduce((sum, taking) => sum + taking.pos, 0),
+      pos: unassignedPos,
+      withdrawals: unassignedWithdrawals,
+      cashResidual: Math.max(
+        0,
+        unassignedReal - unassignedPos - unassignedWithdrawals,
+      ),
       official: unassignedOfficial,
       real: unassignedReal,
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
@@ -168,7 +189,7 @@ export function DashboardPage() {
         </button>
       </header>
 
-      <section className="stats-grid">
+      <section className="stats-grid dashboard-stats-grid">
         <StatCard
           detail={`${accounting.invoices.length} documenti registrati`}
           label="Fatture ricevute"
@@ -254,6 +275,12 @@ export function DashboardPage() {
           value={money(withdrawals)}
         />
         <StatCard
+          detail="Incasso reale − POS − Cash ritirato"
+          label="Cash residuo"
+          tone="green"
+          value={money(cashResidual)}
+        />
+        <StatCard
           detail="Vendita teorica dei prodotti acquistati"
           label="Venit complessivo"
           tone="cyan"
@@ -337,6 +364,14 @@ export function DashboardPage() {
                   <div>
                     <span>Totale incassi</span>
                     <strong>{money(seller.official + seller.real)}</strong>
+                  </div>
+                  <div className="seller-cash-metric seller-cash-withdrawn">
+                    <span>Cash ritirato</span>
+                    <strong>{money(seller.withdrawals)}</strong>
+                  </div>
+                  <div className="seller-cash-metric seller-cash-residual">
+                    <span>Cash in mano attuale</span>
+                    <strong>{money(seller.cashResidual)}</strong>
                   </div>
                   <div>
                     <span>Venit stock</span>
