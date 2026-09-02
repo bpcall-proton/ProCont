@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { StatCard } from '../components/StatCard'
 import {
   activeAccounting,
@@ -8,8 +9,53 @@ import {
 } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
+type DashboardMetricKey =
+  | 'invoices'
+  | 'paid-invoices'
+  | 'remaining-invoices'
+  | 'input-vat'
+  | 'output-vat'
+  | 'vat-balance'
+  | 'cash'
+  | 'pos'
+  | 'official'
+  | 'real'
+  | 'withdrawals'
+  | 'cash-residual'
+  | 'theoretical'
+  | 'stock'
+  | 'costs'
+  | 'real-result'
+
+interface DashboardDetailRow {
+  date: string
+  category: string
+  description: string
+  reference: string
+  amount: number
+}
+
+interface DashboardMetric {
+  title: string
+  note: string
+  value: number
+  tone: 'cyan' | 'violet' | 'green' | 'amber' | 'red'
+  rows: DashboardDetailRow[]
+}
+
+function filenamePart(value: string) {
+  return (
+    value
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'azienda'
+  )
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
+  const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
   const { review } = state
   const companyId = state.accounting.activeCompanyId
   const activeCompany = state.accounting.companies.find(
@@ -80,6 +126,316 @@ export function DashboardPage() {
     0,
   )
   const totalCosts = invoiceValue + rents + accountantCosts + otherExpenses
+  const invoiceRows: DashboardDetailRow[] = accounting.invoices.map(
+    (invoice) => ({
+      date: invoice.date,
+      category: 'Fattura fornitore',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'} · ${invoice.sellerName || 'Venditore non indicato'}`,
+      amount: invoice.total,
+    }),
+  )
+  const paidInvoiceRows: DashboardDetailRow[] = accounting.invoices
+    .map((invoice) => ({
+      date: invoice.paymentDate ?? invoice.date,
+      category: invoice.settled ? 'Fattura saldata' : 'Acconto',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'} · ${invoice.paymentMethod ?? 'Metodo non indicato'}`,
+      amount: invoice.settled ? invoice.total : invoice.paidAmount,
+    }))
+    .filter((row) => row.amount > 0)
+  const remainingInvoiceRows: DashboardDetailRow[] = accounting.invoices
+    .map((invoice) => ({
+      date: invoice.dueDate || invoice.date,
+      category: 'Residuo fattura',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'} · scadenza ${invoice.dueDate || 'non indicata'}`,
+      amount: invoiceRemaining(invoice),
+    }))
+    .filter((row) => row.amount > 0)
+  const inputVatRows: DashboardDetailRow[] = [
+    ...accounting.invoices.map((invoice) => ({
+      date: invoice.date,
+      category: 'IVA fattura fornitore',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'}`,
+      amount: invoice.vat,
+    })),
+    ...accounting.rentals.map((rental) => ({
+      date: rental.date,
+      category: 'IVA affitto',
+      description: rental.property || 'Immobile non indicato',
+      reference: rental.period || 'Periodo non indicato',
+      amount: rental.vat,
+    })),
+    ...accounting.accountantInvoices.map((invoice) => ({
+      date: invoice.date,
+      category: 'IVA contabile',
+      description: invoice.description || 'Fattura contabile',
+      reference: `Fattura ${invoice.number || 'senza numero'}`,
+      amount: invoice.vat,
+    })),
+  ].filter((row) => row.amount !== 0)
+  const outputVatRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'IVA incassi',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: 'IVA inclusa in Cash + POS',
+      amount: taking.vat,
+    }))
+    .filter((row) => row.amount !== 0)
+  const cashRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'Cash',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: taking.supplierName || 'Fornitore non indicato',
+      amount: taking.cash,
+    }))
+    .filter((row) => row.amount !== 0)
+  const posRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'POS',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: taking.supplierName || 'Fornitore non indicato',
+      amount: taking.pos,
+    }))
+    .filter((row) => row.amount !== 0)
+  const officialRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'Incasso registrato',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: `Cash ${money(taking.cash)} · POS ${money(taking.pos)}`,
+      amount: officialTaking(taking),
+    }))
+    .filter((row) => row.amount !== 0)
+  const realRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'Incasso reale',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: `Incasso registrato ${money(officialTaking(taking))}`,
+      amount: realTaking(taking),
+    }))
+    .filter((row) => row.amount !== 0)
+  const withdrawalRows: DashboardDetailRow[] = accounting.takings
+    .map((taking) => ({
+      date: taking.date,
+      category: 'Cash ritirato',
+      description: taking.sellerName || 'Venditore non indicato',
+      reference: taking.supplierName || 'Fornitore non indicato',
+      amount: taking.withdrawal,
+    }))
+    .filter((row) => row.amount !== 0)
+  const rawCashResidual = real - pos - withdrawals
+  const cashResidualRows: DashboardDetailRow[] = [
+    {
+      date: '',
+      category: 'Incasso reale',
+      description: 'Totale effettivamente incassato',
+      reference: 'Valore di partenza',
+      amount: real,
+    },
+    {
+      date: '',
+      category: 'POS',
+      description: 'Pagamenti elettronici',
+      reference: 'Importo sottratto',
+      amount: -pos,
+    },
+    {
+      date: '',
+      category: 'Cash ritirato',
+      description: 'Contanti già ritirati',
+      reference: 'Importo sottratto',
+      amount: -withdrawals,
+    },
+    ...(rawCashResidual < 0
+      ? [
+          {
+            date: '',
+            category: 'Limite minimo',
+            description: 'Il cash residuo non può essere negativo',
+            reference: 'Adeguamento a zero',
+            amount: -rawCashResidual,
+          },
+        ]
+      : []),
+  ]
+  const theoreticalRows: DashboardDetailRow[] = accounting.invoices
+    .map((invoice) => ({
+      date: invoice.date,
+      category: 'Venit teorico',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'} · ${invoice.sellerName || 'Venditore non indicato'}`,
+      amount: invoice.theoreticalRevenue,
+    }))
+    .filter((row) => row.amount !== 0)
+  const rentalRows: DashboardDetailRow[] = accounting.rentals.map(
+    (rental) => ({
+      date: rental.date,
+      category: 'Affitto',
+      description: rental.property || 'Immobile non indicato',
+      reference: rental.period || 'Periodo non indicato',
+      amount: rental.total,
+    }),
+  )
+  const accountantRows: DashboardDetailRow[] =
+    accounting.accountantInvoices.map((invoice) => ({
+      date: invoice.date,
+      category: 'Contabile',
+      description: invoice.description || 'Fattura contabile',
+      reference: `Fattura ${invoice.number || 'senza numero'}`,
+      amount: invoice.total,
+    }))
+  const expenseRows: DashboardDetailRow[] = accounting.expenses.map(
+    (expense) => ({
+      date: expense.date,
+      category: 'Spesa',
+      description: expense.description || expense.type,
+      reference: expense.sellerName || expense.notes || 'Spesa aziendale',
+      amount: expense.amount,
+    }),
+  )
+  const costRows = [
+    ...invoiceRows,
+    ...rentalRows,
+    ...accountantRows,
+    ...expenseRows,
+  ]
+  const negativeCostRows = costRows.map((row) => ({
+    ...row,
+    amount: -row.amount,
+  }))
+  const metrics: Record<DashboardMetricKey, DashboardMetric> = {
+    invoices: {
+      title: 'Fatture ricevute',
+      note: 'Totale delle fatture fornitori registrate per l’azienda.',
+      value: invoiceValue,
+      tone: 'cyan',
+      rows: invoiceRows,
+    },
+    'paid-invoices': {
+      title: 'Fatture pagate',
+      note: 'Acconti e saldi registrati sulle fatture fornitori.',
+      value: paidInvoices,
+      tone: 'green',
+      rows: paidInvoiceRows,
+    },
+    'remaining-invoices': {
+      title: 'Residuo da pagare',
+      note: 'Importi ancora dovuti ai fornitori.',
+      value: remainingInvoices,
+      tone: 'amber',
+      rows: remainingInvoiceRows,
+    },
+    'input-vat': {
+      title: 'IVA acquisti',
+      note: 'IVA registrata su fatture fornitori, affitti e contabile.',
+      value: inputVat,
+      tone: 'cyan',
+      rows: inputVatRows,
+    },
+    'output-vat': {
+      title: 'IVA incassi',
+      note: 'IVA già inclusa negli importi Cash + POS.',
+      value: outputVat,
+      tone: 'amber',
+      rows: outputVatRows,
+    },
+    'vat-balance': {
+      title:
+        vatBalance > 0
+          ? 'IVA: a debito'
+          : vatBalance < 0
+            ? 'IVA: a credito'
+            : 'IVA: in pareggio',
+      note: 'Differenza tra IVA incassi e IVA acquisti.',
+      value: Math.abs(vatBalance),
+      tone: vatBalance > 0 ? 'red' : vatBalance < 0 ? 'green' : 'cyan',
+      rows: [
+        ...outputVatRows,
+        ...inputVatRows.map((row) => ({ ...row, amount: -row.amount })),
+      ],
+    },
+    cash: {
+      title: 'Cash',
+      note: 'Contanti registrati negli incassi.',
+      value: cash,
+      tone: 'green',
+      rows: cashRows,
+    },
+    pos: {
+      title: 'POS',
+      note: 'Pagamenti elettronici registrati negli incassi.',
+      value: pos,
+      tone: 'green',
+      rows: posRows,
+    },
+    official: {
+      title: 'Incasso registrato',
+      note: 'Somma di Cash e POS, con IVA già compresa.',
+      value: official,
+      tone: 'green',
+      rows: officialRows,
+    },
+    real: {
+      title: 'Incasso reale',
+      note: 'Totale effettivamente incassato, autonomo dal fiscale.',
+      value: real,
+      tone: 'cyan',
+      rows: realRows,
+    },
+    withdrawals: {
+      title: 'Cash ritirato',
+      note: 'Contanti ritirati dai venditori e dai punti vendita.',
+      value: withdrawals,
+      tone: 'violet',
+      rows: withdrawalRows,
+    },
+    'cash-residual': {
+      title: 'Cash residuo',
+      note: 'Incasso reale meno POS e Cash ritirato.',
+      value: cashResidual,
+      tone: 'green',
+      rows: cashResidualRows,
+    },
+    theoretical: {
+      title: 'Venit complessivo',
+      note: 'Vendita teorica dei prodotti acquistati.',
+      value: theoretical,
+      tone: 'cyan',
+      rows: theoreticalRows,
+    },
+    stock: {
+      title: 'Venit stock',
+      note: 'Venit teorico meno incasso reale.',
+      value: theoretical - real,
+      tone: 'amber',
+      rows: [
+        ...theoreticalRows,
+        ...realRows.map((row) => ({ ...row, amount: -row.amount })),
+      ],
+    },
+    costs: {
+      title: 'Costi complessivi',
+      note: 'Fatture fornitori, affitti, contabile e altre spese.',
+      value: totalCosts,
+      tone: 'amber',
+      rows: costRows,
+    },
+    'real-result': {
+      title: 'Risultato reale',
+      note: 'Incasso reale meno tutti i costi registrati.',
+      value: real - totalCosts,
+      tone: real - totalCosts >= 0 ? 'green' : 'red',
+      rows: [...realRows, ...negativeCostRows],
+    },
+  }
+  const selectedMetric = detail ? metrics[detail] : null
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
   const sellerSummaries = accounting.sellers.map((seller) => {
     const invoices = accounting.invoices.filter(
@@ -172,6 +528,109 @@ export function DashboardPage() {
     })
   }
 
+  async function exportDetailExcel() {
+    if (!selectedMetric) return
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        selectedMetric.rows.map((row) => ({
+          Data: row.date,
+          Categoria: row.category,
+          Descrizione: row.description,
+          Riferimento: row.reference,
+          Importo: row.amount,
+        })),
+      ),
+      'Dettaglio',
+    )
+    XLSX.writeFile(
+      workbook,
+      `panoramica-${filenamePart(selectedMetric.title)}-${filenamePart(activeCompany?.name ?? '')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    )
+  }
+
+  if (selectedMetric) {
+    return (
+      <div className="page-stack">
+        <header className="page-heading">
+          <div>
+            <span className="eyebrow">DETTAGLIO PANORAMICA</span>
+            <h1>{selectedMetric.title}</h1>
+            <p>{selectedMetric.note}</p>
+            <div className="detail-heading-actions">
+              <button
+                className="button button-secondary"
+                onClick={() => setDetail(null)}
+                type="button"
+              >
+                Torna alla Panoramica
+              </button>
+              <button
+                className="button button-primary"
+                onClick={() => void exportDetailExcel()}
+                type="button"
+              >
+                Esporta Excel
+              </button>
+            </div>
+          </div>
+        </header>
+        <section className="report-kpis">
+          <article
+            className={`report-card report-${selectedMetric.tone}`}
+          >
+            <span>{selectedMetric.title}</span>
+            <strong>{money(selectedMetric.value)}</strong>
+          </article>
+          <article className="report-card report-violet">
+            <span>Voci nel dettaglio</span>
+            <strong>{selectedMetric.rows.length}</strong>
+          </article>
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">COMPOSIZIONE DEL VALORE</span>
+              <h2>Dettaglio completo</h2>
+            </div>
+          </div>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Categoria</th>
+                  <th>Descrizione</th>
+                  <th>Riferimento</th>
+                  <th>Importo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedMetric.rows.map((row, index) => (
+                  <tr key={`${row.category}-${row.date}-${index}`}>
+                    <td>{row.date || '—'}</td>
+                    <td>{row.category}</td>
+                    <td>{row.description}</td>
+                    <td>{row.reference}</td>
+                    <td>{money(row.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {selectedMetric.rows.length === 0 && (
+              <div className="empty-state compact-empty">
+                <strong>Nessun dato registrato</strong>
+                <span>La card non contiene ancora voci da mostrare.</span>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="page-stack">
       <header className="page-heading">
@@ -192,30 +651,35 @@ export function DashboardPage() {
         <StatCard
           detail={`${accounting.invoices.length} documenti registrati`}
           label="Fatture ricevute"
+          onClick={() => setDetail('invoices')}
           tone="cyan"
           value={money(invoiceValue)}
         />
         <StatCard
           detail="Acconti e saldi registrati"
           label="Fatture pagate"
+          onClick={() => setDetail('paid-invoices')}
           tone="green"
           value={money(paidInvoices)}
         />
         <StatCard
           detail="Importo ancora dovuto ai fornitori"
           label="Residuo da pagare"
+          onClick={() => setDetail('remaining-invoices')}
           tone="amber"
           value={money(remainingInvoices)}
         />
         <StatCard
           detail="Su fatture, affitti e contabile"
           label="IVA acquisti"
+          onClick={() => setDetail('input-vat')}
           tone="cyan"
           value={money(inputVat)}
         />
         <StatCard
           detail="Già inclusa negli importi Cash + POS"
           label="IVA incassi"
+          onClick={() => setDetail('output-vat')}
           tone="amber"
           value={money(outputVat)}
         />
@@ -234,66 +698,77 @@ export function DashboardPage() {
                 ? 'IVA: a credito'
                 : 'IVA: in pareggio'
           }
+          onClick={() => setDetail('vat-balance')}
           tone={vatBalance > 0 ? 'red' : vatBalance < 0 ? 'green' : 'cyan'}
           value={money(Math.abs(vatBalance))}
         />
         <StatCard
           detail="Contanti registrati negli incassi"
           label="Cash"
+          onClick={() => setDetail('cash')}
           tone="green"
           value={money(cash)}
         />
         <StatCard
           detail="Pagamenti elettronici registrati"
           label="POS"
+          onClick={() => setDetail('pos')}
           tone="green"
           value={money(pos)}
         />
         <StatCard
           detail="Cash + POS, IVA già compresa"
           label="Incasso registrato"
+          onClick={() => setDetail('official')}
           tone="green"
           value={money(official)}
         />
         <StatCard
           detail="Totale effettivamente incassato"
           label="Incasso reale"
+          onClick={() => setDetail('real')}
           tone="cyan"
           value={money(real)}
         />
         <StatCard
           detail="Cash prelevato dai punti vendita"
           label="Cash ritirato"
+          onClick={() => setDetail('withdrawals')}
           tone="violet"
           value={money(withdrawals)}
         />
         <StatCard
           detail="Incasso reale − POS − Cash ritirato"
           label="Cash residuo"
+          onClick={() => setDetail('cash-residual')}
           tone="green"
           value={money(cashResidual)}
         />
         <StatCard
           detail="Vendita teorica dei prodotti acquistati"
           label="Venit complessivo"
+          onClick={() => setDetail('theoretical')}
           tone="cyan"
           value={money(theoretical)}
         />
         <StatCard
           detail="Venit teorico meno incasso reale"
           label="Venit stock"
+          onClick={() => setDetail('stock')}
           tone="amber"
           value={money(theoretical - real)}
         />
         <StatCard
           detail="Fatture, affitti, contabile e spese registrate"
           label="Costi complessivi"
+          onClick={() => setDetail('costs')}
           tone="amber"
           value={money(totalCosts)}
         />
         <StatCard
           detail="Incasso reale meno i costi registrati"
           label="Risultato reale"
+          onClick={() => setDetail('real-result')}
           tone={real - totalCosts >= 0 ? 'green' : 'red'}
           value={money(real - totalCosts)}
         />
