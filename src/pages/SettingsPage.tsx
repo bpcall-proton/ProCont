@@ -7,6 +7,10 @@ import {
 import type { AccountingCompany, Locale } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
 import {
+  DriveRepository,
+  type DriveRevisionList,
+} from '../data/driveRepository'
+import {
   createDrivePairing,
   disconnectDriveSession,
   driveServiceConfigured,
@@ -169,6 +173,15 @@ export function SettingsPage() {
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
   const [googleMessage, setGoogleMessage] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [cloudRevisionBusy, setCloudRevisionBusy] = useState(false)
+  const [cloudRevisionMessage, setCloudRevisionMessage] = useState<
+    string | null
+  >(null)
+  const [cloudRevisionCompanyId, setCloudRevisionCompanyId] = useState<
+    string | null
+  >(null)
+  const [cloudRevisions, setCloudRevisions] =
+    useState<DriveRevisionList | null>(null)
   const [drivePairing, setDrivePairing] = useState<DrivePairing | null>(null)
   const [driveFolderConfirmation, setDriveFolderConfirmation] = useState<
     'warning' | 'final' | null
@@ -288,6 +301,66 @@ export function SettingsPage() {
     setDrivePairing(null)
     setGoogleMessage('Dispositivo scollegato da Google Drive.')
     setGoogleBusy(false)
+  }
+
+  async function loadCloudRevisions() {
+    if (!companyId) return
+    setCloudRevisionBusy(true)
+    setCloudRevisionMessage(null)
+    try {
+      const result = await new DriveRepository(companyId).listCompanyRevisions(
+        companyId,
+      )
+      setCloudRevisions(result)
+      setCloudRevisionCompanyId(companyId)
+      setCloudRevisionMessage(
+        result.revisions.length > 1
+          ? 'Versioni disponibili: confronta data e dimensione prima di ripristinare.'
+          : 'Non sono disponibili versioni precedenti recuperabili.',
+      )
+    } catch (error) {
+      setCloudRevisions(null)
+      setCloudRevisionCompanyId(companyId)
+      setCloudRevisionMessage(
+        error instanceof Error
+          ? error.message
+          : 'Ricerca versioni Cloud non riuscita',
+      )
+    } finally {
+      setCloudRevisionBusy(false)
+    }
+  }
+
+  async function restoreCloudRevision(revisionId: string) {
+    if (!companyId || !cloudRevisions) return
+    const firstConfirmation = window.confirm(
+      'ATTENZIONE: stai per ripristinare una versione precedente dell’archivio Cloud. La versione attuale resterà nella cronologia. Continuare?',
+    )
+    if (!firstConfirmation) return
+    const finalConfirmation = window.confirm(
+      'SEI SICURO AL 100% DI VOLER RIPRISTINARE QUESTA VERSIONE?',
+    )
+    if (!finalConfirmation) return
+    setCloudRevisionBusy(true)
+    setCloudRevisionMessage('Ripristino Cloud in corso. Non chiudere l’app.')
+    try {
+      await new DriveRepository(companyId).restoreCompanyRevision(
+        companyId,
+        revisionId,
+        cloudRevisions.currentRevision,
+      )
+      setCloudRevisionMessage(
+        'Versione ripristinata. Ricaricamento dei dati in corso.',
+      )
+      window.location.reload()
+    } catch (error) {
+      setCloudRevisionMessage(
+        error instanceof Error
+          ? error.message
+          : 'Ripristino Cloud non riuscito',
+      )
+      setCloudRevisionBusy(false)
+    }
   }
 
   function addCompany(event: FormEvent) {
@@ -694,6 +767,65 @@ export function SettingsPage() {
             <p aria-live="polite" className="import-message">
               {googleMessage}
             </p>
+          )}
+          {driveAccountEmail && accountingCompany && (
+            <div className="cloud-recovery-panel">
+              <div>
+                <strong>Recupero versioni Cloud</strong>
+                <small>
+                  Cerca le copie precedenti dell’archivio di{' '}
+                  {accountingCompany.name}. Nessun dato viene sovrascritto
+                  durante la ricerca.
+                </small>
+              </div>
+              <button
+                className="button button-secondary"
+                disabled={cloudRevisionBusy}
+                onClick={() => void loadCloudRevisions()}
+                type="button"
+              >
+                {cloudRevisionBusy
+                  ? 'Ricerca in corso...'
+                  : 'Cerca versioni precedenti'}
+              </button>
+              {cloudRevisionCompanyId === companyId &&
+                cloudRevisions?.revisions.map((item) => {
+                  const current =
+                    item.id === cloudRevisions.currentRevisionId
+                  return (
+                    <div className="cloud-revision-row" key={item.id}>
+                      <span>
+                        <strong>
+                          {new Intl.DateTimeFormat('it-IT', {
+                            dateStyle: 'short',
+                            timeStyle: 'medium',
+                          }).format(new Date(item.modifiedTime))}
+                        </strong>
+                        <small>
+                          {(item.size / 1024).toLocaleString('it-IT', {
+                            maximumFractionDigits: 1,
+                          })}{' '}
+                          KB
+                          {current ? ' · versione attuale' : ''}
+                        </small>
+                      </span>
+                      <button
+                        className="button"
+                        disabled={cloudRevisionBusy || current}
+                        onClick={() => void restoreCloudRevision(item.id)}
+                        type="button"
+                      >
+                        {current ? 'Attuale' : 'Ripristina'}
+                      </button>
+                    </div>
+                  )
+                })}
+              {cloudRevisionMessage && (
+                <p aria-live="polite" className="import-message">
+                  {cloudRevisionMessage}
+                </p>
+              )}
+            </div>
           )}
           <p className="settings-note">
             I file JSON restano nel tuo Google Drive. Il programma conserva
