@@ -129,6 +129,7 @@ function Workspace() {
     loading,
     syncState,
     syncMessage,
+    retrySync,
     setActiveAccountingCompany,
   } = useAppStore()
   const [page, setPage] = useState<Page>('dashboard')
@@ -282,6 +283,15 @@ function Workspace() {
           </div>
           <div className="topbar-status">
             <SyncBadge message={syncMessage} state={syncState} />
+            {syncState === 'error' && (
+              <button
+                className="sync-retry-button"
+                onClick={() => void retrySync()}
+                type="button"
+              >
+                Sincronizza / forza salvataggio
+              </button>
+            )}
             <DataModeBadge mode={state.dataSettings.mode} />
           </div>
         </header>

@@ -38,6 +38,7 @@ export interface AppStoreContextValue {
   driveAccountEmail: string | null
   cloudAvailable: boolean
   refreshDriveConnection: () => void
+  retrySync: () => Promise<void>
   updateCompany: (patch: Partial<Company>) => void
   setActiveAccountingCompany: (companyId: string) => void
   addAccountingCompany: (
