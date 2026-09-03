@@ -170,6 +170,9 @@ export function SettingsPage() {
   const [googleMessage, setGoogleMessage] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
   const [drivePairing, setDrivePairing] = useState<DrivePairing | null>(null)
+  const [driveFolderConfirmation, setDriveFolderConfirmation] = useState<
+    'warning' | 'final' | null
+  >(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
@@ -206,6 +209,19 @@ export function SettingsPage() {
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
           : 'Sincronizzato'
+
+  function requestDriveFolderChange() {
+    if (driveFolderConfigured) {
+      setDriveFolderConfirmation('warning')
+      return
+    }
+    void selectDriveFolder()
+  }
+
+  async function confirmDriveFolderChange() {
+    setDriveFolderConfirmation(null)
+    await selectDriveFolder()
+  }
 
   async function prepareGoogleConnection() {
     setGoogleBusy(true)
@@ -733,7 +749,7 @@ export function SettingsPage() {
             <button
               className="button button-primary"
               disabled={!window.desktopApp}
-              onClick={() => void selectDriveFolder()}
+              onClick={requestDriveFolderChange}
               type="button"
             >
               Scegli cartella
@@ -788,6 +804,77 @@ export function SettingsPage() {
             nella sezione precedente.
           </p>
         </article>
+        {driveFolderConfirmation && (
+          <div className="drive-folder-confirmation-overlay">
+            <div
+              aria-labelledby="drive-folder-confirmation-title"
+              aria-modal="true"
+              className={`drive-folder-confirmation ${
+                driveFolderConfirmation === 'warning'
+                  ? 'drive-folder-confirmation-flashing'
+                  : ''
+              }`}
+              role="dialog"
+            >
+              {driveFolderConfirmation === 'warning' ? (
+                <>
+                  <span className="drive-folder-confirmation-icon">!</span>
+                  <h2 id="drive-folder-confirmation-title">
+                    STAI CAMBIANDO LA CARTELLA
+                  </h2>
+                  <strong>ATTENZIONE: PERICOLO DI PERDITA DATI</strong>
+                  <p>
+                    La cartella memorizzata resterà invariata finché non
+                    completi entrambe le conferme.
+                  </p>
+                  <div className="drive-folder-confirmation-actions">
+                    <button
+                      className="button button-secondary"
+                      onClick={() => setDriveFolderConfirmation(null)}
+                      type="button"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      className="button danger-button"
+                      onClick={() => setDriveFolderConfirmation('final')}
+                      type="button"
+                    >
+                      Ho capito, continua
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="drive-folder-confirmation-icon">!</span>
+                  <h2 id="drive-folder-confirmation-title">
+                    SEI SICURO AL 100%?
+                  </h2>
+                  <p>
+                    Solo scegliendo SÌ potrai selezionare una nuova cartella.
+                    Scegliendo NO non cambierà nulla.
+                  </p>
+                  <div className="drive-folder-confirmation-actions">
+                    <button
+                      className="button button-secondary"
+                      onClick={() => setDriveFolderConfirmation(null)}
+                      type="button"
+                    >
+                      NO
+                    </button>
+                    <button
+                      className="button danger-button"
+                      onClick={() => void confirmDriveFolderChange()}
+                      type="button"
+                    >
+                      SÌ
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <article className="panel integration-guide">
           <div className="panel-heading">

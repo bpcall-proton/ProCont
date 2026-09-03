@@ -1426,6 +1426,93 @@ select {
   margin-top: 16px;
 }
 
+.drive-folder-confirmation-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 4, 10, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.drive-folder-confirmation {
+  width: min(480px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 28px;
+  border: 2px solid var(--red);
+  border-radius: 18px;
+  color: #fff;
+  text-align: center;
+  background: #24070d;
+  box-shadow: 0 0 36px rgba(244, 63, 94, 0.45);
+}
+
+.drive-folder-confirmation-flashing {
+  animation: drive-folder-danger-flash 0.8s ease-in-out infinite alternate;
+}
+
+.drive-folder-confirmation-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #31040c;
+  background: #fb7185;
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.drive-folder-confirmation h2,
+.drive-folder-confirmation p {
+  margin: 0;
+}
+
+.drive-folder-confirmation > strong {
+  color: #fecdd3;
+  font-size: 1rem;
+}
+
+.drive-folder-confirmation p {
+  color: #ffe4e6;
+  line-height: 1.55;
+}
+
+.drive-folder-confirmation-actions {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.drive-folder-confirmation-actions .button {
+  min-width: 120px;
+}
+
+@keyframes drive-folder-danger-flash {
+  from {
+    border-color: #fb7185;
+    background: #24070d;
+    box-shadow: 0 0 20px rgba(244, 63, 94, 0.35);
+  }
+
+  to {
+    border-color: #ff1744;
+    background: #4c0714;
+    box-shadow: 0 0 54px rgba(255, 23, 68, 0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-folder-confirmation-flashing {
+    animation: none;
+  }
+}
+
 .archive-location-stack {
   display: grid;
   gap: 10px;
@@ -2526,6 +2613,18 @@ select {
 }
 
 @media (max-width: 620px) {
+  .drive-folder-confirmation {
+    padding: 22px 18px;
+  }
+
+  .drive-folder-confirmation-actions {
+    flex-direction: column;
+  }
+
+  .drive-folder-confirmation-actions .button {
+    width: 100%;
+  }
+
   .sidebar nav {
     display: flex;
     gap: 4px;
