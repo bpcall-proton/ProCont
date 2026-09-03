@@ -230,7 +230,9 @@ export function AccountingPage({
         </div>
       ) : (
         <>
-          {section === 'invoices' && <InvoicesPanel />}
+          {section === 'invoices' && (
+            <InvoicesPanel key={active.company.id} />
+          )}
           {section === 'takings' && <TakingsPanel />}
           {section === 'contacts' && <ContactsPanel />}
           {section === 'expenses' && <ExpensesPanel />}
@@ -288,6 +290,7 @@ export function InvoicesPanel({
   const [supplierFilter, setSupplierFilter] = useState('')
   const [sellerFilter, setSellerFilter] = useState('')
   const [monthFilter, setMonthFilter] = useState('')
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
   const [paymentTarget, setPaymentTarget] =
     useState<AccountingInvoice | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -348,6 +351,15 @@ export function InvoicesPanel({
     (sum, item) => sum + item.theoreticalRevenue,
     0,
   )
+  const selectedInvoices = invoices.filter((invoice) =>
+    selectedInvoiceIds.includes(invoice.id),
+  )
+  const selectedInvoiceTotal = selectedInvoices.reduce(
+    (sum, invoice) => sum + invoice.total,
+    0,
+  )
+  const allVisibleInvoicesSelected =
+    invoices.length > 0 && selectedInvoices.length === invoices.length
   const invoiceTotal = roundMoney(
     numberValue(form.taxableAmount) + numberValue(form.vat),
   )
@@ -571,10 +583,31 @@ export function InvoicesPanel({
 
   function remove(id: string) {
     if (!window.confirm('Eliminare questa fattura?')) return
+    setSelectedInvoiceIds((current) =>
+      current.filter((invoiceId) => invoiceId !== id),
+    )
     updateAccounting((current) => ({
       ...current,
       invoices: current.invoices.filter((item) => item.id !== id),
     }))
+  }
+
+  function toggleInvoiceSelection(id: string) {
+    setSelectedInvoiceIds((current) =>
+      current.includes(id)
+        ? current.filter((invoiceId) => invoiceId !== id)
+        : [...current, id],
+    )
+  }
+
+  function toggleAllVisibleInvoices() {
+    setSelectedInvoiceIds(
+      allVisibleInvoicesSelected ? [] : invoices.map((invoice) => invoice.id),
+    )
+  }
+
+  function resetInvoiceSelection() {
+    setSelectedInvoiceIds([])
   }
 
   function addPayment(event: FormEvent) {
@@ -916,32 +949,81 @@ export function InvoicesPanel({
       <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ''}`}>
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
+          <div className="invoice-selection-total" aria-live="polite">
+            <small>Totale fatture selezionate</small>
+            <strong>{money(selectedInvoiceTotal)}</strong>
+            <span>
+              {selectedInvoices.length}{' '}
+              {selectedInvoices.length === 1 ? 'fattura' : 'fatture'}
+            </span>
+          </div>
           <div className="invoice-filters">
-            <select aria-label="Filtra per stato" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+            <select
+              aria-label="Filtra per stato"
+              value={filter}
+              onChange={(event) => {
+                setFilter(event.target.value as typeof filter)
+                resetInvoiceSelection()
+              }}
+            >
               <option value="all">Tutti gli stati</option>
               <option value="open">Da pagare</option>
               <option value="paid">Pagate</option>
             </select>
-            <select aria-label="Filtra per fornitore" value={activeSupplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+            <select
+              aria-label="Filtra per fornitore"
+              value={activeSupplierFilter}
+              onChange={(event) => {
+                setSupplierFilter(event.target.value)
+                resetInvoiceSelection()
+              }}
+            >
               <option value="">Tutti i fornitori</option>
               {data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select>
-            <select aria-label="Filtra per venditore" value={activeSellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+            <select
+              aria-label="Filtra per venditore"
+              value={activeSellerFilter}
+              onChange={(event) => {
+                setSellerFilter(event.target.value)
+                resetInvoiceSelection()
+              }}
+            >
               <option value="">Tutti i venditori</option>
               {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
-            <input aria-label="Filtra per mese fattura" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+            <input
+              aria-label="Filtra per mese fattura"
+              type="month"
+              value={monthFilter}
+              onChange={(event) => {
+                setMonthFilter(event.target.value)
+                resetInvoiceSelection()
+              }}
+            />
             <button className="button button-secondary" disabled={invoices.length === 0} onClick={() => void exportInvoicesExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
         <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ''}`}>
           <table className="data-table">
-            <thead><tr><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
+            <thead><tr><th className="invoice-selection-column"><input
+              aria-label="Seleziona tutte le fatture visualizzate"
+              checked={allVisibleInvoicesSelected}
+              disabled={invoices.length === 0}
+              onChange={toggleAllVisibleInvoices}
+              type="checkbox"
+            /></th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
               {invoices.map((invoice) => {
                 const dueState = invoiceDueState(invoice)
                 return (
                 <tr className={`invoice-row ${dueState}`} key={invoice.id}>
+                  <td className="invoice-selection-column"><input
+                    aria-label={`Seleziona fattura ${invoice.number || invoice.date}`}
+                    checked={selectedInvoiceIds.includes(invoice.id)}
+                    onChange={() => toggleInvoiceSelection(invoice.id)}
+                    type="checkbox"
+                  /></td>
                   <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
                   <td>
                     {invoice.supplierName || '—'}

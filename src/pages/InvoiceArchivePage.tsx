@@ -43,7 +43,10 @@ export function InvoiceArchivePage({ onBack }: InvoiceArchivePageProps) {
         </div>
       </header>
 
-      <InvoicesPanel archiveOnly />
+      <InvoicesPanel
+        archiveOnly
+        key={state.accounting.activeCompanyId ?? 'no-company'}
+      />
     </div>
   )
 }

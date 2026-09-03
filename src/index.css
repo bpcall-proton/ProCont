@@ -2156,6 +2156,27 @@ select {
   align-items: flex-start;
 }
 
+.invoice-selection-total {
+  min-width: 180px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid rgba(52, 211, 153, 0.38);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.invoice-selection-total small,
+.invoice-selection-total span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.invoice-selection-total strong {
+  color: #6ee7b7;
+  font-size: 1.08rem;
+}
+
 .invoice-filters {
   display: flex;
   flex-wrap: wrap;
@@ -2178,6 +2199,22 @@ select {
   padding: 0 12px;
   border-radius: 9px;
   font-size: 0.76rem;
+}
+
+.data-table th.invoice-selection-column,
+.data-table td.invoice-selection-column {
+  width: 42px;
+  min-width: 42px;
+  padding-right: 4px;
+  text-align: center;
+}
+
+.invoice-selection-column input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
 .integration-steps {
