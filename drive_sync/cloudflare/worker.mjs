@@ -331,7 +331,7 @@ async function findDriveFile(folderId, key, accessToken) {
       'trashed = false',
     ].join(' and '),
     spaces: 'drive',
-    fields: 'files(id,name,md5Checksum,modifiedTime)',
+    fields: 'files(id,name,md5Checksum,modifiedTime,headRevisionId)',
   })
   const response = await driveRequest(
     'GET',
@@ -542,6 +542,158 @@ async function readStorage(request, env, key) {
   return jsonResponse({ content, revision: revision(driveFile) })
 }
 
+async function listStorageRevisions(request, env, key) {
+  key = validateStorageKey(key)
+  const { account } = await deviceAccount(request, env)
+  const accessToken = await refreshAccessToken(account, env)
+  const folderId = await ensureDriveFolder(account, accessToken, env)
+  const driveFile = await findDriveFile(folderId, key, accessToken)
+  if (!driveFile) {
+    throw new HttpError(404, 'Archivio non presente')
+  }
+  const revisionsUrl = new URL(
+    `${DRIVE_API_URL}/files/${driveFile.id}/revisions`,
+  )
+  revisionsUrl.search = new URLSearchParams({
+    pageSize: '100',
+    fields:
+      'revisions(id,modifiedTime,size,keepForever,md5Checksum)',
+  })
+  const response = await driveRequest(
+    'GET',
+    revisionsUrl.toString(),
+    accessToken,
+  )
+  const revisions = ((await response.json()).revisions ?? [])
+    .map((item) => ({
+      id: item.id,
+      modified_time: item.modifiedTime,
+      size: Number(item.size ?? 0),
+      keep_forever: Boolean(item.keepForever),
+      checksum: item.md5Checksum ?? null,
+    }))
+    .sort((left, right) =>
+      String(right.modified_time).localeCompare(String(left.modified_time)),
+    )
+  return jsonResponse({
+    current_revision: revision(driveFile),
+    current_revision_id: driveFile.headRevisionId ?? null,
+    revisions,
+  })
+}
+
+function validateRevisionId(revisionId) {
+  if (
+    !revisionId ||
+    revisionId.length > 140 ||
+    !/^[A-Za-z0-9_-]+$/.test(revisionId)
+  ) {
+    throw new HttpError(400, 'Versione archivio non valida')
+  }
+  return revisionId
+}
+
+async function keepDriveRevision(fileId, revisionId, accessToken) {
+  const keepUrl = new URL(
+    `${DRIVE_API_URL}/files/${fileId}/revisions/${revisionId}`,
+  )
+  keepUrl.searchParams.set('fields', 'id,keepForever')
+  await driveRequest('PATCH', keepUrl.toString(), accessToken, {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keepForever: true }),
+  })
+}
+
+async function createDriveBackupCopy(
+  driveFile,
+  folderId,
+  key,
+  accessToken,
+) {
+  const backupUrl = new URL(
+    `${DRIVE_API_URL}/files/${driveFile.id}/copy`,
+  )
+  backupUrl.searchParams.set('fields', 'id,name')
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const response = await driveRequest(
+    'POST',
+    backupUrl.toString(),
+    accessToken,
+    {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `backup-${key}-${timestamp}.json`,
+        parents: [folderId],
+      }),
+    },
+  )
+  return response.json()
+}
+
+async function restoreStorageRevision(request, env, key, revisionId) {
+  key = validateStorageKey(key)
+  revisionId = validateRevisionId(revisionId)
+  const payload = await readJson(request)
+  const { account } = await deviceAccount(request, env)
+  const accessToken = await refreshAccessToken(account, env)
+  const folderId = await ensureDriveFolder(account, accessToken, env)
+  const driveFile = await findDriveFile(folderId, key, accessToken)
+  if (!driveFile) {
+    throw new HttpError(404, 'Archivio non presente')
+  }
+  if (payload.expected_revision !== revision(driveFile)) {
+    throw new HttpError(
+      409,
+      'Archivio aggiornato da un altro dispositivo: ricarica le versioni',
+    )
+  }
+  const backupFile = await createDriveBackupCopy(
+    driveFile,
+    folderId,
+    key,
+    accessToken,
+  )
+  await keepDriveRevision(driveFile.id, revisionId, accessToken)
+  const revisionUrl = new URL(
+    `${DRIVE_API_URL}/files/${driveFile.id}/revisions/${revisionId}`,
+  )
+  revisionUrl.searchParams.set('alt', 'media')
+  const revisionResponse = await driveRequest(
+    'GET',
+    revisionUrl.toString(),
+    accessToken,
+  )
+  let content
+  try {
+    content = await revisionResponse.json()
+  } catch {
+    throw new HttpError(502, 'Versione Cloud non leggibile')
+  }
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    throw new HttpError(502, 'Versione Cloud non valida')
+  }
+  const updateUrl = new URL(`${DRIVE_UPLOAD_URL}/files/${driveFile.id}`)
+  updateUrl.search = new URLSearchParams({
+    uploadType: 'media',
+    fields: 'id,md5Checksum,modifiedTime,headRevisionId',
+  })
+  const response = await driveRequest(
+    'PATCH',
+    updateUrl.toString(),
+    accessToken,
+    {
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(content),
+    },
+  )
+  const restoredFile = await response.json()
+  return jsonResponse({
+    backup_name: backupFile.name,
+    revision: revision(restoredFile),
+    revision_id: restoredFile.headRevisionId ?? null,
+  })
+}
+
 async function writeStorage(request, env, key) {
   key = validateStorageKey(key)
   const payload = await readJson(request)
@@ -658,6 +810,27 @@ async function route(request, env) {
       request,
       env,
       decodeURIComponent(storageMatch[1]),
+    )
+  }
+  const revisionsMatch = url.pathname.match(
+    /^\/v1\/storage\/([^/]+)\/revisions$/,
+  )
+  if (revisionsMatch && method === 'GET') {
+    return listStorageRevisions(
+      request,
+      env,
+      decodeURIComponent(revisionsMatch[1]),
+    )
+  }
+  const restoreRevisionMatch = url.pathname.match(
+    /^\/v1\/storage\/([^/]+)\/revisions\/([^/]+)\/restore$/,
+  )
+  if (restoreRevisionMatch && method === 'POST') {
+    return restoreStorageRevision(
+      request,
+      env,
+      decodeURIComponent(restoreRevisionMatch[1]),
+      decodeURIComponent(restoreRevisionMatch[2]),
     )
   }
   throw new HttpError(404, 'Risorsa non trovata')

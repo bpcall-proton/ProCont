@@ -1453,6 +1453,47 @@ select {
   color: var(--red);
 }
 
+.cloud-recovery-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.cloud-recovery-panel > div:first-child,
+.cloud-revision-row > span {
+  display: grid;
+  gap: 4px;
+}
+
+.cloud-recovery-panel small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.cloud-recovery-panel > .button {
+  justify-self: start;
+}
+
+.cloud-revision-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-revision-row .button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+}
+
 .drive-folder-warning {
   margin: 9px 0 0;
   color: var(--amber);
@@ -2265,8 +2306,12 @@ select {
 .invoice-paid-checkbox {
   width: 18px;
   height: 18px;
+  min-height: 18px;
   margin: 0;
+  padding: 0;
   box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 18px;
   appearance: none;
   border: 2px solid var(--red);
   border-radius: 4px;

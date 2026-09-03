@@ -20,6 +20,19 @@ interface StoredState {
   revision: string
 }
 
+export interface DriveRevision {
+  id: string
+  modifiedTime: string
+  size: number
+  keepForever: boolean
+}
+
+export interface DriveRevisionList {
+  currentRevision: string
+  currentRevisionId: string | null
+  revisions: DriveRevision[]
+}
+
 export class DriveRepository implements AppRepository {
   readonly mode = 'cloud' as const
   private readonly revisions = new Map<string, string>()
@@ -40,23 +53,93 @@ export class DriveRepository implements AppRepository {
     key: string,
     init?: RequestInit,
   ): Promise<Response> {
+    return this.requestPath(`/v1/storage/${encodeURIComponent(key)}`, init)
+  }
+
+  private async requestPath(
+    path: string,
+    init?: RequestInit,
+  ): Promise<Response> {
     const session = this.session()
-    const response = await fetch(
-      `${driveSyncUrl}/v1/storage/${encodeURIComponent(key)}`,
-      {
-        ...init,
-        headers: {
-          ...init?.headers,
-          Authorization: `Bearer ${session.deviceToken}`,
-        },
+    const response = await fetch(`${driveSyncUrl}${path}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${session.deviceToken}`,
       },
-    )
+    })
     if (response.status === 401) {
       throw new RepositoryUnavailableError(
         'Ricollega Google Drive nelle Impostazioni',
       )
     }
     return response
+  }
+
+  async listCompanyRevisions(
+    companyId: string,
+  ): Promise<DriveRevisionList> {
+    const key = `company-${companyId}`
+    const response = await this.requestPath(
+      `/v1/storage/${encodeURIComponent(key)}/revisions`,
+    )
+    if (!response.ok) {
+      const body = (await response.json()) as { detail?: string }
+      throw new Error(
+        body.detail ?? 'Impossibile caricare le versioni precedenti',
+      )
+    }
+    const payload = (await response.json()) as {
+      current_revision?: string | null
+      current_revision_id?: string | null
+      revisions?: Array<{
+        id?: string
+        modified_time?: string
+        size?: number
+        keep_forever?: boolean
+      }>
+    }
+    return {
+      currentRevision: payload.current_revision ?? '',
+      currentRevisionId: payload.current_revision_id ?? null,
+      revisions: (payload.revisions ?? [])
+        .filter(
+          (
+            item,
+          ): item is {
+            id: string
+            modified_time: string
+            size?: number
+            keep_forever?: boolean
+          } => Boolean(item.id && item.modified_time),
+        )
+        .map((item) => ({
+          id: item.id,
+          modifiedTime: item.modified_time,
+          size: item.size ?? 0,
+          keepForever: item.keep_forever ?? false,
+        })),
+    }
+  }
+
+  async restoreCompanyRevision(
+    companyId: string,
+    revisionId: string,
+    expectedRevision: string,
+  ) {
+    const key = `company-${companyId}`
+    const response = await this.requestPath(
+      `/v1/storage/${encodeURIComponent(key)}/revisions/${encodeURIComponent(revisionId)}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expected_revision: expectedRevision }),
+      },
+    )
+    if (!response.ok) {
+      const body = (await response.json()) as { detail?: string }
+      throw new Error(body.detail ?? 'Ripristino Cloud non riuscito')
+    }
   }
 
   private async loadKey(key: string) {
