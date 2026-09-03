@@ -114,6 +114,22 @@ function writeModePreference(companyId: string, mode: DataMode) {
   localStorage.setItem(modePreferenceKey(companyId), mode)
 }
 
+function cloudRecoveryKey(companyId: string) {
+  return `fip:cloud-recovery:${companyId}`
+}
+
+function readCloudRecovery(companyId: string) {
+  return localStorage.getItem(cloudRecoveryKey(companyId)) === 'pending'
+}
+
+function writeCloudRecovery(companyId: string, pending: boolean) {
+  if (pending) {
+    localStorage.setItem(cloudRecoveryKey(companyId), 'pending')
+    return
+  }
+  localStorage.removeItem(cloudRecoveryKey(companyId))
+}
+
 function normalizeCompanyValue(value: string) {
   return value.trim().toLocaleLowerCase()
 }
@@ -198,6 +214,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const activeRepository = useRef<AppRepository>(localRepository)
   const saveQueue = useRef(Promise.resolve())
   const stateRef = useRef(state)
+  const syncRecovery = useRef<'reload-cloud' | 'retry-save'>('retry-save')
   const unsubscribe = useRef<() => void>(() => undefined)
 
   const applyState = useCallback((next: AppState) => {
@@ -247,6 +264,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const enqueueSave = useCallback((next: AppState) => {
+    syncRecovery.current = 'retry-save'
     setSyncState('saving')
     setSyncMessage(null)
     saveQueue.current = saveQueue.current
@@ -269,7 +287,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const local = await localRepository.load()
       const initial = local ?? createInitialState(companyId)
       const requestedMode =
-        readModePreference(companyId) ?? initial.dataSettings.mode
+        readCloudRecovery(companyId)
+          ? 'cloud'
+          : readModePreference(companyId) ?? initial.dataSettings.mode
       const repository: AppRepository =
         requestedMode === 'cloud' &&
         driveServiceConfigured &&
@@ -288,6 +308,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           },
         }
         if (!cancelled) {
+          if (repository.mode === 'cloud') {
+            writeCloudRecovery(companyId, false)
+          }
           applyState(hydrated)
           unsubscribe.current()
           unsubscribe.current =
@@ -296,6 +319,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         activeRepository.current = localRepository
+        syncRecovery.current =
+          repository.mode === 'cloud' ? 'reload-cloud' : 'retry-save'
+        writeCloudRecovery(companyId, repository.mode === 'cloud')
         writeModePreference(companyId, 'local')
         if (!cancelled) {
           applyState({
@@ -358,6 +384,42 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setDriveAccountEmail(loadDriveSession()?.email ?? null)
       },
       retrySync: async () => {
+        if (syncRecovery.current === 'reload-cloud') {
+          setSyncState('saving')
+          setSyncMessage('Ricaricamento dati Cloud in corso')
+          try {
+            await saveQueue.current
+            const remote = await cloudRepository.load()
+            if (!remote) {
+              throw new Error(
+                'Archivio Cloud non trovato: nessun dato è stato sovrascritto',
+              )
+            }
+            const hydrated: AppState = {
+              ...remote,
+              dataSettings: { ...remote.dataSettings, mode: 'cloud' },
+            }
+            unsubscribe.current()
+            activeRepository.current = cloudRepository
+            unsubscribe.current =
+              cloudRepository.subscribe?.((next) => applyState(next)) ??
+              (() => undefined)
+            writeModePreference(companyId, 'cloud')
+            writeCloudRecovery(companyId, false)
+            applyState(hydrated)
+            syncRecovery.current = 'retry-save'
+            setSyncState('saved')
+            setSyncMessage('Dati Cloud ricaricati')
+          } catch (error) {
+            setSyncState('error')
+            setSyncMessage(
+              error instanceof Error
+                ? error.message
+                : 'Ricaricamento Cloud non riuscito',
+            )
+          }
+          return
+        }
         const next = stateRef.current
         setSyncState('saving')
         setSyncMessage('Sincronizzazione forzata in corso')
@@ -601,14 +663,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           await destination.save(migrated)
           unsubscribe.current()
           activeRepository.current = destination
+          syncRecovery.current = 'retry-save'
           unsubscribe.current =
             destination.subscribe?.((next) => applyState(next)) ??
             (() => undefined)
           writeModePreference(companyId, mode)
+          writeCloudRecovery(companyId, false)
           applyState(migrated)
           setSyncState('saved')
           setSyncMessage('Modalità dati aggiornata')
         } catch (error) {
+          syncRecovery.current =
+            mode === 'cloud' ? 'reload-cloud' : 'retry-save'
+          writeCloudRecovery(companyId, mode === 'cloud')
           setSyncState('error')
           setSyncMessage(
             error instanceof Error ? error.message : 'Migrazione non riuscita',
