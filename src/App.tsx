@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import packageMetadata from '../package.json'
 import { AuthProvider } from './auth/AuthProvider'
 import { useAuth } from './auth/AuthContext'
 import { can, type Permission } from './auth/permissions'
@@ -236,6 +237,11 @@ function Workspace() {
               </strong>
               <small>{user?.preview ? 'Anteprima locale' : user?.email}</small>
             </span>
+          </div>
+          <div className="software-credit">
+            <span>Ideatore del software</span>
+            <strong>Bpcall S.r.l. © 2026 Moldavia</strong>
+            <small>Versione {packageMetadata.version}</small>
           </div>
           <button className="logout-button" onClick={signOut} type="button">
             <LogoutIcon />

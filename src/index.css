@@ -513,6 +513,26 @@ select {
   text-overflow: ellipsis;
 }
 
+.software-credit {
+  display: grid;
+  gap: 3px;
+  padding: 0 10px 5px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.software-credit strong {
+  color: var(--text);
+  font-size: 0.7rem;
+}
+
+.software-credit small {
+  color: var(--cyan);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
 .user-avatar {
   width: 36px;
   height: 36px;
@@ -1517,6 +1537,7 @@ select {
   .sidebar .brand-copy,
   .sidebar nav span,
   .sidebar-footer .user-summary > span:last-child,
+  .software-credit,
   .logout-button {
     display: none;
   }
