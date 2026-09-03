@@ -2238,6 +2238,46 @@ select {
   cursor: pointer;
 }
 
+.data-table th.invoice-paid-column,
+.data-table td.invoice-paid-column {
+  width: 58px;
+  min-width: 58px;
+  padding-right: 4px;
+  text-align: center;
+}
+
+.invoice-paid-checkbox {
+  width: 19px;
+  height: 19px;
+  margin: 0;
+  appearance: none;
+  border: 2px solid var(--red);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.invoice-paid-checkbox:checked {
+  display: inline-grid;
+  place-content: center;
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.invoice-paid-checkbox:checked::after {
+  width: 9px;
+  height: 5px;
+  border-bottom: 2px solid white;
+  border-left: 2px solid white;
+  content: '';
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.invoice-paid-checkbox:focus-visible {
+  outline: 3px solid rgba(255, 69, 69, 0.28);
+  outline-offset: 2px;
+}
+
 .integration-steps {
   display: grid;
   gap: 14px;
