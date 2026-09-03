@@ -848,13 +848,27 @@ select {
   gap: 8px;
 }
 
-.dashboard-seller-metrics div {
+.dashboard-seller-metrics button {
   display: grid;
   gap: 5px;
   min-width: 0;
   padding: 10px;
   border-radius: 10px;
+  border: 1px solid transparent;
   background: rgba(19, 27, 46, 0.78);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-seller-metrics button:hover,
+.dashboard-seller-metrics button:focus-visible {
+  border-color: color-mix(in srgb, var(--cyan) 45%, transparent);
+  transform: translateY(-1px);
 }
 
 .dashboard-seller-metrics span {
@@ -868,6 +882,13 @@ select {
   font-size: 0.85rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dashboard-seller-metrics em {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .dashboard-seller-metrics .seller-cash-metric {

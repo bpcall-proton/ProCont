@@ -27,6 +27,23 @@ type DashboardMetricKey =
   | 'costs'
   | 'real-result'
 
+type SellerMetricKey =
+  | 'invoices'
+  | 'theoretical'
+  | 'cash'
+  | 'pos'
+  | 'official'
+  | 'real'
+  | 'vat'
+  | 'withdrawals'
+  | 'cash-residual'
+  | 'stock-residual'
+
+interface SellerMetricDetail {
+  sellerId: string
+  metric: SellerMetricKey
+}
+
 interface DashboardDetailRow {
   date: string
   category: string
@@ -56,6 +73,8 @@ function filenamePart(value: string) {
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
+  const [sellerDetail, setSellerDetail] =
+    useState<SellerMetricDetail | null>(null)
   const [sellerAsOfDate, setSellerAsOfDate] = useState('')
   const { review } = state
   const companyId = state.accounting.activeCompanyId
@@ -436,7 +455,6 @@ export function DashboardPage() {
       rows: [...realRows, ...negativeCostRows],
     },
   }
-  const selectedMetric = detail ? metrics[detail] : null
   const sellerInvoices = accounting.invoices.filter(
     (invoice) => !sellerAsOfDate || invoice.date <= sellerAsOfDate,
   )
@@ -471,6 +489,8 @@ export function DashboardPage() {
     return {
       id: seller.id,
       name: seller.name,
+      invoices,
+      takings,
       invoiceValue: invoices.reduce(
         (sum, invoice) => sum + invoice.total,
         0,
@@ -516,6 +536,8 @@ export function DashboardPage() {
     sellerSummaries.push({
       id: 'unassigned',
       name: 'Non assegnato',
+      invoices: unassignedInvoices,
+      takings: unassignedTakings,
       invoiceValue: unassignedInvoices.reduce(
         (sum, invoice) => sum + invoice.total,
         0,
@@ -535,14 +557,207 @@ export function DashboardPage() {
     })
   }
 
+  const selectedMetric = detail ? metrics[detail] : null
+  const selectedSeller = sellerDetail
+    ? sellerSummaries.find((seller) => seller.id === sellerDetail.sellerId)
+    : undefined
+  const selectedSellerMetric: DashboardMetric | null =
+    sellerDetail && selectedSeller
+      ? (() => {
+          const invoiceRows = selectedSeller.invoices.map((invoice) => ({
+            date: invoice.date,
+            category: 'Fattura assegnata',
+            description: invoice.supplierName || 'Fornitore non indicato',
+            reference: `Fattura ${invoice.number || 'senza numero'}`,
+            amount: invoice.total,
+          }))
+          const theoreticalRows = selectedSeller.invoices
+            .map((invoice) => ({
+              date: invoice.date,
+              category: 'Venit teorico',
+              description: invoice.supplierName || 'Fornitore non indicato',
+              reference: `Fattura ${invoice.number || 'senza numero'}`,
+              amount: invoice.theoreticalRevenue,
+            }))
+            .filter((row) => row.amount !== 0)
+          const sellerTakingRows = (
+            category: string,
+            amount: (taking: (typeof accounting.takings)[number]) => number,
+            reference: (
+              taking: (typeof accounting.takings)[number],
+            ) => string,
+          ) =>
+            selectedSeller.takings
+              .map((taking) => ({
+                date: taking.date,
+                category,
+                description: selectedSeller.name,
+                reference: reference(taking),
+                amount: amount(taking),
+              }))
+              .filter((row) => row.amount !== 0)
+          const cashRows = sellerTakingRows(
+            'Cash',
+            (taking) => taking.cash,
+            (taking) => taking.supplierName || 'Fornitore non indicato',
+          )
+          const posRows = sellerTakingRows(
+            'POS',
+            (taking) => taking.pos,
+            (taking) => taking.supplierName || 'Fornitore non indicato',
+          )
+          const officialRows = sellerTakingRows(
+            'Incasso registrato',
+            officialTaking,
+            (taking) =>
+              `Cash ${money(taking.cash)} · POS ${money(taking.pos)}`,
+          )
+          const realRows = sellerTakingRows(
+            'Incasso reale',
+            realTaking,
+            (taking) =>
+              `Incasso registrato ${money(officialTaking(taking))}`,
+          )
+          const vatRows = sellerTakingRows(
+            'IVA inclusa',
+            (taking) => taking.vat,
+            () => 'IVA inclusa in Cash + POS',
+          )
+          const withdrawalRows = sellerTakingRows(
+            'Cash ritirato',
+            (taking) => taking.withdrawal,
+            (taking) => taking.supplierName || 'Fornitore non indicato',
+          )
+          const rawCashResidual =
+            selectedSeller.real -
+            selectedSeller.pos -
+            selectedSeller.withdrawals
+          const cashResidualRows: DashboardDetailRow[] = [
+            {
+              date: '',
+              category: 'Incasso reale',
+              description: selectedSeller.name,
+              reference: 'Valore di partenza',
+              amount: selectedSeller.real,
+            },
+            {
+              date: '',
+              category: 'POS',
+              description: selectedSeller.name,
+              reference: 'Importo sottratto',
+              amount: -selectedSeller.pos,
+            },
+            {
+              date: '',
+              category: 'Cash ritirato',
+              description: selectedSeller.name,
+              reference: 'Importo sottratto',
+              amount: -selectedSeller.withdrawals,
+            },
+            ...(rawCashResidual < 0
+              ? [
+                  {
+                    date: '',
+                    category: 'Limite minimo',
+                    description: selectedSeller.name,
+                    reference: 'Adeguamento a zero',
+                    amount: -rawCashResidual,
+                  },
+                ]
+              : []),
+          ]
+          const stockResidualRows = [
+            ...theoreticalRows,
+            ...realRows.map((row) => ({ ...row, amount: -row.amount })),
+          ]
+          const periodNote = sellerAsOfDate
+            ? ` Dati fino al ${sellerAsOfDate}, data compresa.`
+            : ' Tutto lo storico disponibile.'
+          const sellerMetrics: Record<SellerMetricKey, DashboardMetric> = {
+            invoices: {
+              title: `Fatture assegnate · ${selectedSeller.name}`,
+              note: `Fatture attribuite al venditore.${periodNote}`,
+              value: selectedSeller.invoiceValue,
+              tone: 'cyan',
+              rows: invoiceRows,
+            },
+            theoretical: {
+              title: `Venit teorico · ${selectedSeller.name}`,
+              note: `Venit delle fatture attribuite al venditore.${periodNote}`,
+              value: selectedSeller.theoretical,
+              tone: 'violet',
+              rows: theoreticalRows,
+            },
+            cash: {
+              title: `Cash · ${selectedSeller.name}`,
+              note: `Contanti registrati negli incassi del venditore.${periodNote}`,
+              value: selectedSeller.cash,
+              tone: 'green',
+              rows: cashRows,
+            },
+            pos: {
+              title: `POS · ${selectedSeller.name}`,
+              note: `Pagamenti elettronici registrati per il venditore.${periodNote}`,
+              value: selectedSeller.pos,
+              tone: 'green',
+              rows: posRows,
+            },
+            official: {
+              title: `Incasso registrato · ${selectedSeller.name}`,
+              note: `Somma di Cash e POS del venditore.${periodNote}`,
+              value: selectedSeller.official,
+              tone: 'green',
+              rows: officialRows,
+            },
+            real: {
+              title: `Incasso reale · ${selectedSeller.name}`,
+              note: `Totale effettivamente incassato dal venditore.${periodNote}`,
+              value: selectedSeller.real,
+              tone: 'cyan',
+              rows: realRows,
+            },
+            vat: {
+              title: `IVA inclusa · ${selectedSeller.name}`,
+              note: `IVA inclusa in Cash e POS del venditore.${periodNote}`,
+              value: selectedSeller.vat,
+              tone: 'amber',
+              rows: vatRows,
+            },
+            withdrawals: {
+              title: `Cash ritirato · ${selectedSeller.name}`,
+              note: `Contanti già ritirati dal venditore.${periodNote}`,
+              value: selectedSeller.withdrawals,
+              tone: 'violet',
+              rows: withdrawalRows,
+            },
+            'cash-residual': {
+              title: `Cash in mano attuale · ${selectedSeller.name}`,
+              note: `Incasso reale meno POS e Cash ritirato.${periodNote}`,
+              value: selectedSeller.cashResidual,
+              tone: 'green',
+              rows: cashResidualRows,
+            },
+            'stock-residual': {
+              title: `Stock residuo · ${selectedSeller.name}`,
+              note: `Venit teorico meno Incasso reale.${periodNote}`,
+              value: selectedSeller.stockResidual,
+              tone: 'amber',
+              rows: stockResidualRows,
+            },
+          }
+          return sellerMetrics[sellerDetail.metric]
+        })()
+      : null
+  const displayedMetric = selectedSellerMetric ?? selectedMetric
+
   async function exportDetailExcel() {
-    if (!selectedMetric) return
+    if (!displayedMetric) return
     const XLSX = await import('xlsx')
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
-        selectedMetric.rows.map((row) => ({
+        displayedMetric.rows.map((row) => ({
           Data: row.date,
           Categoria: row.category,
           Descrizione: row.description,
@@ -554,22 +769,29 @@ export function DashboardPage() {
     )
     XLSX.writeFile(
       workbook,
-      `panoramica-${filenamePart(selectedMetric.title)}-${filenamePart(activeCompany?.name ?? '')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      `panoramica-${filenamePart(displayedMetric.title)}-${filenamePart(activeCompany?.name ?? '')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
     )
   }
 
-  if (selectedMetric) {
+  if (displayedMetric) {
     return (
       <div className="page-stack">
         <header className="page-heading">
           <div>
-            <span className="eyebrow">DETTAGLIO PANORAMICA</span>
-            <h1>{selectedMetric.title}</h1>
-            <p>{selectedMetric.note}</p>
+            <span className="eyebrow">
+              {selectedSellerMetric
+                ? 'DETTAGLIO VENDITORE'
+                : 'DETTAGLIO PANORAMICA'}
+            </span>
+            <h1>{displayedMetric.title}</h1>
+            <p>{displayedMetric.note}</p>
             <div className="detail-heading-actions">
               <button
                 className="button button-secondary"
-                onClick={() => setDetail(null)}
+                onClick={() => {
+                  setDetail(null)
+                  setSellerDetail(null)
+                }}
                 type="button"
               >
                 Torna alla Panoramica
@@ -586,14 +808,14 @@ export function DashboardPage() {
         </header>
         <section className="report-kpis">
           <article
-            className={`report-card report-${selectedMetric.tone}`}
+            className={`report-card report-${displayedMetric.tone}`}
           >
-            <span>{selectedMetric.title}</span>
-            <strong>{money(selectedMetric.value)}</strong>
+            <span>{displayedMetric.title}</span>
+            <strong>{money(displayedMetric.value)}</strong>
           </article>
           <article className="report-card report-violet">
             <span>Voci nel dettaglio</span>
-            <strong>{selectedMetric.rows.length}</strong>
+            <strong>{displayedMetric.rows.length}</strong>
           </article>
         </section>
         <section className="panel">
@@ -615,7 +837,7 @@ export function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {selectedMetric.rows.map((row, index) => (
+                {displayedMetric.rows.map((row, index) => (
                   <tr key={`${row.category}-${row.date}-${index}`}>
                     <td>{row.date || '—'}</td>
                     <td>{row.category}</td>
@@ -626,7 +848,7 @@ export function DashboardPage() {
                 ))}
               </tbody>
             </table>
-            {selectedMetric.rows.length === 0 && (
+            {displayedMetric.rows.length === 0 && (
               <div className="empty-state compact-empty">
                 <strong>Nessun dato registrato</strong>
                 <span>La card non contiene ancora voci da mostrare.</span>
@@ -827,46 +1049,127 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="dashboard-seller-metrics">
-                  <div>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'invoices',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Fatture assegnate</span>
                     <strong>{money(seller.invoiceValue)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'theoretical',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Venit teorico</span>
                     <strong>{money(seller.theoretical)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({ sellerId: seller.id, metric: 'cash' })
+                    }
+                    type="button"
+                  >
                     <span>Cash</span>
                     <strong>{money(seller.cash)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({ sellerId: seller.id, metric: 'pos' })
+                    }
+                    type="button"
+                  >
                     <span>POS</span>
                     <strong>{money(seller.pos)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'official',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Incasso registrato</span>
                     <strong>{money(seller.official)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({ sellerId: seller.id, metric: 'real' })
+                    }
+                    type="button"
+                  >
                     <span>Incasso reale</span>
                     <strong>{money(seller.real)}</strong>
-                  </div>
-                  <div>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSellerDetail({ sellerId: seller.id, metric: 'vat' })
+                    }
+                    type="button"
+                  >
                     <span>IVA inclusa</span>
                     <strong>{money(seller.vat)}</strong>
-                  </div>
-                  <div className="seller-cash-metric seller-cash-withdrawn">
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-cash-metric seller-cash-withdrawn"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'withdrawals',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Cash ritirato</span>
                     <strong>{money(seller.withdrawals)}</strong>
-                  </div>
-                  <div className="seller-cash-metric seller-cash-residual">
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-cash-metric seller-cash-residual"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'cash-residual',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Cash in mano attuale</span>
                     <strong>{money(seller.cashResidual)}</strong>
-                  </div>
-                  <div className="seller-stock-residual">
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-stock-residual"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'stock-residual',
+                      })
+                    }
+                    type="button"
+                  >
                     <span>Stock residuo</span>
                     <strong>{money(seller.stockResidual)}</strong>
-                  </div>
+                    <em>Apri dettaglio</em>
+                  </button>
                 </div>
               </article>
             ))}
