@@ -610,6 +610,28 @@ export function InvoicesPanel({
     setSelectedInvoiceIds([])
   }
 
+  function toggleInvoicePaid(invoiceId: string) {
+    updateAccounting((current) => ({
+      ...current,
+      invoices: current.invoices.map((invoice) => {
+        if (invoice.id !== invoiceId) return invoice
+        const settled = !invoice.settled
+        const recordedPayments = invoice.payments.reduce(
+          (sum, payment) => sum + payment.amount,
+          0,
+        )
+        return {
+          ...invoice,
+          settled,
+          paidAmount: settled
+            ? invoice.total
+            : Math.min(invoice.total, recordedPayments),
+          paymentDate: settled ? invoice.paymentDate ?? today() : null,
+        }
+      }),
+    }))
+  }
+
   function addPayment(event: FormEvent) {
     event.preventDefault()
     if (!paymentTarget) return
@@ -1012,7 +1034,7 @@ export function InvoicesPanel({
               disabled={invoices.length === 0}
               onChange={toggleAllVisibleInvoices}
               type="checkbox"
-            /></th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
+            /></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
               {invoices.map((invoice) => {
                 const dueState = invoiceDueState(invoice)
@@ -1022,6 +1044,13 @@ export function InvoicesPanel({
                     aria-label={`Seleziona fattura ${invoice.number || invoice.date}`}
                     checked={selectedInvoiceIds.includes(invoice.id)}
                     onChange={() => toggleInvoiceSelection(invoice.id)}
+                    type="checkbox"
+                  /></td>
+                  <td className="invoice-paid-column"><input
+                    aria-label={`Segna fattura ${invoice.number || invoice.date} come pagata`}
+                    checked={invoice.settled}
+                    className="invoice-paid-checkbox"
+                    onChange={() => toggleInvoicePaid(invoice.id)}
                     type="checkbox"
                   /></td>
                   <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
