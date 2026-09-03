@@ -357,6 +357,27 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       refreshDriveConnection: () => {
         setDriveAccountEmail(loadDriveSession()?.email ?? null)
       },
+      retrySync: async () => {
+        const next = stateRef.current
+        setSyncState('saving')
+        setSyncMessage('Sincronizzazione forzata in corso')
+        saveQueue.current = saveQueue.current
+          .then(() => activeRepository.current.save(next))
+          .then(async () => {
+            setSyncState('saved')
+            setSyncMessage('Salvataggio completato')
+            await saveDriveBackup(next)
+          })
+          .catch((error: unknown) => {
+            setSyncState('error')
+            setSyncMessage(
+              error instanceof Error
+                ? error.message
+                : 'Salvataggio non riuscito',
+            )
+          })
+        await saveQueue.current
+      },
       updateCompany: (patch: Partial<Company>) => {
         updateState((current) => ({
           ...current,

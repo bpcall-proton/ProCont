@@ -589,6 +589,22 @@ select {
   gap: 10px;
 }
 
+.sync-retry-button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 69, 69, 0.65);
+  border-radius: 999px;
+  color: #ffd7dc;
+  background: rgba(255, 69, 69, 0.12);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sync-retry-button:hover {
+  background: rgba(255, 69, 69, 0.22);
+}
+
 .status-badge,
 .sync-badge {
   min-height: 32px;
