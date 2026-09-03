@@ -1194,11 +1194,16 @@ export function DashboardPage() {
           ) : (
             <div className="store-summary-list">
               {stores.map((store) => {
-                const seller = accounting.sellers.find(
+                const linkedSeller = state.sellers.find(
                   (item) => item.id === store.sellerId,
                 )
+                const accountingSellerId =
+                  linkedSeller?.accountingSellerId || store.sellerId
+                const seller = accounting.sellers.find(
+                  (item) => item.id === accountingSellerId,
+                )
                 const storeTakings = accounting.takings.filter(
-                  (taking) => taking.sellerId === store.sellerId,
+                  (taking) => taking.sellerId === accountingSellerId,
                 )
                 return (
                   <div className="store-summary" key={store.id}>
