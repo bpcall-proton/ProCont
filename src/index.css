@@ -2263,9 +2263,10 @@ select {
 }
 
 .invoice-paid-checkbox {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   margin: 0;
+  box-sizing: border-box;
   appearance: none;
   border: 2px solid var(--red);
   border-radius: 4px;
@@ -2281,8 +2282,8 @@ select {
 }
 
 .invoice-paid-checkbox:checked::after {
-  width: 9px;
-  height: 5px;
+  width: 8px;
+  height: 4px;
   border-bottom: 2px solid white;
   border-left: 2px solid white;
   content: '';
