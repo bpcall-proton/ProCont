@@ -17,14 +17,25 @@ export function SyncBadge({
   state: SyncState
   message: string | null
 }) {
+  const errorLabel =
+    message?.toLocaleLowerCase().includes('google drive') ||
+    message?.toLocaleLowerCase().includes('ricollega')
+      ? 'Drive da collegare'
+      : message?.toLocaleLowerCase().includes('cloud')
+        ? 'Cloud non disponibile'
+        : 'Salvataggio fallito'
   const label = {
     idle: 'Pronto',
     saving: 'Salvataggio',
     saved: 'Sincronizzato',
-    error: 'Attenzione',
+    error: errorLabel,
   }[state]
   return (
-    <span className={`sync-badge sync-${state}`} title={message ?? label}>
+    <span
+      aria-label={message ?? label}
+      className={`sync-badge sync-${state}`}
+      title={message ?? label}
+    >
       <span className="sync-dot" />
       {label}
     </span>
