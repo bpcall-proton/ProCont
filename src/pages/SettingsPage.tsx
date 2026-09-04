@@ -159,6 +159,8 @@ export function SettingsPage() {
     setDriveBackup,
     selectDriveFolder,
     syncDriveBackup,
+    archiveSeason,
+    restoreSeasonArchive,
     setCurrency,
     setImageRetention,
     setLanguage,
@@ -186,7 +188,14 @@ export function SettingsPage() {
   const [driveFolderConfirmation, setDriveFolderConfirmation] = useState<
     'warning' | 'final' | null
   >(null)
+  const [seasonDialog, setSeasonDialog] = useState<
+    'name' | 'confirmation' | null
+  >(null)
+  const [seasonName, setSeasonName] = useState('')
+  const [seasonBusy, setSeasonBusy] = useState(false)
+  const [seasonMessage, setSeasonMessage] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const seasonArchiveInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
     state.accounting.companies.find(
       (item) => item.id === state.accounting.activeCompanyId,
@@ -234,6 +243,44 @@ export function SettingsPage() {
   async function confirmDriveFolderChange() {
     setDriveFolderConfirmation(null)
     await selectDriveFolder()
+  }
+
+  async function confirmSeasonArchive() {
+    setSeasonBusy(true)
+    setSeasonMessage(null)
+    const result = await archiveSeason(seasonName)
+    setSeasonBusy(false)
+    if (!result.ok) {
+      setSeasonMessage(result.error ?? 'Archiviazione non riuscita.')
+      return
+    }
+    setSeasonDialog(null)
+    setSeasonName('')
+    setSeasonMessage(
+      `Stagione archiviata e nuovo esercizio pronto: ${result.destination}`,
+    )
+  }
+
+  async function restoreSeason(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const confirmed = window.confirm(
+      `Ripristinare ${file.name}? I dati correnti dell’azienda attiva saranno sostituiti. Archiviali prima se devi conservarli.`,
+    )
+    if (!confirmed) {
+      event.target.value = ''
+      return
+    }
+    setSeasonBusy(true)
+    setSeasonMessage('Ripristino stagione in corso. Non chiudere l’app.')
+    const result = await restoreSeasonArchive(await file.text())
+    setSeasonBusy(false)
+    setSeasonMessage(
+      result.ok
+        ? 'Stagione ripristinata nell’azienda attiva.'
+        : result.error ?? 'Ripristino stagione non riuscito.',
+    )
+    event.target.value = ''
   }
 
   async function prepareGoogleConnection() {
@@ -1000,6 +1047,149 @@ export function SettingsPage() {
                       type="button"
                     >
                       SÌ
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <article className="panel season-archive-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">CHIUSURA ESERCIZIO</span>
+              <h2>Archivia stagione</h2>
+            </div>
+          </div>
+          <p className="settings-note">
+            Salva l’intero esercizio dell’azienda attiva nella cartella
+            configurata. Solo dopo il salvataggio riuscito vengono azzerati
+            fatture, incassi, costi e produzione; anagrafiche e configurazioni
+            restano pronte per la nuova stagione.
+          </p>
+          <input
+            accept="application/json,.json"
+            className="visually-hidden"
+            onChange={(event) => void restoreSeason(event)}
+            ref={seasonArchiveInput}
+            type="file"
+          />
+          <div className="backup-actions">
+            <button
+              className="button danger-button"
+              disabled={
+                seasonBusy ||
+                !window.desktopApp ||
+                !driveFolderConfigured ||
+                !accountingCompany
+              }
+              onClick={() => {
+                setSeasonMessage(null)
+                setSeasonDialog('name')
+              }}
+              type="button"
+            >
+              Archivia stagione
+            </button>
+            <button
+              className="button button-secondary"
+              disabled={seasonBusy || !accountingCompany}
+              onClick={() => seasonArchiveInput.current?.click()}
+              type="button"
+            >
+              Riprendi stagione archiviata
+            </button>
+          </div>
+          {!window.desktopApp && (
+            <p className="drive-folder-warning">
+              Il salvataggio diretto nella cartella configurata è disponibile
+              nell’EXE desktop.
+            </p>
+          )}
+          {window.desktopApp && !driveFolderConfigured && (
+            <p className="drive-folder-warning">
+              Prima seleziona la cartella del computer nella sezione Backup e
+              conservazione.
+            </p>
+          )}
+          {seasonMessage && (
+            <p aria-live="polite" className="import-message">
+              {seasonMessage}
+            </p>
+          )}
+        </article>
+
+        {seasonDialog && (
+          <div className="drive-folder-confirmation-overlay">
+            <div
+              aria-labelledby="season-archive-title"
+              aria-modal="true"
+              className={`drive-folder-confirmation ${
+                seasonDialog === 'confirmation'
+                  ? 'drive-folder-confirmation-flashing'
+                  : ''
+              }`}
+              role="dialog"
+            >
+              {seasonDialog === 'name' ? (
+                <>
+                  <h2 id="season-archive-title">Nome della stagione</h2>
+                  <p>
+                    Indica il periodo da archiviare, per esempio 2026/2027.
+                  </p>
+                  <label className="season-name-field">
+                    Nome archivio
+                    <input
+                      autoFocus
+                      onChange={(event) => setSeasonName(event.target.value)}
+                      placeholder="Esempio: 2026/2027"
+                      value={seasonName}
+                    />
+                  </label>
+                  <div className="drive-folder-confirmation-actions">
+                    <button
+                      className="button button-secondary"
+                      onClick={() => setSeasonDialog(null)}
+                      type="button"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      className="button button-primary"
+                      disabled={!seasonName.trim()}
+                      onClick={() => setSeasonDialog('confirmation')}
+                      type="button"
+                    >
+                      Continua
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="drive-folder-confirmation-icon">!</span>
+                  <h2 id="season-archive-title">CONFERMI IL RESET?</h2>
+                  <strong>STAGIONE: {seasonName.trim()}</strong>
+                  <p>
+                    L’archivio sarà salvato prima nella cartella configurata.
+                    Il reset partirà soltanto se il salvataggio riesce.
+                  </p>
+                  <div className="drive-folder-confirmation-actions">
+                    <button
+                      className="button button-secondary"
+                      disabled={seasonBusy}
+                      onClick={() => setSeasonDialog(null)}
+                      type="button"
+                    >
+                      NO
+                    </button>
+                    <button
+                      className="button danger-button"
+                      disabled={seasonBusy}
+                      onClick={() => void confirmSeasonArchive()}
+                      type="button"
+                    >
+                      {seasonBusy ? 'Archiviazione...' : 'SÌ, ARCHIVIA E RESETTA'}
                     </button>
                   </div>
                 </>
