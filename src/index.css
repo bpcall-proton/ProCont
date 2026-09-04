@@ -1894,6 +1894,19 @@ select {
   gap: 28px;
 }
 
+.accounting-sticky-header {
+  position: sticky;
+  z-index: 9;
+  top: 0;
+  display: grid;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(38, 50, 74, 0.82);
+  background: rgba(6, 8, 16, 0.96);
+  box-shadow: 0 14px 24px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(16px);
+}
+
 .accounting-heading-actions,
 .invoice-archive-actions {
   min-width: min(100%, 420px);

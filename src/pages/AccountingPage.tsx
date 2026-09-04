@@ -159,69 +159,71 @@ export function AccountingPage({
 
   return (
     <div className="page-stack">
-      <header className="page-heading accounting-heading">
-        <div>
-          <span className="eyebrow">GESTIONE COMPLETA</span>
-          <h1>Contabilità manuale</h1>
-          <p>
-            Tutte le funzioni della precedente Contabilità Pro, nello stesso
-            archivio dei documenti automatici.
-          </p>
-        </div>
-        <div className="accounting-heading-actions">
-          <button
-            className="button button-primary"
-            onClick={onOpenInvoiceArchive}
-            type="button"
-          >
-            Archivio fatture
-          </button>
-          <div className="company-switcher">
-            <select
-              aria-label="Azienda contabile attiva"
-              onChange={(event) =>
-                setActiveAccountingCompany(event.target.value)
-              }
-              value={state.accounting.activeCompanyId ?? ''}
-            >
-              {state.accounting.companies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-            <form onSubmit={addCompany}>
-              <input
-                onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Nuova azienda"
-                value={companyName}
-              />
-              <button className="button button-secondary" type="submit">
-                Aggiungi
-              </button>
-            </form>
-            {companyError && <p className="import-message">{companyError}</p>}
+      <div className="accounting-sticky-header">
+        <header className="page-heading accounting-heading">
+          <div>
+            <span className="eyebrow">GESTIONE COMPLETA</span>
+            <h1>Contabilità manuale</h1>
+            <p>
+              Tutte le funzioni della precedente Contabilità Pro, nello stesso
+              archivio dei documenti automatici.
+            </p>
           </div>
-        </div>
-      </header>
+          <div className="accounting-heading-actions">
+            <button
+              className="button button-primary"
+              onClick={onOpenInvoiceArchive}
+              type="button"
+            >
+              Archivio fatture
+            </button>
+            <div className="company-switcher">
+              <select
+                aria-label="Azienda contabile attiva"
+                onChange={(event) =>
+                  setActiveAccountingCompany(event.target.value)
+                }
+                value={state.accounting.activeCompanyId ?? ''}
+              >
+                {state.accounting.companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <form onSubmit={addCompany}>
+                <input
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  placeholder="Nuova azienda"
+                  value={companyName}
+                />
+                <button className="button button-secondary" type="submit">
+                  Aggiungi
+                </button>
+              </form>
+              {companyError && <p className="import-message">{companyError}</p>}
+            </div>
+          </div>
+        </header>
 
-      <nav className="section-tabs" aria-label="Sezioni contabili">
-        {[
-          ['invoices', 'Fatture'],
-          ['takings', 'Incassi'],
-          ['contacts', 'Venditori e fornitori'],
-          ['expenses', 'Spese, affitti e contabile'],
-        ].map(([id, label]) => (
-          <button
-            className={section === id ? 'active' : ''}
-            key={id}
-            onClick={() => setSection(id as Section)}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+        <nav className="section-tabs" aria-label="Sezioni contabili">
+          {[
+            ['invoices', 'Fatture'],
+            ['takings', 'Incassi'],
+            ['contacts', 'Venditori e fornitori'],
+            ['expenses', 'Spese, affitti e contabile'],
+          ].map(([id, label]) => (
+            <button
+              className={section === id ? 'active' : ''}
+              key={id}
+              onClick={() => setSection(id as Section)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {!active.company ? (
         <div className="panel empty-state">
