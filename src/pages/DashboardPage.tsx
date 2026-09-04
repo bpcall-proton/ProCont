@@ -214,7 +214,7 @@ export function DashboardPage() {
       date: taking.date,
       category: 'Cash',
       description: taking.sellerName || 'Venditore non indicato',
-      reference: taking.supplierName || 'Fornitore non indicato',
+      reference: `Incasso reale ${money(realTaking(taking))}`,
       amount: taking.cash,
     }))
     .filter((row) => row.amount !== 0)
@@ -223,7 +223,7 @@ export function DashboardPage() {
       date: taking.date,
       category: 'POS',
       description: taking.sellerName || 'Venditore non indicato',
-      reference: taking.supplierName || 'Fornitore non indicato',
+      reference: `Incasso reale ${money(realTaking(taking))}`,
       amount: taking.pos,
     }))
     .filter((row) => row.amount !== 0)
@@ -250,7 +250,7 @@ export function DashboardPage() {
       date: taking.date,
       category: 'Cash ritirato',
       description: taking.sellerName || 'Venditore non indicato',
-      reference: taking.supplierName || 'Fornitore non indicato',
+      reference: `Incasso reale ${money(realTaking(taking))}`,
       amount: taking.withdrawal,
       sellerId: taking.sellerId,
     }))
@@ -633,12 +633,12 @@ export function DashboardPage() {
           const cashRows = sellerTakingRows(
             'Cash',
             (taking) => taking.cash,
-            (taking) => taking.supplierName || 'Fornitore non indicato',
+            (taking) => `Incasso reale ${money(realTaking(taking))}`,
           )
           const posRows = sellerTakingRows(
             'POS',
             (taking) => taking.pos,
-            (taking) => taking.supplierName || 'Fornitore non indicato',
+            (taking) => `Incasso reale ${money(realTaking(taking))}`,
           )
           const officialRows = sellerTakingRows(
             'Incasso registrato',
@@ -660,7 +660,7 @@ export function DashboardPage() {
           const withdrawalRows = sellerTakingRows(
             'Cash ritirato',
             (taking) => taking.withdrawal,
-            (taking) => taking.supplierName || 'Fornitore non indicato',
+            (taking) => `Incasso reale ${money(realTaking(taking))}`,
           )
           const rawCashResidual =
             selectedSeller.real -

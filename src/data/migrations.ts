@@ -189,8 +189,6 @@ function mapTaking(value: JsonRecord): AccountingTaking {
     date: text(value.data),
     sellerId: nullableText(value.venditoreId),
     sellerName: text(value.venditoreNome),
-    supplierId: nullableText(value.fornitoreId),
-    supplierName: text(value.fornitoreNome),
     cash: amount(value.cash),
     pos: amount(value.pos),
     withdrawal: amount(value.ritiro),
@@ -596,8 +594,6 @@ export function normalizeStoredState(
         takings: (accounting.takings ?? []).map((taking) => ({
           ...taking,
           companyId: taking.companyId || fallbackCompanyId,
-          supplierId: taking.supplierId ?? null,
-          supplierName: taking.supplierName ?? '',
         })),
         rentals: (accounting.rentals ?? []).map((rental) => ({
           ...rental,
