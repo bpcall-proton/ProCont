@@ -159,69 +159,71 @@ export function AccountingPage({
 
   return (
     <div className="page-stack">
-      <header className="page-heading accounting-heading">
-        <div>
-          <span className="eyebrow">GESTIONE COMPLETA</span>
-          <h1>Contabilità manuale</h1>
-          <p>
-            Tutte le funzioni della precedente Contabilità Pro, nello stesso
-            archivio dei documenti automatici.
-          </p>
-        </div>
-        <div className="accounting-heading-actions">
-          <button
-            className="button button-primary"
-            onClick={onOpenInvoiceArchive}
-            type="button"
-          >
-            Archivio fatture
-          </button>
-          <div className="company-switcher">
-            <select
-              aria-label="Azienda contabile attiva"
-              onChange={(event) =>
-                setActiveAccountingCompany(event.target.value)
-              }
-              value={state.accounting.activeCompanyId ?? ''}
-            >
-              {state.accounting.companies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-            <form onSubmit={addCompany}>
-              <input
-                onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Nuova azienda"
-                value={companyName}
-              />
-              <button className="button button-secondary" type="submit">
-                Aggiungi
-              </button>
-            </form>
-            {companyError && <p className="import-message">{companyError}</p>}
+      <div className="accounting-sticky-header">
+        <header className="page-heading accounting-heading">
+          <div>
+            <span className="eyebrow">GESTIONE COMPLETA</span>
+            <h1>Contabilità manuale</h1>
+            <p>
+              Tutte le funzioni della precedente Contabilità Pro, nello stesso
+              archivio dei documenti automatici.
+            </p>
           </div>
-        </div>
-      </header>
+          <div className="accounting-heading-actions">
+            <button
+              className="button button-primary"
+              onClick={onOpenInvoiceArchive}
+              type="button"
+            >
+              Archivio fatture
+            </button>
+            <div className="company-switcher">
+              <select
+                aria-label="Azienda contabile attiva"
+                onChange={(event) =>
+                  setActiveAccountingCompany(event.target.value)
+                }
+                value={state.accounting.activeCompanyId ?? ''}
+              >
+                {state.accounting.companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <form onSubmit={addCompany}>
+                <input
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  placeholder="Nuova azienda"
+                  value={companyName}
+                />
+                <button className="button button-secondary" type="submit">
+                  Aggiungi
+                </button>
+              </form>
+              {companyError && <p className="import-message">{companyError}</p>}
+            </div>
+          </div>
+        </header>
 
-      <nav className="section-tabs" aria-label="Sezioni contabili">
-        {[
-          ['invoices', 'Fatture'],
-          ['takings', 'Incassi'],
-          ['contacts', 'Venditori e fornitori'],
-          ['expenses', 'Spese, affitti e contabile'],
-        ].map(([id, label]) => (
-          <button
-            className={section === id ? 'active' : ''}
-            key={id}
-            onClick={() => setSection(id as Section)}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+        <nav className="section-tabs" aria-label="Sezioni contabili">
+          {[
+            ['invoices', 'Fatture'],
+            ['takings', 'Incassi'],
+            ['contacts', 'Venditori e fornitori'],
+            ['expenses', 'Spese, affitti e contabile'],
+          ].map(([id, label]) => (
+            <button
+              className={section === id ? 'active' : ''}
+              key={id}
+              onClick={() => setSection(id as Section)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {!active.company ? (
         <div className="panel empty-state">
@@ -579,6 +581,13 @@ export function InvoicesPanel({
       settled: invoice.settled,
     })
     setLines(invoice.lines)
+    window.requestAnimationFrame(() => {
+      invoiceFormRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+      dateInputRef.current?.focus({ preventScroll: true })
+    })
   }
 
   function remove(id: string) {
@@ -1129,6 +1138,7 @@ function TakingsPanel() {
   const [sellerFilter, setSellerFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [monthFilter, setMonthFilter] = useState('')
+  const takingFormRef = useRef<HTMLFormElement>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
   const cashInputRef = useRef<HTMLInputElement>(null)
@@ -1246,6 +1256,28 @@ function TakingsPanel() {
     setFormError(null)
   }
 
+  function editTaking(taking: AccountingTaking) {
+    setEditingId(taking.id)
+    setForm({
+      date: taking.date,
+      sellerId: taking.sellerId ?? '',
+      supplierId: taking.supplierId ?? '',
+      cash: String(taking.cash),
+      pos: String(taking.pos),
+      withdrawal: String(taking.withdrawal),
+      vat: String(taking.vat),
+      realTotal: String(taking.realTotal),
+    })
+    setFormError(null)
+    window.requestAnimationFrame(() => {
+      takingFormRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+      dateInputRef.current?.focus({ preventScroll: true })
+    })
+  }
+
   async function exportTakingsExcel() {
     const XLSX = await import('xlsx')
     const workbook = XLSX.utils.book_new()
@@ -1278,7 +1310,11 @@ function TakingsPanel() {
         <div><span>Reale</span><strong>{money(real)}</strong></div>
         <div><span>Ritiri cash</span><strong>{money(data.takings.reduce((sum, item) => sum + item.withdrawal, 0))}</strong></div>
       </section>
-      <form className="panel accounting-form" onSubmit={submit}>
+      <form
+        className="panel accounting-form"
+        onSubmit={submit}
+        ref={takingFormRef}
+      >
         <div className="panel-heading invoice-form-heading">
           <div>
             <span className="eyebrow">INSERIMENTO MANUALE</span>
@@ -1340,7 +1376,7 @@ function TakingsPanel() {
         <div className="data-table-wrap">
           <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Fornitore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{taking.supplierName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => { setEditingId(taking.id); setForm({ date: taking.date, sellerId: taking.sellerId ?? '', supplierId: taking.supplierId ?? '', cash: String(taking.cash), pos: String(taking.pos), withdrawal: String(taking.withdrawal), vat: String(taking.vat), realTotal: String(taking.realTotal) }); setFormError(null) }}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{taking.supplierName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
           {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}
