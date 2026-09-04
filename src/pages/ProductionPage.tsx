@@ -74,6 +74,29 @@ function rangeFor(period: ProductionReportPeriod, selected: string) {
   }
 }
 
+function allocatedMonthlyCost(
+  amount: number,
+  date: string,
+  rangeStart: string,
+  rangeEnd: string,
+) {
+  const [year, month] = date.split('-').map(Number)
+  if (!year || !month || amount <= 0) return 0
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const monthStart = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`
+  const monthEnd = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
+  const start = rangeStart > monthStart ? rangeStart : monthStart
+  const end = rangeEnd < monthEnd ? rangeEnd : monthEnd
+  if (start > end) return 0
+  const elapsedDays =
+    Math.round(
+      (new Date(`${end}T00:00:00Z`).getTime() -
+        new Date(`${start}T00:00:00Z`).getTime()) /
+        86_400_000,
+    ) + 1
+  return (amount * elapsedDays) / daysInMonth
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('it-IT', {
     day: '2-digit',
@@ -201,6 +224,19 @@ export function ProductionPage() {
           ),
         }))
         .filter((item) => item.amount > 0)
+      const rentals = data.rentals
+        .map((rental) => ({
+          rental,
+          amount: roundMoney(
+            allocatedMonthlyCost(
+              rental.total,
+              rental.date,
+              range.start,
+              range.end,
+            ) / Math.max(1, data.productionSettings.length),
+          ),
+        }))
+        .filter((item) => item.amount > 0)
       const productionEntries = data.productionEntries.filter(
         (entry) =>
           entry.productId === product.id &&
@@ -214,7 +250,7 @@ export function ProductionPage() {
       const fixedCosts = fixedExpenses.reduce(
         (total, item) => total + item.amount,
         0,
-      )
+      ) + rentals.reduce((total, item) => total + item.amount, 0)
       const salaryCosts = salaryExpenses.reduce(
         (total, item) => total + item.amount,
         0,
@@ -229,6 +265,7 @@ export function ProductionPage() {
         product,
         invoices,
         fixedExpenses,
+        rentals,
         salaryExpenses,
         productionEntries,
         invoiceCosts: roundMoney(invoiceCosts),
@@ -265,6 +302,17 @@ export function ProductionPage() {
           configuredIds(product.workerIds).includes(expense.sellerId ?? ''),
         ),
     )
+    const uniqueRentals = data.rentals
+      .map((rental) => ({
+        rental,
+        amount: allocatedMonthlyCost(
+          rental.total,
+          rental.date,
+          range.start,
+          range.end,
+        ),
+      }))
+      .filter((item) => item.amount > 0)
     const invoiceCosts = showingAllProducts
       ? uniqueInvoices.reduce((total, invoice) => total + invoice.total, 0)
       : productsResults.reduce(
@@ -276,7 +324,7 @@ export function ProductionPage() {
           (total, expense) =>
             total + allocatedExpense(expense, range.start, range.end),
           0,
-        )
+        ) + uniqueRentals.reduce((total, item) => total + item.amount, 0)
       : productsResults.reduce(
           (total, product) => total + product.fixedCosts,
           0,
@@ -584,6 +632,13 @@ export function ProductionPage() {
       productName: product.product.productName,
     })),
   )
+  const fixedRentalDetails = results.products.flatMap((product) =>
+    product.rentals.map((item) => ({
+      ...item,
+      productId: product.product.id,
+      productName: product.product.productName,
+    })),
+  )
   const salaryDetails = results.products.flatMap((product) =>
     product.salaryExpenses.map((item) => ({
       ...item,
@@ -812,7 +867,8 @@ export function ProductionPage() {
             </div>
             <div>
               <h3>Spese fisse incluse</h3>
-              {fixedExpenseDetails.length === 0 ? (
+              {fixedExpenseDetails.length === 0 &&
+              fixedRentalDetails.length === 0 ? (
                 <p className="production-help">
                   Nessuna spesa fissa nel periodo.
                 </p>
@@ -830,6 +886,24 @@ export function ProductionPage() {
                             {productName}
                             {expense.sellerName &&
                               ` · ${expense.sellerName}`}
+                          </small>
+                        </span>
+                        <strong>{money(amount)}</strong>
+                      </div>
+                    ),
+                  )}
+                  {fixedRentalDetails.map(
+                    ({ rental, amount, productId, productName }) => (
+                      <div
+                        className="record-card"
+                        key={`${productId}-${rental.id}`}
+                      >
+                        <span>
+                          <strong>
+                            Affitto · {rental.property || 'Locale'}
+                          </strong>
+                          <small>
+                            {productName} · mese di {rental.date.slice(0, 7)}
                           </small>
                         </span>
                         <strong>{money(amount)}</strong>

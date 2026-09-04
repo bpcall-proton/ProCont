@@ -1119,12 +1119,11 @@ export function InvoicesPanel({
 const emptyTaking = {
   date: today(),
   sellerId: '',
-  supplierId: '',
   cash: '',
   pos: '',
-  withdrawal: '',
   vat: '',
   realTotal: '',
+  withdrawal: '',
 }
 
 function TakingsPanel() {
@@ -1136,7 +1135,6 @@ function TakingsPanel() {
   const [repeatSeller, setRepeatSeller] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [sellerFilter, setSellerFilter] = useState('')
-  const [supplierFilter, setSupplierFilter] = useState('')
   const [monthFilter, setMonthFilter] = useState('')
   const takingFormRef = useRef<HTMLFormElement>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
@@ -1155,19 +1153,10 @@ function TakingsPanel() {
   )
     ? sellerFilter
     : ''
-  const activeSupplierFilter = data.suppliers.some(
-    (supplier) => supplier.id === supplierFilter,
-  )
-    ? supplierFilter
-    : ''
   const takings = data.takings
     .filter(
       (taking) =>
         !activeSellerFilter || taking.sellerId === activeSellerFilter,
-    )
-    .filter(
-      (taking) =>
-        !activeSupplierFilter || taking.supplierId === activeSupplierFilter,
     )
     .filter(
       (taking) => !monthFilter || taking.date.slice(0, 7) === monthFilter,
@@ -1193,22 +1182,17 @@ function TakingsPanel() {
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const seller = data.sellers.find((item) => item.id === form.sellerId)
-        const supplier = data.suppliers.find(
-          (item) => item.id === form.supplierId,
-        )
         const taking: AccountingTaking = {
           id: editingId ?? createId('taking'),
           companyId,
           date: form.date,
           sellerId: seller?.id ?? null,
           sellerName: seller?.name ?? '',
-          supplierId: supplier?.id ?? null,
-          supplierName: supplier?.name ?? '',
           cash,
           pos,
-          withdrawal: numberValue(form.withdrawal),
           vat,
           realTotal,
+          withdrawal: numberValue(form.withdrawal),
         }
         return {
           ...current,
@@ -1256,17 +1240,49 @@ function TakingsPanel() {
     setFormError(null)
   }
 
+  function handleTakingEnter(event: KeyboardEvent<HTMLFormElement>) {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return
+    }
+    const target = event.target
+    if (
+      !(target instanceof HTMLInputElement) &&
+      !(target instanceof HTMLSelectElement)
+    ) {
+      return
+    }
+    if (!target.matches('[data-taking-entry]')) return
+
+    event.preventDefault()
+    const takingForm = takingFormRef.current
+    if (!takingForm) return
+    const fields = Array.from(
+      takingForm.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        '[data-taking-entry]',
+      ),
+    ).filter((field) => !field.disabled)
+    const nextField = fields[fields.indexOf(target) + 1]
+    if (nextField) {
+      nextField.focus()
+      return
+    }
+    takingForm.requestSubmit()
+  }
+
   function editTaking(taking: AccountingTaking) {
     setEditingId(taking.id)
     setForm({
       date: taking.date,
       sellerId: taking.sellerId ?? '',
-      supplierId: taking.supplierId ?? '',
       cash: String(taking.cash),
       pos: String(taking.pos),
-      withdrawal: String(taking.withdrawal),
       vat: String(taking.vat),
       realTotal: String(taking.realTotal),
+      withdrawal: String(taking.withdrawal),
     })
     setFormError(null)
     window.requestAnimationFrame(() => {
@@ -1287,12 +1303,11 @@ function TakingsPanel() {
         takings.map((taking) => ({
           Data: taking.date,
           Venditore: taking.sellerName,
-          Fornitore: taking.supplierName,
           Cash: taking.cash,
           POS: taking.pos,
-          'Cash ritirato': taking.withdrawal,
           'IVA inclusa': taking.vat,
           'Incasso reale': taking.realTotal,
+          'Cash ritirato': taking.withdrawal,
         })),
       ),
       'Incassi',
@@ -1312,6 +1327,7 @@ function TakingsPanel() {
       </section>
       <form
         className="panel accounting-form"
+        onKeyDown={handleTakingEnter}
         onSubmit={submit}
         ref={takingFormRef}
       >
@@ -1342,14 +1358,13 @@ function TakingsPanel() {
           )}
         </div>
         <div className="form-grid accounting-fields">
-          <label>Data<input ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
-          <label>Venditore<select ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Fornitore<select value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Cash<input ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
-          <label>POS<input inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
-          <label>Cash ritirato<input inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
-          <label>IVA inclusa in Cash + POS<input inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Incasso reale totale<input inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
+          <label>Data<input data-taking-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+          <label>Venditore<select data-taking-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Cash<input data-taking-entry ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
+          <label>POS<input data-taking-entry inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
+          <label>IVA inclusa in Cash + POS<input data-taking-entry inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
+          <label>Incasso reale totale<input data-taking-entry inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
+          <label>Cash ritirato<input data-taking-entry inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
@@ -1365,18 +1380,14 @@ function TakingsPanel() {
               <option value="">Tutti i venditori</option>
               {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
-            <select aria-label="Filtra incassi per fornitore" value={activeSupplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
-              <option value="">Tutti i fornitori</option>
-              {data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-            </select>
             <input aria-label="Filtra incassi per mese" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
             <button className="button button-secondary" disabled={takings.length === 0} onClick={() => void exportTakingsExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
         <div className="data-table-wrap">
-          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Fornitore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Azioni</th></tr></thead>
+          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{taking.supplierName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
           {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}

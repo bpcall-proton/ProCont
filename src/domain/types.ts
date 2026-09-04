@@ -151,13 +151,11 @@ export interface AccountingTaking {
   date: string
   sellerId: string | null
   sellerName: string
-  supplierId: string | null
-  supplierName: string
   cash: number
   pos: number
-  withdrawal: number
   vat: number
   realTotal: number
+  withdrawal: number
 }
 
 export interface AccountingSeller {
