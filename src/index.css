@@ -1164,6 +1164,17 @@ select {
   background: rgba(244, 63, 94, 0.1);
 }
 
+.season-name-field {
+  width: 100%;
+  display: grid;
+  gap: 7px;
+  text-align: left;
+}
+
+.season-name-field input {
+  width: 100%;
+}
+
 .record-status.unrecognized,
 .record-status.possible-duplicate {
   color: #fca5a5;

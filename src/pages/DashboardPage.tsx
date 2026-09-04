@@ -50,6 +50,7 @@ interface DashboardDetailRow {
   description: string
   reference: string
   amount: number
+  sellerId?: string | null
 }
 
 interface DashboardMetric {
@@ -76,6 +77,9 @@ export function DashboardPage() {
   const [sellerDetail, setSellerDetail] =
     useState<SellerMetricDetail | null>(null)
   const [sellerAsOfDate, setSellerAsOfDate] = useState('')
+  const [withdrawalSellerFilter, setWithdrawalSellerFilter] = useState('')
+  const [withdrawalMonthFilter, setWithdrawalMonthFilter] = useState('')
+  const [withdrawalYearFilter, setWithdrawalYearFilter] = useState('')
   const { review } = state
   const companyId = state.accounting.activeCompanyId
   const activeCompany = state.accounting.companies.find(
@@ -248,6 +252,7 @@ export function DashboardPage() {
       description: taking.sellerName || 'Venditore non indicato',
       reference: taking.supplierName || 'Fornitore non indicato',
       amount: taking.withdrawal,
+      sellerId: taking.sellerId,
     }))
     .filter((row) => row.amount !== 0)
   const rawCashResidual = real - pos - withdrawals
@@ -557,7 +562,36 @@ export function DashboardPage() {
     })
   }
 
-  const selectedMetric = detail ? metrics[detail] : null
+  const withdrawalYears = [
+    ...new Set(
+      withdrawalRows
+        .map((row) => row.date.slice(0, 4))
+        .filter((year) => /^\d{4}$/.test(year)),
+    ),
+  ].sort((first, second) => second.localeCompare(first))
+  const filteredWithdrawalRows = withdrawalRows.filter((row) => {
+    const [year, month] = row.date.split('-')
+    return (
+      (!withdrawalSellerFilter ||
+        (withdrawalSellerFilter === 'unassigned'
+          ? !row.sellerId
+          : row.sellerId === withdrawalSellerFilter)) &&
+      (!withdrawalMonthFilter || month === withdrawalMonthFilter) &&
+      (!withdrawalYearFilter || year === withdrawalYearFilter)
+    )
+  })
+  const selectedMetric = detail
+    ? detail === 'withdrawals'
+      ? {
+          ...metrics.withdrawals,
+          value: filteredWithdrawalRows.reduce(
+            (sum, row) => sum + row.amount,
+            0,
+          ),
+          rows: filteredWithdrawalRows,
+        }
+      : metrics[detail]
+    : null
   const selectedSeller = sellerDetail
     ? sellerSummaries.find((seller) => seller.id === sellerDetail.sellerId)
     : undefined
@@ -818,6 +852,90 @@ export function DashboardPage() {
             <strong>{displayedMetric.rows.length}</strong>
           </article>
         </section>
+        {detail === 'withdrawals' && !selectedSellerMetric && (
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">FILTRI RITIRI</span>
+                <h2>Venditore e periodo</h2>
+              </div>
+            </div>
+            <div className="invoice-filters">
+              <select
+                aria-label="Filtra Cash ritirato per venditore"
+                onChange={(event) =>
+                  setWithdrawalSellerFilter(event.target.value)
+                }
+                value={withdrawalSellerFilter}
+              >
+                <option value="">Tutti i venditori</option>
+                {accounting.sellers.map((seller) => (
+                  <option key={seller.id} value={seller.id}>
+                    {seller.name}
+                  </option>
+                ))}
+                {withdrawalRows.some((row) => !row.sellerId) && (
+                  <option value="unassigned">Venditore non indicato</option>
+                )}
+              </select>
+              <select
+                aria-label="Filtra Cash ritirato per mese"
+                onChange={(event) =>
+                  setWithdrawalMonthFilter(event.target.value)
+                }
+                value={withdrawalMonthFilter}
+              >
+                <option value="">Tutti i mesi</option>
+                {[
+                  'Gennaio',
+                  'Febbraio',
+                  'Marzo',
+                  'Aprile',
+                  'Maggio',
+                  'Giugno',
+                  'Luglio',
+                  'Agosto',
+                  'Settembre',
+                  'Ottobre',
+                  'Novembre',
+                  'Dicembre',
+                ].map((month, index) => (
+                  <option
+                    key={month}
+                    value={String(index + 1).padStart(2, '0')}
+                  >
+                    {month}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Filtra Cash ritirato per anno"
+                onChange={(event) =>
+                  setWithdrawalYearFilter(event.target.value)
+                }
+                value={withdrawalYearFilter}
+              >
+                <option value="">Tutti gli anni</option>
+                {withdrawalYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button"
+                onClick={() => {
+                  setWithdrawalSellerFilter('')
+                  setWithdrawalMonthFilter('')
+                  setWithdrawalYearFilter('')
+                }}
+                type="button"
+              >
+                Azzera filtri
+              </button>
+            </div>
+          </section>
+        )}
         <section className="panel">
           <div className="panel-heading">
             <div>

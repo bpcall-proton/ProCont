@@ -183,6 +183,85 @@ function backupFilename(state: AppState) {
   return `fatture-incassi-pro-${name}.json`
 }
 
+function safeFilenamePart(value: string) {
+  return (
+    value
+      .trim()
+      .toLocaleLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'stagione'
+  )
+}
+
+function resetActiveCompanySeason(state: AppState, companyId: string) {
+  return {
+    ...state,
+    reviewDocuments: state.reviewDocuments.filter(
+      (document) => document.companyId !== companyId,
+    ),
+    accounting: {
+      ...state.accounting,
+      invoices: state.accounting.invoices.filter(
+        (invoice) => invoice.companyId !== companyId,
+      ),
+      takings: state.accounting.takings.filter(
+        (taking) => taking.companyId !== companyId,
+      ),
+      rentals: state.accounting.rentals.filter(
+        (rental) => rental.companyId !== companyId,
+      ),
+      accountantInvoices: state.accounting.accountantInvoices.filter(
+        (invoice) => invoice.companyId !== companyId,
+      ),
+      expenses: state.accounting.expenses.filter(
+        (expense) => expense.companyId !== companyId,
+      ),
+      productionSettings: state.accounting.productionSettings.map(
+        (settings) =>
+          settings.companyId === companyId
+            ? { ...settings, expenseIds: [] }
+            : settings,
+      ),
+      productionEntries: state.accounting.productionEntries.filter(
+        (entry) => entry.companyId !== companyId,
+      ),
+    },
+  }
+}
+
+function clearActiveCompanyData(state: AppState, companyId: string) {
+  const outsideCompany = <Item extends { companyId: string }>(items: Item[]) =>
+    items.filter((item) => item.companyId !== companyId)
+  return {
+    ...state,
+    stores: outsideCompany(state.stores),
+    sellers: outsideCompany(state.sellers),
+    reviewDocuments: outsideCompany(state.reviewDocuments),
+    accounting: {
+      ...state.accounting,
+      invoices: outsideCompany(state.accounting.invoices),
+      takings: outsideCompany(state.accounting.takings),
+      sellers: outsideCompany(state.accounting.sellers),
+      suppliers: outsideCompany(state.accounting.suppliers),
+      products: outsideCompany(state.accounting.products),
+      rentals: outsideCompany(state.accounting.rentals),
+      accountantInvoices: outsideCompany(
+        state.accounting.accountantInvoices,
+      ),
+      expenses: outsideCompany(state.accounting.expenses),
+      productionSettings: outsideCompany(
+        state.accounting.productionSettings,
+      ),
+      productionEntries: outsideCompany(state.accounting.productionEntries),
+      productionViewSettings: outsideCompany(
+        state.accounting.productionViewSettings,
+      ),
+    },
+  }
+}
+
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const sessionUser = user
@@ -736,6 +815,127 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncDriveBackup: async () => {
         await saveQueue.current
         await saveDriveBackup(stateRef.current)
+      },
+      archiveSeason: async (name: string) => {
+        const current = stateRef.current
+        const activeCompanyId = current.accounting.activeCompanyId
+        const activeCompany = current.accounting.companies.find(
+          (company) => company.id === activeCompanyId,
+        )
+        const archiveName = name.trim()
+        const folder = current.dataSettings.driveFolder.trim()
+        if (!archiveName) {
+          return { ok: false, error: 'Inserisci il nome della stagione.' }
+        }
+        if (!activeCompanyId || !activeCompany) {
+          return { ok: false, error: 'Seleziona prima un’azienda.' }
+        }
+        if (!window.desktopApp || !folder || /^https?:\/\//i.test(folder)) {
+          return {
+            ok: false,
+            error:
+              'Seleziona nell’EXE Windows una cartella locale prima di archiviare.',
+          }
+        }
+        const archivedAt = new Date()
+        const archiveState = createCompanyState(current, activeCompanyId)
+        const timestamp = archivedAt
+          .toISOString()
+          .replace(/[-:]/g, '')
+          .replace('T', '-')
+          .slice(0, 15)
+        const filename = `stagione-${safeFilenamePart(archiveName)}-${safeFilenamePart(activeCompany.name)}-${timestamp}.json`
+        const content = JSON.stringify(
+          {
+            app: 'fatture-incassi-pro',
+            version: 9,
+            archive: {
+              type: 'season',
+              name: archiveName,
+              companyId: activeCompanyId,
+              companyName: activeCompany.name,
+              archivedAt: archivedAt.toISOString(),
+            },
+            data: archiveState,
+          },
+          null,
+          2,
+        )
+        try {
+          const destination = await window.desktopApp.saveDriveBackup(
+            folder,
+            filename,
+            content,
+          )
+          const resetState = withTimestamp(
+            resetActiveCompanySeason(current, activeCompanyId),
+          )
+          setSyncState('saving')
+          setSyncMessage('Reset del nuovo esercizio in corso')
+          const persistence = saveQueue.current.then(() =>
+            activeRepository.current.save(resetState),
+          )
+          saveQueue.current = persistence.catch(() => undefined)
+          await persistence
+          applyState(resetState)
+          setSyncState('saved')
+          setSyncMessage('Stagione archiviata e nuovo esercizio pronto')
+          await saveDriveBackup(resetState)
+          return { ok: true, destination }
+        } catch (error) {
+          setSyncState('error')
+          setSyncMessage(
+            error instanceof Error
+              ? error.message
+              : 'Archiviazione stagione non riuscita',
+          )
+          return {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Archiviazione stagione non riuscita',
+          }
+        }
+      },
+      restoreSeasonArchive: async (json: string) => {
+        const current = stateRef.current
+        const activeCompanyId = current.accounting.activeCompanyId
+        if (!activeCompanyId) {
+          return { ok: false, error: 'Seleziona prima un’azienda.' }
+        }
+        try {
+          const cleared = clearActiveCompanyData(current, activeCompanyId)
+          const restored = withTimestamp(
+            importLegacyIntoActiveCompany(cleared, json),
+          )
+          setSyncState('saving')
+          setSyncMessage('Ripristino stagione in corso')
+          const persistence = saveQueue.current.then(() =>
+            activeRepository.current.save(restored),
+          )
+          saveQueue.current = persistence.catch(() => undefined)
+          await persistence
+          applyState(restored)
+          setSyncState('saved')
+          setSyncMessage('Stagione ripristinata')
+          await saveDriveBackup(restored)
+          return { ok: true }
+        } catch (error) {
+          setSyncState('error')
+          setSyncMessage(
+            error instanceof Error
+              ? error.message
+              : 'Ripristino stagione non riuscito',
+          )
+          return {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Ripristino stagione non riuscito',
+          }
+        }
       },
       setCurrency: (currency: Currency) => {
         updateState((current) => ({

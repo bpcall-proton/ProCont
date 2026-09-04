@@ -59,6 +59,12 @@ export interface AppStoreContextValue {
   setDriveFolder: (folder: string) => void
   selectDriveFolder: () => Promise<void>
   syncDriveBackup: () => Promise<void>
+  archiveSeason: (
+    name: string,
+  ) => Promise<{ ok: boolean; destination?: string; error?: string }>
+  restoreSeasonArchive: (
+    json: string,
+  ) => Promise<{ ok: boolean; error?: string }>
   setCurrency: (currency: Currency) => void
   setImageRetention: (days: number | null) => void
   setLanguage: (language: InterfaceLanguage) => void
