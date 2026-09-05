@@ -27,7 +27,9 @@ import type {
   AccountantInvoice,
   AccountingExpense,
   AccountingInvoice,
+  AccountingSeller,
   AccountingState,
+  AccountingSupplier,
   AccountingTaking,
   InvoiceLine,
   PaymentMethod,
@@ -1536,8 +1538,12 @@ function TakingsPanel() {
 function ContactsPanel() {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
+  const [editingSellerId, setEditingSellerId] = useState<string | null>(null)
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(
+    null,
+  )
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
   const [supplierCashUnregistered, setSupplierCashUnregistered] =
@@ -1548,108 +1554,167 @@ function ContactsPanel() {
 
   function addSeller(event: FormEvent) {
     event.preventDefault()
+    const name = sellerName.trim()
+    const phone = sellerPhone.trim()
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => ({
         ...current,
-        sellers: [
-          {
-            id: createId('accounting-seller'),
-            companyId,
-            name: sellerName.trim(),
-            email: '',
-            phone: sellerPhone.trim(),
-            city: '',
-            notes: '',
-          },
-          ...current.sellers,
-        ],
+        sellers: editingSellerId
+          ? current.sellers.map((seller) =>
+              seller.id === editingSellerId
+                ? { ...seller, name, phone }
+                : seller,
+            )
+          : [
+              {
+                id: createId('accounting-seller'),
+                companyId,
+                name,
+                email: '',
+                phone,
+                city: '',
+                notes: '',
+              },
+              ...current.sellers,
+            ],
+        invoices: editingSellerId
+          ? current.invoices.map((invoice) =>
+              invoice.sellerId === editingSellerId
+                ? { ...invoice, sellerName: name }
+                : invoice,
+            )
+          : current.invoices,
+        takings: editingSellerId
+          ? current.takings.map((taking) =>
+              taking.sellerId === editingSellerId
+                ? { ...taking, sellerName: name }
+                : taking,
+            )
+          : current.takings,
+        expenses: editingSellerId
+          ? current.expenses.map((expense) =>
+              expense.sellerId === editingSellerId
+                ? { ...expense, sellerName: name }
+                : expense,
+            )
+          : current.expenses,
       })),
     )
+    setEditingSellerId(null)
+    setSellerName('')
+    setSellerPhone('')
+  }
+
+  function editSeller(seller: AccountingSeller) {
+    setEditingSellerId(seller.id)
+    setSellerName(seller.name)
+    setSellerPhone(seller.phone)
+  }
+
+  function cancelSellerEdit() {
+    setEditingSellerId(null)
     setSellerName('')
     setSellerPhone('')
   }
 
   function addSupplier(event: FormEvent) {
     event.preventDefault()
+    const name = supplierName.trim()
+    const taxId = supplierTaxId.trim()
+    const paymentTermsDays = Math.max(
+      0,
+      Math.min(365, Math.round(numberValue(supplierPaymentTerms))),
+    )
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => ({
         ...current,
-        suppliers: [
-          {
-            id: createId('accounting-supplier'),
-            companyId,
-            name: supplierName.trim(),
-            taxId: supplierTaxId.trim(),
-            email: '',
-            phone: '',
-            city: '',
-            notes: '',
-            paymentTermsDays: Math.max(
-              0,
-              Math.round(numberValue(supplierPaymentTerms)),
-            ),
-            cashUnregisteredByDefault: supplierCashUnregistered,
-          },
-          ...current.suppliers,
-        ],
+        suppliers: editingSupplierId
+          ? current.suppliers.map((supplier) =>
+              supplier.id === editingSupplierId
+                ? {
+                    ...supplier,
+                    name,
+                    taxId,
+                    paymentTermsDays,
+                    cashUnregisteredByDefault: supplierCashUnregistered,
+                  }
+                : supplier,
+            )
+          : [
+              {
+                id: createId('accounting-supplier'),
+                companyId,
+                name,
+                taxId,
+                email: '',
+                phone: '',
+                city: '',
+                notes: '',
+                paymentTermsDays,
+                cashUnregisteredByDefault: supplierCashUnregistered,
+              },
+              ...current.suppliers,
+            ],
+        invoices: editingSupplierId
+          ? current.invoices.map((invoice) =>
+              invoice.supplierId === editingSupplierId
+                ? { ...invoice, supplierName: name }
+                : invoice,
+            )
+          : current.invoices,
+        products: editingSupplierId
+          ? current.products.map((product) =>
+              product.supplierId === editingSupplierId
+                ? { ...product, supplierName: name }
+                : product,
+            )
+          : current.products,
       })),
     )
+    setEditingSupplierId(null)
     setSupplierName('')
     setSupplierTaxId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
     setSupplierCashUnregistered(false)
   }
 
-  function updateSupplierPaymentTerms(supplierId: string, value: string) {
-    const paymentTermsDays = Math.max(
-      0,
-      Math.min(365, Math.round(numberValue(value))),
-    )
-    updateAccounting((current) => ({
-      ...current,
-      suppliers: current.suppliers.map((supplier) =>
-        supplier.id === supplierId
-          ? { ...supplier, paymentTermsDays }
-          : supplier,
-      ),
-    }))
+  function editSupplier(supplier: AccountingSupplier) {
+    setEditingSupplierId(supplier.id)
+    setSupplierName(supplier.name)
+    setSupplierTaxId(supplier.taxId)
+    setSupplierPaymentTerms(String(supplier.paymentTermsDays))
+    setSupplierCashUnregistered(supplier.cashUnregisteredByDefault)
   }
 
-  function updateSupplierCashUnregistered(
-    supplierId: string,
-    cashUnregisteredByDefault: boolean,
-  ) {
-    updateAccounting((current) => ({
-      ...current,
-      suppliers: current.suppliers.map((supplier) =>
-        supplier.id === supplierId
-          ? { ...supplier, cashUnregisteredByDefault }
-          : supplier,
-      ),
-    }))
+  function cancelSupplierEdit() {
+    setEditingSupplierId(null)
+    setSupplierName('')
+    setSupplierTaxId('')
+    setSupplierPaymentTerms(String(defaultPaymentTermsDays))
+    setSupplierCashUnregistered(false)
   }
 
   return (
     <section className="contact-columns">
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Venditori</h2></div><span className="count-pill">{data.sellers.length}</span></div>
-        <form className="inline-create-form" onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className={`inline-create-form${editingSellerId ? ' contact-editing-form' : ''}`} onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">{editingSellerId ? 'Salva' : 'Aggiungi'}</button>{editingSellerId ? <button type="button" onClick={cancelSellerEdit}>Annulla</button> : null}</form>
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Fornitori</h2></div><span className="count-pill">{data.suppliers.length}</span></div>
-        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><label className="supplier-cash-default"><input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className={`inline-create-form supplier-create-form${editingSupplierId ? ' contact-editing-form' : ''}`} onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><label className="supplier-cash-default"><input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><button className="button button-primary" type="submit">{editingSupplierId ? 'Salva' : 'Aggiungi'}</button>{editingSupplierId ? <button type="button" onClick={cancelSupplierEdit}>Annulla</button> : null}</form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
           const total = invoices.reduce(
             (sum, item) => sum + item.total + item.unregisteredGoods,
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><label className="supplier-cash-default"><input checked={supplier.cashUnregisteredByDefault} onChange={(event) => updateSupplierCashUnregistered(supplier.id, event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
     </section>
