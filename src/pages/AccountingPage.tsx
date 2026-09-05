@@ -118,6 +118,42 @@ function filenamePart(value: string) {
   )
 }
 
+function cashBalanceByTaking(takings: AccountingTaking[]) {
+  const balanceBySeller = new Map<string, number>()
+  const balanceByTaking = new Map<string, number>()
+  const orderedTakings = takings
+    .map((taking, index) => ({ taking, index }))
+    .sort(
+      (left, right) =>
+        left.taking.date.localeCompare(right.taking.date) ||
+        right.index - left.index,
+    )
+
+  for (const { taking } of orderedTakings) {
+    const sellerName = taking.sellerName.trim().toLocaleLowerCase()
+    const sellerKey = taking.sellerId
+      ? `id:${taking.sellerId}`
+      : `name:${sellerName || 'non-assegnato'}`
+    const realTotal = Number.isFinite(taking.realTotal)
+      ? Math.max(0, taking.realTotal)
+      : 0
+    const pos = Number.isFinite(taking.pos) ? taking.pos : 0
+    const withdrawal = Number.isFinite(taking.withdrawal)
+      ? taking.withdrawal
+      : 0
+    const balance = roundMoney(
+      (balanceBySeller.get(sellerKey) ?? 0) +
+        realTotal -
+        pos -
+        withdrawal,
+    )
+    balanceBySeller.set(sellerKey, balance)
+    balanceByTaking.set(taking.id, balance)
+  }
+
+  return balanceByTaking
+}
+
 function mutateCompany(
   state: AccountingState,
   updater: (activeId: string) => AccountingState,
@@ -1153,6 +1189,7 @@ function TakingsPanel() {
   )
     ? sellerFilter
     : ''
+  const cashBalances = cashBalanceByTaking(data.takings)
   const takings = data.takings
     .filter(
       (taking) =>
@@ -1308,6 +1345,7 @@ function TakingsPanel() {
           'IVA inclusa': taking.vat,
           'Incasso reale': taking.realTotal,
           'Cash ritirato': taking.withdrawal,
+          'Cash in mano': cashBalances.get(taking.id) ?? 0,
         })),
       ),
       'Incassi',
@@ -1385,9 +1423,9 @@ function TakingsPanel() {
           </div>
         </div>
         <div className="data-table-wrap">
-          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Azioni</th></tr></thead>
+          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Cash in mano</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
           {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}

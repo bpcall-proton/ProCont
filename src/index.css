@@ -17,6 +17,16 @@
   --violet-soft: rgba(139, 92, 246, 0.16);
   --text: #f8fafc;
   --muted: #94a3b8;
+  --sidebar-background: rgba(8, 12, 22, 0.94);
+  --topbar-background: rgba(6, 8, 16, 0.72);
+  --panel-background: rgba(13, 18, 32, 0.82);
+  --subtle-background: rgba(7, 11, 22, 0.58);
+  --input-background: #0b1120;
+  --card-background: linear-gradient(
+    145deg,
+    rgba(19, 27, 46, 0.94),
+    rgba(9, 14, 27, 0.94)
+  );
   --green: #10b981;
   --amber: #f59e0b;
   --red: #f43f5e;
@@ -191,7 +201,7 @@ h2 {
 }
 
 .button-secondary {
-  background: rgba(19, 27, 46, 0.85);
+  background: var(--panel-background);
   border-color: var(--border);
 }
 
@@ -309,7 +319,7 @@ h2 {
 label {
   display: grid;
   gap: 8px;
-  color: #cad5e5;
+  color: var(--text);
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -323,7 +333,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 11px;
   color: var(--text);
-  background: #0b1120;
+  background: var(--input-background);
   transition: 160ms ease;
 }
 
@@ -412,6 +422,81 @@ select {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(139, 92, 246, 0.1), transparent 34%),
+    radial-gradient(circle at 20% 100%, rgba(0, 229, 255, 0.08), transparent 36%),
+    var(--background);
+}
+
+.app-shell[data-background="gray"] {
+  --background: #3f4652;
+  --background-soft: #343a45;
+  --surface: #303744;
+  --surface-hover: #414a59;
+  --border: #667085;
+  --sidebar-background: rgba(43, 49, 60, 0.95);
+  --topbar-background: rgba(53, 59, 70, 0.88);
+  --panel-background: rgba(47, 54, 66, 0.88);
+  --subtle-background: rgba(38, 44, 55, 0.72);
+  --input-background: #29313d;
+  --card-background: linear-gradient(145deg, #3c4553, #2c333e);
+}
+
+.app-shell[data-background="pink"] {
+  --background: #6a3449;
+  --background-soft: #53283a;
+  --surface: #482536;
+  --surface-hover: #603046;
+  --border: #92556d;
+  --sidebar-background: rgba(68, 32, 48, 0.95);
+  --topbar-background: rgba(82, 39, 57, 0.88);
+  --panel-background: rgba(73, 35, 52, 0.88);
+  --subtle-background: rgba(57, 27, 41, 0.72);
+  --input-background: #3d2130;
+  --card-background: linear-gradient(145deg, #5f3045, #422232);
+}
+
+.app-shell[data-background="blue"] {
+  --background: #245979;
+  --background-soft: #1c4762;
+  --surface: #193e56;
+  --surface-hover: #255773;
+  --border: #4f829f;
+  --sidebar-background: rgba(20, 55, 76, 0.95);
+  --topbar-background: rgba(26, 67, 91, 0.88);
+  --panel-background: rgba(22, 59, 81, 0.88);
+  --subtle-background: rgba(17, 47, 66, 0.72);
+  --input-background: #17384e;
+  --card-background: linear-gradient(145deg, #255975, #183c54);
+}
+
+.app-shell[data-text="yellow"] {
+  --text: #fff36b;
+  --muted: #e8d970;
+}
+
+.app-shell[data-text="green"] {
+  --text: #7dff9d;
+  --muted: #73d98b;
+}
+
+.app-shell[data-text="black"] {
+  --text: #090d16;
+  --muted: #344155;
+  --surface: #e2e8f0;
+  --surface-hover: #d5dde8;
+  --border: #718096;
+  --sidebar-background: rgba(238, 242, 247, 0.95);
+  --topbar-background: rgba(226, 232, 240, 0.92);
+  --panel-background: rgba(241, 245, 249, 0.88);
+  --subtle-background: rgba(226, 232, 240, 0.8);
+  --input-background: #f8fafc;
+  --card-background: linear-gradient(145deg, #f8fafc, #dfe7f0);
+}
+
+.app-shell[data-text="black"] select {
+  color-scheme: light;
 }
 
 .sidebar {
@@ -422,7 +507,7 @@ select {
   flex-direction: column;
   padding: 25px 18px;
   border-right: 1px solid rgba(38, 50, 74, 0.8);
-  background: rgba(8, 12, 22, 0.94);
+  background: var(--sidebar-background);
   backdrop-filter: blur(18px);
 }
 
@@ -464,11 +549,11 @@ select {
 
 .sidebar nav button:hover {
   color: var(--text);
-  background: rgba(19, 27, 46, 0.7);
+  background: var(--surface-hover);
 }
 
 .sidebar nav button.active {
-  color: #eefdff;
+  color: var(--text);
   border-color: rgba(0, 229, 255, 0.2);
   background: linear-gradient(90deg, rgba(0, 229, 255, 0.14), rgba(139, 92, 246, 0.07));
   box-shadow: inset 3px 0 0 var(--cyan);
@@ -563,7 +648,7 @@ select {
   gap: 20px;
   padding: 14px clamp(22px, 4vw, 50px);
   border-bottom: 1px solid rgba(38, 50, 74, 0.7);
-  background: rgba(6, 8, 16, 0.72);
+  background: var(--topbar-background);
   backdrop-filter: blur(14px);
 }
 
@@ -692,7 +777,7 @@ select {
   padding: 24px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: linear-gradient(145deg, rgba(19, 27, 46, 0.94), rgba(9, 14, 27, 0.94));
+  background: var(--card-background);
 }
 
 .stat-card .stat-glow {
@@ -826,7 +911,7 @@ select {
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 15px;
-  background: rgba(7, 11, 22, 0.55);
+  background: var(--subtle-background);
 }
 
 .dashboard-seller-heading {
@@ -871,7 +956,7 @@ select {
   padding: 10px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: rgba(19, 27, 46, 0.78);
+  background: var(--panel-background);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -1003,6 +1088,75 @@ select {
   border-top: 1px solid var(--border);
 }
 
+.theme-settings {
+  display: grid;
+  gap: 22px;
+}
+
+.theme-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-settings legend {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-options button {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--subtle-background);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.theme-options button.selected {
+  border-color: var(--cyan);
+  box-shadow: inset 0 0 0 1px var(--cyan);
+}
+
+.theme-swatch {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.65);
+  border-radius: 7px;
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
+.theme-swatch.background-black { background: #060810; }
+.theme-swatch.background-gray { background: #59616d; }
+.theme-swatch.background-pink { background: #d67599; }
+.theme-swatch.background-blue { background: #55a9d6; }
+.theme-swatch.text-white { color: #fff; background: #182033; }
+.theme-swatch.text-yellow { color: #fff36b; background: #182033; }
+.theme-swatch.text-green { color: #7dff9d; background: #182033; }
+.theme-swatch.text-black { color: #090d16; background: #f8fafc; }
+
 .company-editor .button,
 .company-create-form .button {
   justify-self: start;
@@ -1023,7 +1177,7 @@ select {
   padding: 24px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(13, 18, 32, 0.78);
+  background: var(--panel-background);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.16);
 }
 

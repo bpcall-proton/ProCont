@@ -1,6 +1,8 @@
 export type UserRole = 'owner' | 'accountant'
 export type DataMode = 'local' | 'cloud'
 export type InterfaceLanguage = 'it' | 'ro' | 'en'
+export type InterfaceBackground = 'black' | 'gray' | 'pink' | 'blue'
+export type InterfaceTextColor = 'white' | 'yellow' | 'green' | 'black'
 export type Locale = 'it' | 'ro' | 'en'
 export type Currency = 'EUR' | 'MDL' | 'USD'
 export type SyncState = 'idle' | 'saving' | 'saved' | 'error'
@@ -71,6 +73,8 @@ export interface FinancialSummary {
 export interface DataSettings {
   mode: DataMode
   language: InterfaceLanguage
+  background: InterfaceBackground
+  textColor: InterfaceTextColor
   currency: Currency
   driveBackupAfterApproval: boolean
   driveFolder: string

@@ -19,7 +19,9 @@ import type {
   Company,
   Currency,
   DataMode,
+  InterfaceBackground,
   InterfaceLanguage,
+  InterfaceTextColor,
   SyncState,
 } from '../domain/types'
 import { DriveRepository } from '../data/driveRepository'
@@ -961,6 +963,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           dataSettings: {
             ...current.dataSettings,
             language,
+          },
+        }))
+      },
+      setInterfaceBackground: (background: InterfaceBackground) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            background,
+          },
+        }))
+      },
+      setInterfaceTextColor: (textColor: InterfaceTextColor) => {
+        updateState((current) => ({
+          ...current,
+          dataSettings: {
+            ...current.dataSettings,
+            textColor,
           },
         }))
       },

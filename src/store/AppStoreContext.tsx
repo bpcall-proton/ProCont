@@ -6,7 +6,9 @@ import type {
   Company,
   Currency,
   DataMode,
+  InterfaceBackground,
   InterfaceLanguage,
+  InterfaceTextColor,
   ReviewDocument,
   SyncState,
 } from '../domain/types'
@@ -68,6 +70,8 @@ export interface AppStoreContextValue {
   setCurrency: (currency: Currency) => void
   setImageRetention: (days: number | null) => void
   setLanguage: (language: InterfaceLanguage) => void
+  setInterfaceBackground: (background: InterfaceBackground) => void
+  setInterfaceTextColor: (textColor: InterfaceTextColor) => void
   updateAccounting: (
     updater: (accounting: AccountingState) => AccountingState,
   ) => void

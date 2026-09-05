@@ -544,6 +544,18 @@ export function normalizeStoredState(
       dataSettings: {
         ...state.dataSettings,
         language: state.dataSettings.language ?? 'it',
+        background:
+          state.dataSettings.background === 'gray' ||
+          state.dataSettings.background === 'pink' ||
+          state.dataSettings.background === 'blue'
+            ? state.dataSettings.background
+            : 'black',
+        textColor:
+          state.dataSettings.textColor === 'yellow' ||
+          state.dataSettings.textColor === 'green' ||
+          state.dataSettings.textColor === 'black'
+            ? state.dataSettings.textColor
+            : 'white',
         currency:
           state.dataSettings.currency === 'MDL' ||
           state.dataSettings.currency === 'USD'

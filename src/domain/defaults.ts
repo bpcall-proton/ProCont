@@ -37,6 +37,8 @@ export function createInitialState(companyId = createId('company')): AppState {
     dataSettings: {
       mode: 'local',
       language: 'it',
+      background: 'black',
+      textColor: 'white',
       currency: 'EUR',
       driveBackupAfterApproval: true,
       driveFolder: '',
