@@ -1698,7 +1698,20 @@ function ContactsPanel() {
     <section className="contact-columns">
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Venditori</h2></div><span className="count-pill">{data.sellers.length}</span></div>
-        <form className={`inline-create-form${editingSellerId ? ' contact-editing-form' : ''}`} onSubmit={addSeller}><input placeholder="Nome venditore" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} /><input placeholder="Telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} /><button className="button button-primary" type="submit">{editingSellerId ? 'Salva' : 'Aggiungi'}</button>{editingSellerId ? <button type="button" onClick={cancelSellerEdit}>Annulla</button> : null}</form>
+        <form className="inline-create-form contact-form" onSubmit={addSeller}>
+          <label className="contact-field">
+            <span>Nome venditore</span>
+            <input placeholder="Inserisci il nome" required value={sellerName} onChange={(event) => setSellerName(event.target.value)} />
+          </label>
+          <label className="contact-field">
+            <span>Telefono</span>
+            <input placeholder="Inserisci il telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} />
+          </label>
+          <div className="contact-form-actions">
+            <button className="button button-primary" type="submit">{editingSellerId ? 'Salva modifiche' : 'Aggiungi venditore'}</button>
+            {editingSellerId ? <button type="button" onClick={cancelSellerEdit}>Annulla</button> : null}
+          </div>
+        </form>
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
@@ -1707,7 +1720,28 @@ function ContactsPanel() {
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Fornitori</h2></div><span className="count-pill">{data.suppliers.length}</span></div>
-        <form className={`inline-create-form supplier-create-form${editingSupplierId ? ' contact-editing-form' : ''}`} onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><label className="supplier-cash-default"><input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><button className="button button-primary" type="submit">{editingSupplierId ? 'Salva' : 'Aggiungi'}</button>{editingSupplierId ? <button type="button" onClick={cancelSupplierEdit}>Annulla</button> : null}</form>
+        <form className="inline-create-form contact-form" onSubmit={addSupplier}>
+          <label className="contact-field">
+            <span>Nome fornitore</span>
+            <input placeholder="Inserisci la ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} />
+          </label>
+          <label className="contact-field">
+            <span>Partita IVA</span>
+            <input placeholder="Inserisci la Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} />
+          </label>
+          <label className="contact-field">
+            <span>Giorni per il pagamento</span>
+            <input min="0" max="365" placeholder="Esempio: 10" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} />
+          </label>
+          <label className="supplier-cash-default contact-checkbox-field">
+            <input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" />
+            Sempre cash senza fattura
+          </label>
+          <div className="contact-form-actions">
+            <button className="button button-primary" type="submit">{editingSupplierId ? 'Salva modifiche' : 'Aggiungi fornitore'}</button>
+            {editingSupplierId ? <button type="button" onClick={cancelSupplierEdit}>Annulla</button> : null}
+          </div>
+        </form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
           const total = invoices.reduce(
