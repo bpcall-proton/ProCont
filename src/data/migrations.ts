@@ -75,6 +75,13 @@ function contactKey(value: string) {
   return digits.startsWith('00') ? digits.slice(2) : digits
 }
 
+function isGeneratedStoreSeller(seller: AccountingSeller) {
+  return (
+    seller.notes.startsWith('Responsabile del punto vendita ') ||
+    seller.notes === 'Venditrice collegata a un punto vendita'
+  )
+}
+
 function mapPayment(value: JsonRecord): InvoicePayment {
   return {
     id: text(value.id, crypto.randomUUID()),
@@ -502,6 +509,12 @@ export function normalizeStoredState(
         store.companyId ||
         fallbackCompanyId,
     }))
+    const activeRouteSellerIds = new Set(stores.map((store) => store.sellerId))
+    const activeAccountingSellerIds = new Set(
+      sellers
+        .filter((seller) => activeRouteSellerIds.has(seller.id))
+        .map((seller) => seller.accountingSellerId),
+    )
     const invoices = (accounting.invoices ?? []).map((invoice) => {
       const lines = invoice.lines ?? []
       const vat = invoice.vat ?? 0
@@ -528,6 +541,30 @@ export function normalizeStoredState(
       recurrence: expense.recurrence ?? 'once',
       recurrenceEndDate: expense.recurrenceEndDate ?? null,
     }))
+    const referencedAccountingSellerIds = new Set([
+      ...invoices
+        .map((invoice) => invoice.sellerId)
+        .filter((sellerId): sellerId is string => Boolean(sellerId)),
+      ...(accounting.takings ?? [])
+        .map((taking) => taking.sellerId)
+        .filter((sellerId): sellerId is string => Boolean(sellerId)),
+      ...expenses
+        .map((expense) => expense.sellerId)
+        .filter((sellerId): sellerId is string => Boolean(sellerId)),
+      ...records(accounting.productionSettings).flatMap((settings) =>
+        Array.isArray(settings.sellerIds)
+          ? settings.sellerIds.filter(
+              (sellerId): sellerId is string => typeof sellerId === 'string',
+            )
+          : [],
+      ),
+    ])
+    const retainedAccountingSellers = accountingSellers.filter(
+      (seller) =>
+        !isGeneratedStoreSeller(seller) ||
+        activeAccountingSellerIds.has(seller.id) ||
+        referencedAccountingSellerIds.has(seller.id),
+    )
     return {
       ...state,
       schemaVersion: 9,
@@ -577,7 +614,7 @@ export function normalizeStoredState(
       accounting: {
         ...accounting,
         invoices,
-        sellers: accountingSellers.map((seller) => ({
+        sellers: retainedAccountingSellers.map((seller) => ({
           ...seller,
           companyId: seller.companyId || fallbackCompanyId,
         })),

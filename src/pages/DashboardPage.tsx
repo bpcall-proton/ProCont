@@ -78,6 +78,7 @@ export function DashboardPage() {
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
   const [sellerDetail, setSellerDetail] =
     useState<SellerMetricDetail | null>(null)
+  const [storeDetailId, setStoreDetailId] = useState<string | null>(null)
   const [sellerAsOfDate, setSellerAsOfDate] = useState('')
   const [withdrawalSellerFilter, setWithdrawalSellerFilter] = useState('')
   const [withdrawalMonthFilter, setWithdrawalMonthFilter] = useState('')
@@ -88,7 +89,19 @@ export function DashboardPage() {
     (company) => company.id === companyId,
   )
   const accounting = activeAccounting(state.accounting)
-  const stores = state.stores.filter((store) => store.companyId === companyId)
+  const stores = state.stores.filter(
+    (store) =>
+      store.companyId === companyId &&
+      state.sellers.some(
+        (seller) =>
+          seller.id === store.sellerId &&
+          seller.companyId === companyId &&
+          accounting.sellers.some(
+            (accountingSeller) =>
+              accountingSeller.id === seller.accountingSellerId,
+          ),
+      ),
+  )
   const invoiceValue = accounting.invoices.reduce(
     (sum, invoice) => sum + invoice.total,
     0,
@@ -634,6 +647,24 @@ export function DashboardPage() {
       stockResidual: unassignedTheoretical - unassignedReal,
     })
   }
+  const storeSummaries = stores
+    .map((store) => {
+      const routeSeller = state.sellers.find(
+        (seller) => seller.id === store.sellerId,
+      )
+      const seller = routeSeller
+        ? sellerSummaries.find(
+            (summary) => summary.id === routeSeller.accountingSellerId,
+          )
+        : undefined
+      return seller ? { store, seller } : null
+    })
+    .filter(
+      (summary): summary is NonNullable<typeof summary> => summary !== null,
+    )
+  const selectedStore = storeDetailId
+    ? storeSummaries.find((summary) => summary.store.id === storeDetailId)
+    : undefined
 
   const withdrawalYears = [
     ...new Set(
@@ -1076,6 +1107,104 @@ export function DashboardPage() {
     )
   }
 
+  if (selectedStore) {
+    const openMetric = (metric: SellerMetricKey) =>
+      setSellerDetail({ sellerId: selectedStore.seller.id, metric })
+    return (
+      <div className="page-stack">
+        <header className="page-heading">
+          <div>
+            <span className="eyebrow">DETTAGLIO PUNTO VENDITA</span>
+            <h1>{selectedStore.store.name}</h1>
+            <p>
+              {selectedStore.store.city || 'Città non indicata'} · Venditrice{' '}
+              {selectedStore.seller.name}
+            </p>
+          </div>
+          <button
+            className="button button-secondary"
+            onClick={() => setStoreDetailId(null)}
+            type="button"
+          >
+            Torna alla Panoramica
+          </button>
+        </header>
+        <section className="stats-grid dashboard-stats-grid">
+          <StatCard
+            detail={`${selectedStore.seller.invoices.length} fatture assegnate`}
+            label="Fatture"
+            onClick={() => openMetric('invoices')}
+            tone="cyan"
+            value={money(selectedStore.seller.invoiceValue)}
+          />
+          <StatCard
+            detail="Vendita teorica delle fatture assegnate"
+            label="Venit teorico"
+            onClick={() => openMetric('theoretical')}
+            tone="violet"
+            value={money(selectedStore.seller.theoretical)}
+          />
+          <StatCard
+            detail="Venit teorico meno Incasso reale"
+            label="Stock residuo"
+            onClick={() => openMetric('stock-residual')}
+            tone="amber"
+            value={money(selectedStore.seller.stockResidual)}
+          />
+          <StatCard
+            detail={`${selectedStore.seller.takings.length} incassi registrati`}
+            label="Incasso reale"
+            onClick={() => openMetric('real')}
+            tone="cyan"
+            value={money(selectedStore.seller.real)}
+          />
+          <StatCard
+            detail="Contanti registrati"
+            label="Cash"
+            onClick={() => openMetric('cash')}
+            tone="green"
+            value={money(selectedStore.seller.cash)}
+          />
+          <StatCard
+            detail="Pagamenti elettronici"
+            label="POS"
+            onClick={() => openMetric('pos')}
+            tone="green"
+            value={money(selectedStore.seller.pos)}
+          />
+          <StatCard
+            detail="Cash già ritirato dal punto"
+            label="Cash ritirato"
+            onClick={() => openMetric('withdrawals')}
+            tone="violet"
+            value={money(selectedStore.seller.withdrawals)}
+          />
+          <StatCard
+            detail="Cash disponibile dopo uscite e ritiri"
+            label="Cash in mano"
+            onClick={() => openMetric('cash-residual')}
+            tone="green"
+            value={money(selectedStore.seller.cashResidual)}
+          />
+          <StatCard
+            detail="Acquisti pagati dalla cassa senza fattura"
+            label="Merce senza fattura"
+            onClick={() => openMetric('unregistered-goods')}
+            tone="red"
+            value={money(selectedStore.seller.unregisteredGoods)}
+          />
+          <StatCard
+            detail="IVA inclusa negli incassi registrati"
+            label="IVA incassi"
+            onClick={() => openMetric('vat')}
+            tone="amber"
+            value={money(selectedStore.seller.vat)}
+          />
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="page-stack">
       <header className="page-heading">
@@ -1421,50 +1550,41 @@ export function DashboardPage() {
               <span className="eyebrow">PUNTI VENDITA</span>
               <h2>Situazione per punto</h2>
             </div>
-            <span className="count-pill">{stores.length}</span>
+            <span className="count-pill">{storeSummaries.length}</span>
           </div>
-          {stores.length === 0 ? (
+          {storeSummaries.length === 0 ? (
             <div className="empty-state compact-empty">
               <strong>Nessun punto vendita configurato</strong>
               <span>Aggiungi il primo punto dalla sezione dedicata.</span>
             </div>
           ) : (
             <div className="store-summary-list">
-              {stores.map((store) => {
-                const linkedSeller = state.sellers.find(
-                  (item) => item.id === store.sellerId,
-                )
-                const accountingSellerId =
-                  linkedSeller?.accountingSellerId || store.sellerId
-                const seller = accounting.sellers.find(
-                  (item) => item.id === accountingSellerId,
-                )
-                const storeTakings = accounting.takings.filter(
-                  (taking) => taking.sellerId === accountingSellerId,
-                )
-                return (
-                  <div className="store-summary" key={store.id}>
-                    <span className="store-avatar">
-                      {store.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span>
-                      <strong>{store.name}</strong>
-                      <small>
-                        {store.city || 'Città non indicata'} ·{' '}
-                        {seller?.name ?? 'Venditrice non assegnata'}
-                      </small>
-                    </span>
-                    <span className="store-value">
-                      {money(
-                        storeTakings.reduce(
-                          (sum, taking) => sum + realTaking(taking),
-                          0,
-                        ),
-                      )}
-                    </span>
-                  </div>
-                )
-              })}
+              {storeSummaries.map(({ store, seller }) => (
+                <button
+                  className="store-summary store-summary-button"
+                  key={store.id}
+                  onClick={() => setStoreDetailId(store.id)}
+                  type="button"
+                >
+                  <span className="store-avatar">
+                    {store.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong>{store.name}</strong>
+                    <small>
+                      {store.city || 'Città non indicata'} · {seller.name}
+                    </small>
+                  </span>
+                  <span className="store-summary-values">
+                    <strong>{money(seller.real)}</strong>
+                    <small>Incasso reale</small>
+                    <em>
+                      Venit {money(seller.theoretical)} · Stock{' '}
+                      {money(seller.stockResidual)}
+                    </em>
+                  </span>
+                </button>
+              ))}
             </div>
           )}
         </article>

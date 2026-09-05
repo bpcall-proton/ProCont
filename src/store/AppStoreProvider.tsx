@@ -37,7 +37,6 @@ import {
   importLegacyIntoActiveCompany,
 } from '../data/migrations'
 import { createCompanyState } from '../data/companyState'
-import { normalizeSenderPhone } from '../domain/senderRouting'
 import {
   realTaking,
   setMoneyCurrency,
@@ -633,44 +632,53 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         ) {
           return { ok: false, error: 'Seleziona un’azienda valida' }
         }
-        const phone = normalizeSenderPhone(input.sellerPhone)
-        if (!phone) {
-          return { ok: false, error: 'Inserisci un numero di telefono valido' }
+        if (!input.storeName.trim()) {
+          return { ok: false, error: 'Inserisci il nome del punto vendita' }
         }
+        const accountingSeller = stateRef.current.accounting.sellers.find(
+          (seller) =>
+            seller.id === input.accountingSellerId &&
+            seller.companyId === input.companyId &&
+            Boolean(seller.name.trim()),
+        )
+        if (!accountingSeller) {
+          return { ok: false, error: 'Seleziona una venditrice valida' }
+        }
+        const linkedSeller = stateRef.current.sellers.find(
+          (seller) =>
+            seller.companyId === input.companyId &&
+            seller.accountingSellerId === accountingSeller.id,
+        )
         if (
-          stateRef.current.sellers.some(
-            (seller) => normalizeSenderPhone(seller.phone) === phone,
+          linkedSeller &&
+          stateRef.current.stores.some(
+            (store) => store.sellerId === linkedSeller.id,
           )
         ) {
           return {
             ok: false,
             error:
-              'Questo numero è già assegnato: ogni ragazza deve identificare un solo punto vendita',
+              'Questa venditrice è già assegnata a un altro punto vendita',
           }
         }
-        const viberUserId = input.sellerViberUserId.trim()
-        if (
-          viberUserId &&
-          stateRef.current.sellers.some(
-            (seller) => seller.viberUserId === viberUserId,
-          )
-        ) {
-          return {
-            ok: false,
-            error:
-              'Questo ID Viber è già assegnato a un altro punto vendita',
-          }
-        }
-        const { store, seller, accountingSeller } =
-          createStoreWithSeller(input)
+        const created = linkedSeller
+          ? {
+              seller: linkedSeller,
+              store: {
+                id: createId('store'),
+                companyId: input.companyId,
+                name: input.storeName.trim(),
+                city: input.city.trim(),
+                sellerId: linkedSeller.id,
+              },
+            }
+          : createStoreWithSeller({ ...input, accountingSeller })
         updateState((current) => ({
           ...current,
-          stores: [...current.stores, store],
-          sellers: [...current.sellers, seller],
-          accounting: {
-            ...current.accounting,
-            sellers: [...current.accounting.sellers, accountingSeller],
-          },
+          stores: [...current.stores, created.store],
+          sellers: linkedSeller
+            ? current.sellers
+            : [...current.sellers, created.seller],
         }))
         return { ok: true }
       },
@@ -701,12 +709,56 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       removeStore: (storeId: string) => {
         updateState((current) => {
           const store = current.stores.find((item) => item.id === storeId)
+          if (!store) return current
+          const stores = current.stores.filter((item) => item.id !== storeId)
+          const sellerStillAssigned = stores.some(
+            (item) => item.sellerId === store.sellerId,
+          )
+          const routeSeller = current.sellers.find(
+            (item) => item.id === store.sellerId,
+          )
+          const sellers = sellerStillAssigned
+            ? current.sellers
+            : current.sellers.filter((item) => item.id !== store.sellerId)
+          const accountingSellerId = routeSeller?.accountingSellerId
+          const accountingSeller = current.accounting.sellers.find(
+            (item) => item.id === accountingSellerId,
+          )
+          const generatedSeller =
+            accountingSeller?.notes.startsWith(
+              'Responsabile del punto vendita ',
+            ) ||
+            accountingSeller?.notes ===
+              'Venditrice collegata a un punto vendita'
+          const accountingSellerHasData =
+            accountingSellerId !== undefined &&
+            (current.accounting.invoices.some(
+              (item) => item.sellerId === accountingSellerId,
+            ) ||
+              current.accounting.takings.some(
+                (item) => item.sellerId === accountingSellerId,
+              ) ||
+              current.accounting.expenses.some(
+                (item) => item.sellerId === accountingSellerId,
+              ) ||
+              current.accounting.productionSettings.some((item) =>
+                item.sellerIds.includes(accountingSellerId),
+              ))
           return {
             ...current,
-            stores: current.stores.filter((item) => item.id !== storeId),
-            sellers: store
-              ? current.sellers.filter((item) => item.id !== store.sellerId)
-              : current.sellers,
+            stores,
+            sellers,
+            accounting:
+              generatedSeller &&
+              !sellerStillAssigned &&
+              !accountingSellerHasData
+                ? {
+                    ...current.accounting,
+                    sellers: current.accounting.sellers.filter(
+                      (item) => item.id !== accountingSellerId,
+                    ),
+                  }
+                : current.accounting,
           }
         })
       },

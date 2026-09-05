@@ -6,9 +6,7 @@ import { useAppStore } from '../store/AppStoreContext'
 const emptyForm = {
   storeName: '',
   city: '',
-  sellerName: '',
-  sellerPhone: '',
-  sellerViberUserId: '',
+  accountingSellerId: '',
 }
 
 export function StoresPage() {
@@ -25,6 +23,23 @@ export function StoresPage() {
   const stores = state.stores.filter((store) => store.companyId === companyId)
   const sellers = state.sellers.filter(
     (seller) => seller.companyId === companyId,
+  )
+  const accountingSellers = state.accounting.sellers.filter(
+    (seller) => seller.companyId === companyId,
+  )
+  const assignedAccountingSellerIds = new Set(
+    stores
+      .map((store) =>
+        sellers.find((seller) => seller.id === store.sellerId),
+      )
+      .map((seller) => seller?.accountingSellerId)
+      .filter((sellerId): sellerId is string => Boolean(sellerId)),
+  )
+  const availableAccountingSellers = accountingSellers.filter(
+    (seller) =>
+      seller.name.trim() !== '' &&
+      (seller.id === form.accountingSellerId ||
+        !assignedAccountingSellerIds.has(seller.id)),
   )
 
   function submit(event: FormEvent) {
@@ -84,39 +99,23 @@ export function StoresPage() {
             </label>
             <label>
               Venditrice responsabile
-              <input
-                onChange={(event) =>
-                  setForm({ ...form, sellerName: event.target.value })
-                }
-                placeholder="Nome e cognome"
-                required
-                value={form.sellerName}
-              />
-            </label>
-            <label>
-              Telefono WhatsApp
-              <input
-                onChange={(event) =>
-                  setForm({ ...form, sellerPhone: event.target.value })
-                }
-                placeholder="+373..."
-                required
-                type="tel"
-                value={form.sellerPhone}
-              />
-            </label>
-            <label>
-              ID utente Viber (facoltativo)
-              <input
+              <select
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    sellerViberUserId: event.target.value,
+                    accountingSellerId: event.target.value,
                   })
                 }
-                placeholder="sender.id ricevuto dal bot"
-                value={form.sellerViberUserId}
-              />
+                required
+                value={form.accountingSellerId}
+              >
+                <option value="">Seleziona venditrice esistente</option>
+                {availableAccountingSellers.map((seller) => (
+                  <option key={seller.id} value={seller.id}>
+                    {seller.name}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           <div className="form-actions">
@@ -125,6 +124,11 @@ export function StoresPage() {
             </button>
           </div>
           {error && <p className="form-error">{error}</p>}
+          {accountingSellers.length === 0 && (
+            <p className="form-note">
+              Registra prima la venditrice nella sezione Contabilità.
+            </p>
+          )}
         </form>
       )}
 
@@ -132,6 +136,9 @@ export function StoresPage() {
         {stores.map((store) => {
           const seller = sellers.find(
             (item) => item.id === store.sellerId,
+          )
+          const accountingSeller = accountingSellers.find(
+            (item) => item.id === seller?.accountingSellerId,
           )
           return (
             <article className="panel store-card" key={store.id}>
@@ -146,8 +153,8 @@ export function StoresPage() {
               <p>{store.city || 'Città non indicata'}</p>
               <div className="seller-block">
                 <span>Venditrice responsabile</span>
-                <strong>{seller?.name}</strong>
-                <small>{seller?.phone}</small>
+                <strong>{accountingSeller?.name ?? seller?.name}</strong>
+                <small>{accountingSeller?.phone ?? seller?.phone}</small>
               </div>
               {canEdit && seller && (
                 <div className="viber-pairing">

@@ -1404,6 +1404,37 @@ select {
   border-bottom: 1px solid rgba(38, 50, 74, 0.6);
 }
 
+.store-summary-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.store-summary-button:hover,
+.store-summary-button:focus-visible {
+  background: color-mix(in srgb, var(--cyan) 7%, transparent);
+}
+
+.store-summary-values {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.store-summary-values strong {
+  color: var(--cyan);
+}
+
+.store-summary-values em {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+}
+
 .store-summary:last-child {
   border-bottom: 0;
 }
