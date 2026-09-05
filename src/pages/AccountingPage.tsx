@@ -1304,6 +1304,13 @@ function TakingsPanel() {
       )
       return
     }
+    const unregisteredGoods = amountExpression(form.unregisteredGoods)
+    if (unregisteredGoods === null) {
+      setFormError(
+        'Merce acquistata senza fattura non valida: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
+      )
+      return
+    }
     const cash = numberValue(form.cash)
     const pos = numberValue(form.pos)
     const vat = numberValue(form.vat)
@@ -1324,8 +1331,10 @@ function TakingsPanel() {
           pos,
           vat,
           realTotal,
+          realTotalExpression: form.realTotal,
           withdrawal: numberValue(form.withdrawal),
-          unregisteredGoods: numberValue(form.unregisteredGoods),
+          unregisteredGoods,
+          unregisteredGoodsExpression: form.unregisteredGoods,
         }
         return {
           ...current,
@@ -1359,18 +1368,6 @@ function TakingsPanel() {
         nextInput?.focus()
       })
     }
-  }
-
-  function calculateRealTotal() {
-    const result = amountExpression(form.realTotal)
-    if (result === null) {
-      setFormError(
-        'Incasso reale non valido: usa numeri e i simboli +, -, ×, ÷ o parentesi.',
-      )
-      return
-    }
-    setForm((current) => ({ ...current, realTotal: String(result) }))
-    setFormError(null)
   }
 
   function handleTakingEnter(event: KeyboardEvent<HTMLFormElement>) {
@@ -1414,9 +1411,10 @@ function TakingsPanel() {
       cash: String(taking.cash),
       pos: String(taking.pos),
       vat: String(taking.vat),
-      realTotal: String(taking.realTotal),
+      realTotal: taking.realTotalExpression ?? String(taking.realTotal),
       withdrawal: String(taking.withdrawal),
-      unregisteredGoods: String(taking.unregisteredGoods),
+      unregisteredGoods:
+        taking.unregisteredGoodsExpression ?? String(taking.unregisteredGoods),
     })
     setFormError(null)
     window.requestAnimationFrame(() => {
@@ -1500,9 +1498,9 @@ function TakingsPanel() {
           <label>Cash<input data-taking-entry ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
           <label>POS<input data-taking-entry inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>IVA inclusa in Cash + POS<input data-taking-entry inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
-          <label>Incasso reale totale<input data-taking-entry inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
+          <label>Incasso reale totale<input data-taking-entry inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
           <label>Cash ritirato<input data-taking-entry inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
-          <label>Merce aq. senza fattura<input data-taking-entry inputMode="decimal" min="0" placeholder="0,00" value={form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
+          <label>Merce aq. senza fattura<input data-taking-entry inputMode="text" placeholder="Es. =1000+200-50" value={form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">

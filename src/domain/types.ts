@@ -160,8 +160,10 @@ export interface AccountingTaking {
   pos: number
   vat: number
   realTotal: number
+  realTotalExpression?: string
   withdrawal: number
   unregisteredGoods: number
+  unregisteredGoodsExpression?: string
 }
 
 export interface AccountingSeller {
