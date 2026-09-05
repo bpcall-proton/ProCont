@@ -449,6 +449,7 @@ export function SettingsPage() {
         'IVA',
         'TOTALE',
         'VENIT',
+        'MERCE SENZA FATTURA',
         'RICARICO %',
       ],
       ...invoices.map((invoice) => [
@@ -460,6 +461,7 @@ export function SettingsPage() {
         invoice.vat,
         invoice.total,
         invoice.theoreticalRevenue,
+        invoice.unregisteredGoods,
         invoice.markupPercent,
       ]),
       ...takings.map((taking) => [
@@ -471,6 +473,7 @@ export function SettingsPage() {
         taking.vat,
         taking.cash + taking.pos,
         taking.realTotal,
+        taking.unregisteredGoods,
         '',
       ]),
     ]
@@ -496,6 +499,7 @@ export function SettingsPage() {
           IVA: invoice.vat,
           Totale: invoice.total,
           Venit: invoice.theoreticalRevenue,
+          'Merce senza fattura': invoice.unregisteredGoods,
           'Ricarico %': invoice.markupPercent,
           'Righe prodotto': invoice.lines.length,
           Pagata: invoice.settled ? 'Sì' : 'No',
@@ -552,6 +556,7 @@ export function SettingsPage() {
           IVA: taking.vat,
           'Incasso reale': taking.realTotal,
           'Cash ritirato': taking.withdrawal,
+          'Merce acquistata senza fattura': taking.unregisteredGoods,
         })),
       ),
       'Incassi',

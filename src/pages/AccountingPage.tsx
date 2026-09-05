@@ -141,11 +141,15 @@ function cashBalanceByTaking(takings: AccountingTaking[]) {
     const withdrawal = Number.isFinite(taking.withdrawal)
       ? taking.withdrawal
       : 0
+    const unregisteredGoods = Number.isFinite(taking.unregisteredGoods)
+      ? taking.unregisteredGoods
+      : 0
     const balance = roundMoney(
       (balanceBySeller.get(sellerKey) ?? 0) +
         realTotal -
         pos -
-        withdrawal,
+        withdrawal -
+        unregisteredGoods,
     )
     balanceBySeller.set(sellerKey, balance)
     balanceByTaking.set(taking.id, balance)
@@ -289,6 +293,7 @@ const emptyInvoice = {
   taxableAmount: '',
   vat: '',
   theoreticalRevenue: '',
+  unregisteredGoods: '',
   date: today(),
   settled: false,
 }
@@ -540,6 +545,7 @@ export function InvoicesPanel({
           taxableAmount: numberValue(form.taxableAmount),
           vat: numberValue(form.vat),
           theoreticalRevenue: invoiceRevenue,
+          unregisteredGoods: numberValue(form.unregisteredGoods),
           total: invoiceTotal,
           markupPercent: invoiceMarkup,
           lines,
@@ -613,6 +619,7 @@ export function InvoicesPanel({
       taxableAmount: String(taxableAmount),
       vat: String(vat),
       theoreticalRevenue: String(invoice.theoreticalRevenue),
+      unregisteredGoods: String(invoice.unregisteredGoods),
       date: invoice.date,
       settled: invoice.settled,
     })
@@ -776,6 +783,7 @@ export function InvoicesPanel({
           IVA: invoice.vat,
           Totale: invoice.total,
           Venit: invoice.theoreticalRevenue,
+          'Merce senza fattura': invoice.unregisteredGoods,
           'Ricarico %': invoice.markupPercent,
           Pagata: invoice.settled ? 'Sì' : 'No',
           Residuo: invoiceRemaining(invoice),
@@ -874,6 +882,7 @@ export function InvoicesPanel({
           <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
           <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
           <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
+          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
           <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
@@ -1079,7 +1088,7 @@ export function InvoicesPanel({
               disabled={invoices.length === 0}
               onChange={toggleAllVisibleInvoices}
               type="checkbox"
-            /></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
+            /></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Merce senza fattura</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
               {invoices.map((invoice) => {
                 const dueState = invoiceDueState(invoice)
@@ -1110,6 +1119,7 @@ export function InvoicesPanel({
                   </td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
                   <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe</small></td>
+                  <td>{money(invoice.unregisteredGoods)}</td>
                   <td>
                     <span className={`record-status ${dueState}`}>
                       {dueState === 'paid'
@@ -1160,6 +1170,7 @@ const emptyTaking = {
   vat: '',
   realTotal: '',
   withdrawal: '',
+  unregisteredGoods: '',
 }
 
 function TakingsPanel() {
@@ -1230,6 +1241,7 @@ function TakingsPanel() {
           vat,
           realTotal,
           withdrawal: numberValue(form.withdrawal),
+          unregisteredGoods: numberValue(form.unregisteredGoods),
         }
         return {
           ...current,
@@ -1320,6 +1332,7 @@ function TakingsPanel() {
       vat: String(taking.vat),
       realTotal: String(taking.realTotal),
       withdrawal: String(taking.withdrawal),
+      unregisteredGoods: String(taking.unregisteredGoods),
     })
     setFormError(null)
     window.requestAnimationFrame(() => {
@@ -1345,6 +1358,7 @@ function TakingsPanel() {
           'IVA inclusa': taking.vat,
           'Incasso reale': taking.realTotal,
           'Cash ritirato': taking.withdrawal,
+          'Merce acquistata senza fattura': taking.unregisteredGoods,
           'Cash in mano': cashBalances.get(taking.id) ?? 0,
         })),
       ),
@@ -1362,6 +1376,7 @@ function TakingsPanel() {
         <div><span>Ufficiale</span><strong>{money(official)}</strong></div>
         <div><span>Reale</span><strong>{money(real)}</strong></div>
         <div><span>Ritiri cash</span><strong>{money(data.takings.reduce((sum, item) => sum + item.withdrawal, 0))}</strong></div>
+        <div><span>Merce senza fattura</span><strong>{money(data.takings.reduce((sum, item) => sum + item.unregisteredGoods, 0))}</strong></div>
       </section>
       <form
         className="panel accounting-form"
@@ -1403,6 +1418,7 @@ function TakingsPanel() {
           <label>IVA inclusa in Cash + POS<input data-taking-entry inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
           <label>Incasso reale totale<input data-taking-entry inputMode="text" placeholder="Es. =1000+2000" value={form.realTotal} onBlur={calculateRealTotal} onChange={(event) => setForm({ ...form, realTotal: event.target.value })} /></label>
           <label>Cash ritirato<input data-taking-entry inputMode="decimal" value={form.withdrawal} onChange={(event) => setForm({ ...form, withdrawal: event.target.value })} /></label>
+          <label>Merce aq. senza fattura<input data-taking-entry inputMode="decimal" min="0" placeholder="0,00" value={form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
@@ -1423,9 +1439,9 @@ function TakingsPanel() {
           </div>
         </div>
         <div className="data-table-wrap">
-          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Cash in mano</th><th>Azioni</th></tr></thead>
+          <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Merce aq. senza fattura</th><th>Cash in mano</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td>{money(taking.unregisteredGoods)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
             ))}</tbody>
           </table>
           {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}

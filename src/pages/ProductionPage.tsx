@@ -164,7 +164,7 @@ export function ProductionPage() {
         .map((invoice) => ({
           invoice,
           amount: roundMoney(
-            invoice.total /
+            (invoice.total + invoice.unregisteredGoods) /
               Math.max(
                 1,
                 data.productionSettings.filter(
@@ -314,7 +314,11 @@ export function ProductionPage() {
       }))
       .filter((item) => item.amount > 0)
     const invoiceCosts = showingAllProducts
-      ? uniqueInvoices.reduce((total, invoice) => total + invoice.total, 0)
+      ? uniqueInvoices.reduce(
+          (total, invoice) =>
+            total + invoice.total + invoice.unregisteredGoods,
+          0,
+        )
       : productsResults.reduce(
           (total, product) => total + product.invoiceCosts,
           0,
@@ -617,7 +621,8 @@ export function ProductionPage() {
       const current = uniqueDetails.get(detail.invoice.id)
       uniqueDetails.set(detail.invoice.id, {
         ...detail,
-        amount: detail.invoice.total,
+        amount:
+          detail.invoice.total + detail.invoice.unregisteredGoods,
         productName: current
           ? `${current.productName}, ${detail.productName}`
           : detail.productName,

@@ -21,6 +21,7 @@ type DashboardMetricKey =
   | 'official'
   | 'real'
   | 'withdrawals'
+  | 'unregistered-goods'
   | 'cash-residual'
   | 'theoretical'
   | 'stock'
@@ -36,6 +37,7 @@ type SellerMetricKey =
   | 'real'
   | 'vat'
   | 'withdrawals'
+  | 'unregistered-goods'
   | 'cash-residual'
   | 'stock-residual'
 
@@ -124,6 +126,14 @@ export function DashboardPage() {
     (sum, taking) => sum + taking.withdrawal,
     0,
   )
+  const unregisteredGoods = accounting.invoices.reduce(
+    (sum, invoice) => sum + invoice.unregisteredGoods,
+    0,
+  )
+  const unregisteredGoodsCash = accounting.takings.reduce(
+    (sum, taking) => sum + taking.unregisteredGoods,
+    0,
+  )
   const official = accounting.takings.reduce(
     (sum, taking) => sum + officialTaking(taking),
     0,
@@ -132,7 +142,10 @@ export function DashboardPage() {
     (sum, taking) => sum + realTaking(taking),
     0,
   )
-  const cashResidual = Math.max(0, real - pos - withdrawals)
+  const cashResidual = Math.max(
+    0,
+    real - pos - withdrawals - unregisteredGoodsCash,
+  )
   const theoretical = accounting.invoices.reduce(
     (sum, invoice) => sum + invoice.theoreticalRevenue,
     0,
@@ -149,7 +162,12 @@ export function DashboardPage() {
     (sum, expense) => sum + expense.amount,
     0,
   )
-  const totalCosts = invoiceValue + rents + accountantCosts + otherExpenses
+  const totalCosts =
+    invoiceValue +
+    unregisteredGoods +
+    rents +
+    accountantCosts +
+    otherExpenses
   const invoiceRows: DashboardDetailRow[] = accounting.invoices.map(
     (invoice) => ({
       date: invoice.date,
@@ -255,7 +273,18 @@ export function DashboardPage() {
       sellerId: taking.sellerId,
     }))
     .filter((row) => row.amount !== 0)
-  const rawCashResidual = real - pos - withdrawals
+  const unregisteredGoodsRows: DashboardDetailRow[] = accounting.invoices
+    .map((invoice) => ({
+      date: invoice.date,
+      category: 'Merce acquistata senza fattura',
+      description: invoice.supplierName || invoice.description || 'Acquisto',
+      reference: `Venditore ${invoice.sellerName || 'non indicato'}`,
+      amount: invoice.unregisteredGoods,
+      sellerId: invoice.sellerId,
+    }))
+    .filter((row) => row.amount !== 0)
+  const rawCashResidual =
+    real - pos - withdrawals - unregisteredGoodsCash
   const cashResidualRows: DashboardDetailRow[] = [
     {
       date: '',
@@ -277,6 +306,13 @@ export function DashboardPage() {
       description: 'Contanti già ritirati',
       reference: 'Importo sottratto',
       amount: -withdrawals,
+    },
+    {
+      date: '',
+      category: 'Merce acquistata senza fattura',
+      description: 'Pagamenti effettuati dalla cassa',
+      reference: 'Importo sottratto',
+      amount: -unregisteredGoodsCash,
     },
     ...(rawCashResidual < 0
       ? [
@@ -327,6 +363,7 @@ export function DashboardPage() {
   )
   const costRows = [
     ...invoiceRows,
+    ...unregisteredGoodsRows,
     ...rentalRows,
     ...accountantRows,
     ...expenseRows,
@@ -421,9 +458,16 @@ export function DashboardPage() {
       tone: 'violet',
       rows: withdrawalRows,
     },
+    'unregistered-goods': {
+      title: 'Merce acquistata senza fattura',
+      note: 'Spese pagate con la cassa e registrate separatamente dalle fatture.',
+      value: unregisteredGoods,
+      tone: 'red',
+      rows: unregisteredGoodsRows,
+    },
     'cash-residual': {
       title: 'Cash residuo',
-      note: 'Incasso reale meno POS e Cash ritirato.',
+      note: 'Incasso reale meno POS, Cash ritirato e merce senza fattura.',
       value: cashResidual,
       tone: 'green',
       rows: cashResidualRows,
@@ -447,7 +491,7 @@ export function DashboardPage() {
     },
     costs: {
       title: 'Costi complessivi',
-      note: 'Fatture fornitori, affitti, contabile e altre spese.',
+      note: 'Fatture, merce senza fattura, affitti, contabile e altre spese.',
       value: totalCosts,
       tone: 'amber',
       rows: costRows,
@@ -487,6 +531,14 @@ export function DashboardPage() {
       (sum, taking) => sum + taking.withdrawal,
       0,
     )
+    const sellerUnregisteredGoods = invoices.reduce(
+      (sum, invoice) => sum + invoice.unregisteredGoods,
+      0,
+    )
+    const sellerUnregisteredGoodsCash = takings.reduce(
+      (sum, taking) => sum + taking.unregisteredGoods,
+      0,
+    )
     const sellerTheoretical = invoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
@@ -503,7 +555,15 @@ export function DashboardPage() {
       cash: takings.reduce((sum, taking) => sum + taking.cash, 0),
       pos: sellerPos,
       withdrawals: sellerWithdrawals,
-      cashResidual: Math.max(0, sellerReal - sellerPos - sellerWithdrawals),
+      unregisteredGoods: sellerUnregisteredGoods,
+      unregisteredGoodsCash: sellerUnregisteredGoodsCash,
+      cashResidual: Math.max(
+        0,
+        sellerReal -
+          sellerPos -
+          sellerWithdrawals -
+          sellerUnregisteredGoodsCash,
+      ),
       official: sellerOfficial,
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
@@ -534,6 +594,14 @@ export function DashboardPage() {
       (sum, taking) => sum + taking.withdrawal,
       0,
     )
+    const unassignedUnregisteredGoods = unassignedInvoices.reduce(
+      (sum, invoice) => sum + invoice.unregisteredGoods,
+      0,
+    )
+    const unassignedUnregisteredGoodsCash = unassignedTakings.reduce(
+      (sum, taking) => sum + taking.unregisteredGoods,
+      0,
+    )
     const unassignedTheoretical = unassignedInvoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
@@ -550,9 +618,14 @@ export function DashboardPage() {
       cash: unassignedTakings.reduce((sum, taking) => sum + taking.cash, 0),
       pos: unassignedPos,
       withdrawals: unassignedWithdrawals,
+      unregisteredGoods: unassignedUnregisteredGoods,
+      unregisteredGoodsCash: unassignedUnregisteredGoodsCash,
       cashResidual: Math.max(
         0,
-        unassignedReal - unassignedPos - unassignedWithdrawals,
+        unassignedReal -
+          unassignedPos -
+          unassignedWithdrawals -
+          unassignedUnregisteredGoodsCash,
       ),
       official: unassignedOfficial,
       real: unassignedReal,
@@ -662,10 +735,21 @@ export function DashboardPage() {
             (taking) => taking.withdrawal,
             (taking) => `Incasso reale ${money(realTaking(taking))}`,
           )
+          const unregisteredGoodsRows = selectedSeller.invoices
+            .map((invoice) => ({
+              date: invoice.date,
+              category: 'Merce acquistata senza fattura',
+              description:
+                invoice.supplierName || invoice.description || 'Acquisto',
+              reference: `Fattura ${invoice.number || 'senza numero'}`,
+              amount: invoice.unregisteredGoods,
+            }))
+            .filter((row) => row.amount !== 0)
           const rawCashResidual =
             selectedSeller.real -
             selectedSeller.pos -
-            selectedSeller.withdrawals
+            selectedSeller.withdrawals -
+            selectedSeller.unregisteredGoodsCash
           const cashResidualRows: DashboardDetailRow[] = [
             {
               date: '',
@@ -687,6 +771,13 @@ export function DashboardPage() {
               description: selectedSeller.name,
               reference: 'Importo sottratto',
               amount: -selectedSeller.withdrawals,
+            },
+            {
+              date: '',
+              category: 'Merce acquistata senza fattura',
+              description: selectedSeller.name,
+              reference: 'Importo sottratto dalla cassa',
+              amount: -selectedSeller.unregisteredGoodsCash,
             },
             ...(rawCashResidual < 0
               ? [
@@ -764,9 +855,16 @@ export function DashboardPage() {
               tone: 'violet',
               rows: withdrawalRows,
             },
+            'unregistered-goods': {
+              title: `Merce acquistata senza fattura · ${selectedSeller.name}`,
+              note: `Spese non documentate attribuite al venditore.${periodNote}`,
+              value: selectedSeller.unregisteredGoods,
+              tone: 'red',
+              rows: unregisteredGoodsRows,
+            },
             'cash-residual': {
               title: `Cash in mano attuale · ${selectedSeller.name}`,
-              note: `Incasso reale meno POS e Cash ritirato.${periodNote}`,
+              note: `Incasso reale meno POS, Cash ritirato e merce senza fattura.${periodNote}`,
               value: selectedSeller.cashResidual,
               tone: 'green',
               rows: cashResidualRows,
@@ -1085,7 +1183,14 @@ export function DashboardPage() {
           value={money(withdrawals)}
         />
         <StatCard
-          detail="Incasso reale − POS − Cash ritirato"
+          detail="Spesa registrata senza fattura e pagata dalla cassa"
+          label="Merce senza fattura"
+          onClick={() => setDetail('unregistered-goods')}
+          tone="red"
+          value={money(unregisteredGoods)}
+        />
+        <StatCard
+          detail="Incasso reale − POS − Cash ritirato − Merce senza fattura"
           label="Cash residuo"
           onClick={() => setDetail('cash-residual')}
           tone="green"
@@ -1106,7 +1211,7 @@ export function DashboardPage() {
           value={money(theoretical - real)}
         />
         <StatCard
-          detail="Fatture, affitti, contabile e spese registrate"
+          detail="Fatture, merce senza fattura e altre spese"
           label="Costi complessivi"
           onClick={() => setDetail('costs')}
           tone="amber"
@@ -1258,6 +1363,20 @@ export function DashboardPage() {
                   >
                     <span>Cash ritirato</span>
                     <strong>{money(seller.withdrawals)}</strong>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-cash-metric"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'unregistered-goods',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Merce senza fattura</span>
+                    <strong>{money(seller.unregisteredGoods)}</strong>
                     <em>Apri dettaglio</em>
                   </button>
                   <button
