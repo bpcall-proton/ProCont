@@ -80,23 +80,20 @@ export function createStoreWithSeller(input: {
   companyId: string
   storeName: string
   city: string
-  sellerName: string
-  sellerPhone: string
-  sellerViberUserId: string
+  accountingSeller: AccountingSeller
 }): {
   store: Store
   seller: Seller
-  accountingSeller: AccountingSeller
 } {
   const sellerId = createId('seller')
   const seller: Seller = {
     id: sellerId,
     companyId: input.companyId,
-    accountingSellerId: sellerId,
-    name: input.sellerName.trim(),
-    phone: input.sellerPhone.trim(),
-    viberUserId: input.sellerViberUserId.trim(),
-    whatsappEnabled: true,
+    accountingSellerId: input.accountingSeller.id,
+    name: input.accountingSeller.name,
+    phone: input.accountingSeller.phone,
+    viberUserId: '',
+    whatsappEnabled: Boolean(input.accountingSeller.phone),
     viberEnabled: true,
   }
   const store: Store = {
@@ -106,16 +103,7 @@ export function createStoreWithSeller(input: {
     city: input.city.trim(),
     sellerId: seller.id,
   }
-  const accountingSeller: AccountingSeller = {
-    id: sellerId,
-    companyId: input.companyId,
-    name: seller.name,
-    email: '',
-    phone: seller.phone,
-    city: store.city,
-    notes: `Responsabile del punto vendita ${store.name}`,
-  }
-  return { store, seller, accountingSeller }
+  return { store, seller }
 }
 
 export function updateCompany(company: Company, patch: Partial<Company>): Company {

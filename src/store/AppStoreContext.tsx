@@ -17,9 +17,7 @@ export interface NewStoreInput {
   companyId: string
   storeName: string
   city: string
-  sellerName: string
-  sellerPhone: string
-  sellerViberUserId: string
+  accountingSellerId: string
 }
 
 export type AccountingCompanyInput = Omit<AccountingCompany, 'id'>
