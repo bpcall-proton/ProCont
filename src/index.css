@@ -2692,16 +2692,36 @@ select {
   margin-bottom: 18px;
 }
 
-.supplier-create-form {
-  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto auto;
+.contact-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.inline-create-form.contact-editing-form {
-  grid-template-columns: 1fr 1fr auto auto;
+.contact-field {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 800;
+  gap: 6px;
 }
 
-.supplier-create-form.contact-editing-form {
-  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto auto auto;
+.contact-field input {
+  min-width: 0;
+  width: 100%;
+}
+
+.contact-checkbox-field {
+  min-height: 46px;
+  padding-top: 22px;
+}
+
+.contact-form-actions {
+  display: flex;
+  gap: 9px;
+  grid-column: 1 / -1;
+}
+
+.contact-form-actions .button {
+  min-width: 180px;
 }
 
 .vertical-form {
@@ -3017,10 +3037,20 @@ select {
   .stats-strip,
   .report-kpis,
   .compact-form,
+  .contact-form,
   .payment-panel,
   .invoice-line-form,
   .company-switcher form {
     grid-template-columns: 1fr;
+  }
+
+  .contact-form-actions {
+    flex-direction: column;
+  }
+
+  .contact-form-actions .button,
+  .contact-form-actions button {
+    width: 100%;
   }
 
   .record-card,
@@ -3047,7 +3077,6 @@ select {
     flex: 0 0 128px;
   }
 
-  .supplier-create-form,
   .supplier-card {
     grid-template-columns: 1fr;
   }
