@@ -184,6 +184,8 @@ function mapInvoiceLine(value: JsonRecord): InvoiceLine {
 }
 
 function mapTaking(value: JsonRecord): AccountingTaking {
+  const unregisteredGoods = amount(value.merceSenzaFattura)
+  const realTotal = amount(value.reale)
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
@@ -193,9 +195,14 @@ function mapTaking(value: JsonRecord): AccountingTaking {
     cash: amount(value.cash),
     pos: amount(value.pos),
     withdrawal: amount(value.ritiro),
-    unregisteredGoods: amount(value.merceSenzaFattura),
+    unregisteredGoods,
+    unregisteredGoodsExpression: text(
+      value.merceSenzaFatturaEspressione,
+      String(unregisteredGoods),
+    ),
     vat: amount(value.iva),
-    realTotal: amount(value.reale),
+    realTotal,
+    realTotalExpression: text(value.realeEspressione, String(realTotal)),
   }
 }
 
@@ -922,8 +929,13 @@ export function exportLegacyAccounting(state: AccountingState) {
           pos: taking.pos,
           ritiro: taking.withdrawal,
           merceSenzaFattura: taking.unregisteredGoods,
+          merceSenzaFatturaEspressione:
+            taking.unregisteredGoodsExpression ??
+            String(taking.unregisteredGoods),
           iva: taking.vat,
           reale: taking.realTotal,
+          realeEspressione:
+            taking.realTotalExpression ?? String(taking.realTotal),
         })),
         venditori: state.sellers.map((seller) => ({
           id: seller.id,
