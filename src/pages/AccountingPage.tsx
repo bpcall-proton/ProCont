@@ -412,6 +412,33 @@ export function InvoicesPanel({
   const invoiceRevenue =
     lines.length > 0 ? lineRevenue : numberValue(form.theoreticalRevenue)
   const invoiceMarkup = markupPercentage(invoiceTotal, invoiceRevenue)
+  const selectedSupplier = data.suppliers.find(
+    (supplier) => supplier.id === form.supplierId,
+  )
+  const editingInvoice = data.invoices.find(
+    (invoice) => invoice.id === editingId,
+  )
+  const preservesDocumentedInvoice =
+    editingInvoice?.supplierId === form.supplierId &&
+    editingInvoice.total > 0
+  const automaticCashPurchase =
+    (selectedSupplier?.cashUnregisteredByDefault ?? false) &&
+    !preservesDocumentedInvoice
+
+  function selectInvoiceSupplier(supplierId: string) {
+    const supplier = data.suppliers.find((item) => item.id === supplierId)
+    setForm((current) => ({
+      ...current,
+      supplierId,
+      settled: supplier?.cashUnregisteredByDefault
+        ? true
+        : data.suppliers.find((item) => item.id === current.supplierId)
+              ?.cashUnregisteredByDefault
+          ? false
+          : current.settled,
+      vat: supplier?.cashUnregisteredByDefault ? '' : current.vat,
+    }))
+  }
 
   function handleInvoiceEnter(event: KeyboardEvent<HTMLFormElement>) {
     if (
@@ -470,10 +497,7 @@ export function InvoicesPanel({
           : String(productSalePrice(product)),
     })
     if (product.supplierId) {
-      setForm((current) => ({
-        ...current,
-        supplierId: product.supplierId ?? '',
-      }))
+      selectInvoiceSupplier(product.supplierId)
     }
   }
 
@@ -532,6 +556,12 @@ export function InvoicesPanel({
         const previous = current.invoices.find(
           (item) => item.id === editingId,
         )
+        const cashUnregistered = automaticCashPurchase
+        const storedTotal = cashUnregistered ? 0 : invoiceTotal
+        const storedUnregisteredGoods = cashUnregistered
+          ? invoiceTotal
+          : numberValue(form.unregisteredGoods)
+        const settled = cashUnregistered || form.settled
         const invoice: AccountingInvoice = {
           id: editingId ?? createId('invoice'),
           companyId,
@@ -542,11 +572,13 @@ export function InvoicesPanel({
           sellerName: seller?.name ?? '',
           description: form.description.trim(),
           category: form.category,
-          taxableAmount: numberValue(form.taxableAmount),
-          vat: numberValue(form.vat),
+          taxableAmount: cashUnregistered
+            ? 0
+            : numberValue(form.taxableAmount),
+          vat: cashUnregistered ? 0 : numberValue(form.vat),
           theoreticalRevenue: invoiceRevenue,
-          unregisteredGoods: numberValue(form.unregisteredGoods),
-          total: invoiceTotal,
+          unregisteredGoods: storedUnregisteredGoods,
+          total: storedTotal,
           markupPercent: invoiceMarkup,
           lines,
           date: form.date,
@@ -554,16 +586,17 @@ export function InvoicesPanel({
             form.date,
             supplier?.paymentTermsDays ?? defaultPaymentTermsDays,
           ),
-          settled: form.settled,
-          paidAmount: form.settled
-            ? invoiceTotal
+          settled,
+          paidAmount: settled
+            ? storedTotal
             : previous?.paidAmount ?? 0,
           payments: previous?.payments ?? [],
-          paymentDate: form.settled
+          paymentDate: settled
             ? previous?.paymentDate ?? form.date
             : previous?.paymentDate ?? null,
-          paymentMethod: form.settled
-            ? previous?.paymentMethod ?? 'Bonifico'
+          paymentMethod: settled
+            ? previous?.paymentMethod ??
+              (cashUnregistered ? 'Contanti' : 'Bonifico')
             : previous?.paymentMethod ?? null,
         }
         return {
@@ -583,6 +616,7 @@ export function InvoicesPanel({
           supplierId: repeatSupplier ? form.supplierId : '',
           sellerId: repeatSeller ? form.sellerId : '',
           date: repeatDate ? form.date : today(),
+          settled: repeatSupplier && automaticCashPurchase,
         }
     setEditingId(null)
     setForm(nextForm)
@@ -605,8 +639,13 @@ export function InvoicesPanel({
   function edit(invoice: AccountingInvoice) {
     submitAfterValidationRef.current = false
     const vat = invoice.vat ?? 0
+    const cashUnregistered =
+      data.suppliers.find((supplier) => supplier.id === invoice.supplierId)
+        ?.cashUnregisteredByDefault ?? false
     const taxableAmount =
-      (invoice.taxableAmount ?? 0) === 0 && vat === 0 && invoice.total > 0
+      cashUnregistered && invoice.total === 0
+        ? invoice.unregisteredGoods
+        : (invoice.taxableAmount ?? 0) === 0 && vat === 0 && invoice.total > 0
         ? invoice.total
         : invoice.taxableAmount
     setEditingId(invoice.id)
@@ -874,7 +913,7 @@ export function InvoicesPanel({
         <div className="form-grid accounting-fields">
           <label>Data<input data-invoice-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select data-invoice-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => selectInvoiceSupplier(event.target.value)}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}{item.cashUnregisteredByDefault ? ' · cash senza fattura' : ''}</option>)}</select></label>
           <label>Numero fattura<input data-invoice-entry placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
           <label>Descrizione<input data-invoice-entry value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select data-invoice-entry value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -882,9 +921,9 @@ export function InvoicesPanel({
           <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
           <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
           <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
-          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
+          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" readOnly={automaticCashPurchase} value={automaticCashPurchase ? String(invoiceTotal) : form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
-          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={form.settled} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
+          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
         <section className="invoice-lines-editor">
           <div className="panel-heading">
@@ -1211,6 +1250,49 @@ function TakingsPanel() {
     )
     .sort((left, right) => right.date.localeCompare(left.date))
 
+  function pendingUnregisteredGoods(
+    date: string,
+    sellerId: string,
+    excludedTakingId: string | null,
+  ) {
+    if (!date || !sellerId) return 0
+    const invoiced = data.invoices
+      .filter(
+        (invoice) =>
+          invoice.date === date && invoice.sellerId === sellerId,
+      )
+      .reduce((sum, invoice) => sum + invoice.unregisteredGoods, 0)
+    const alreadyRecorded = data.takings
+      .filter(
+        (taking) =>
+          taking.id !== excludedTakingId &&
+          taking.date === date &&
+          taking.sellerId === sellerId,
+      )
+      .reduce((sum, taking) => sum + taking.unregisteredGoods, 0)
+    return roundMoney(Math.max(0, invoiced - alreadyRecorded))
+  }
+
+  function updateTakingDate(date: string) {
+    setForm((current) => ({
+      ...current,
+      date,
+      unregisteredGoods: String(
+        pendingUnregisteredGoods(date, current.sellerId, editingId),
+      ),
+    }))
+  }
+
+  function updateTakingSeller(sellerId: string) {
+    setForm((current) => ({
+      ...current,
+      sellerId,
+      unregisteredGoods: String(
+        pendingUnregisteredGoods(current.date, sellerId, editingId),
+      ),
+    }))
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault()
     const realTotal = amountExpression(form.realTotal)
@@ -1411,8 +1493,8 @@ function TakingsPanel() {
           )}
         </div>
         <div className="form-grid accounting-fields">
-          <label>Data<input data-taking-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
-          <label>Venditore<select data-taking-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Data<input data-taking-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => updateTakingDate(event.target.value)} /></label>
+          <label>Venditore<select data-taking-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => updateTakingSeller(event.target.value)}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Cash<input data-taking-entry ref={cashInputRef} inputMode="decimal" value={form.cash} onChange={(event) => setForm({ ...form, cash: event.target.value })} /></label>
           <label>POS<input data-taking-entry inputMode="decimal" value={form.pos} onChange={(event) => setForm({ ...form, pos: event.target.value })} /></label>
           <label>IVA inclusa in Cash + POS<input data-taking-entry inputMode="decimal" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} /></label>
@@ -1458,6 +1540,8 @@ function ContactsPanel() {
   const [sellerPhone, setSellerPhone] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
+  const [supplierCashUnregistered, setSupplierCashUnregistered] =
+    useState(false)
   const [supplierPaymentTerms, setSupplierPaymentTerms] = useState(
     String(defaultPaymentTermsDays),
   )
@@ -1504,6 +1588,7 @@ function ContactsPanel() {
               0,
               Math.round(numberValue(supplierPaymentTerms)),
             ),
+            cashUnregisteredByDefault: supplierCashUnregistered,
           },
           ...current.suppliers,
         ],
@@ -1512,6 +1597,7 @@ function ContactsPanel() {
     setSupplierName('')
     setSupplierTaxId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
+    setSupplierCashUnregistered(false)
   }
 
   function updateSupplierPaymentTerms(supplierId: string, value: string) {
@@ -1524,6 +1610,20 @@ function ContactsPanel() {
       suppliers: current.suppliers.map((supplier) =>
         supplier.id === supplierId
           ? { ...supplier, paymentTermsDays }
+          : supplier,
+      ),
+    }))
+  }
+
+  function updateSupplierCashUnregistered(
+    supplierId: string,
+    cashUnregisteredByDefault: boolean,
+  ) {
+    updateAccounting((current) => ({
+      ...current,
+      suppliers: current.suppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? { ...supplier, cashUnregisteredByDefault }
           : supplier,
       ),
     }))
@@ -1542,11 +1642,14 @@ function ContactsPanel() {
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">ANAGRAFICA</span><h2>Fornitori</h2></div><span className="count-pill">{data.suppliers.length}</span></div>
-        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><button className="button button-primary" type="submit">Aggiungi</button></form>
+        <form className="inline-create-form supplier-create-form" onSubmit={addSupplier}><input placeholder="Ragione sociale" required value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /><input placeholder="Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} /><input aria-label="Giorni per il pagamento" min="0" max="365" placeholder="Giorni pagamento" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} /><label className="supplier-cash-default"><input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><button className="button button-primary" type="submit">Aggiungi</button></form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
-          const total = invoices.reduce((sum, item) => sum + item.total, 0)
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          const total = invoices.reduce(
+            (sum, item) => sum + item.total + item.unregisteredGoods,
+            0,
+          )
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><label className="supplier-payment-terms">Pagamento entro <input aria-label={`Giorni pagamento ${supplier.name}`} defaultValue={supplier.paymentTermsDays} min="0" max="365" onBlur={(event) => updateSupplierPaymentTerms(supplier.id, event.target.value)} type="number" /> giorni</label><label className="supplier-cash-default"><input checked={supplier.cashUnregisteredByDefault} onChange={(event) => updateSupplierCashUnregistered(supplier.id, event.target.checked)} type="checkbox" /> Sempre cash senza fattura</label><span><strong>{money(total)}</strong><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
     </section>
