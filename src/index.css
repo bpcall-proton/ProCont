@@ -2696,6 +2696,14 @@ select {
   grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto auto;
 }
 
+.inline-create-form.contact-editing-form {
+  grid-template-columns: 1fr 1fr auto auto;
+}
+
+.supplier-create-form.contact-editing-form {
+  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto auto auto;
+}
+
 .vertical-form {
   grid-template-columns: 1fr;
 }
@@ -2727,7 +2735,7 @@ select {
 
 .supplier-card {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) auto auto auto;
+  grid-template-columns: minmax(160px, 1fr) auto auto;
 }
 
 .supplier-payment-terms {
