@@ -4,7 +4,12 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react'
-import type { AccountingCompany, Locale } from '../domain/types'
+import type {
+  AccountingCompany,
+  InterfaceBackground,
+  InterfaceTextColor,
+  Locale,
+} from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
 import {
   DriveRepository,
@@ -164,6 +169,8 @@ export function SettingsPage() {
     setCurrency,
     setImageRetention,
     setLanguage,
+    setInterfaceBackground,
+    setInterfaceTextColor,
     importLegacyData,
     exportUnifiedData,
     exportLegacyData,
@@ -696,6 +703,71 @@ export function SettingsPage() {
                 <option value="USD">Dollaro USA (USD)</option>
               </select>
             </label>
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">ASPETTO</span>
+              <h2>Colori interfaccia</h2>
+            </div>
+          </div>
+          <div className="theme-settings">
+            <fieldset>
+              <legend>Sfondo</legend>
+              <div className="theme-options">
+                {[
+                  ['black', 'Nero'],
+                  ['gray', 'Grigio'],
+                  ['pink', 'Rosa'],
+                  ['blue', 'Azzurro'],
+                ].map(([value, label]) => (
+                  <button
+                    aria-pressed={dataSettings.background === value}
+                    className={
+                      dataSettings.background === value ? 'selected' : ''
+                    }
+                    key={value}
+                    onClick={() =>
+                      setInterfaceBackground(value as InterfaceBackground)
+                    }
+                    type="button"
+                  >
+                    <span
+                      className={`theme-swatch background-${value}`}
+                    />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Scrittura</legend>
+              <div className="theme-options">
+                {[
+                  ['white', 'Bianca accesa'],
+                  ['yellow', 'Gialla'],
+                  ['green', 'Verde'],
+                  ['black', 'Nera'],
+                ].map(([value, label]) => (
+                  <button
+                    aria-pressed={dataSettings.textColor === value}
+                    className={
+                      dataSettings.textColor === value ? 'selected' : ''
+                    }
+                    key={value}
+                    onClick={() =>
+                      setInterfaceTextColor(value as InterfaceTextColor)
+                    }
+                    type="button"
+                  >
+                    <span className={`theme-swatch text-${value}`}>Aa</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
           </div>
         </article>
 

@@ -191,7 +191,11 @@ function Workspace() {
   }
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-background={state.dataSettings.background}
+      data-text={state.dataSettings.textColor}
+    >
       <aside className="sidebar">
         <Logo />
         <nav>
