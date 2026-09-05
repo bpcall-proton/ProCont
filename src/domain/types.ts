@@ -137,6 +137,7 @@ export interface AccountingInvoice {
   taxableAmount: number
   vat: number
   theoreticalRevenue: number
+  unregisteredGoods: number
   total: number
   markupPercent: number
   lines: InvoiceLine[]
@@ -160,6 +161,7 @@ export interface AccountingTaking {
   vat: number
   realTotal: number
   withdrawal: number
+  unregisteredGoods: number
 }
 
 export interface AccountingSeller {

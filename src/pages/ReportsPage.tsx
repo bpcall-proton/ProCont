@@ -18,6 +18,7 @@ type MetricKey =
   | 'official'
   | 'real'
   | 'purchases'
+  | 'unregistered-goods'
   | 'fixed-costs'
   | 'official-profit'
   | 'real-profit'
@@ -152,6 +153,10 @@ export function ReportsPage() {
     (sum, item) => sum + item.total,
     0,
   )
+  const unregisteredGoods = data.invoices.reduce(
+    (sum, item) => sum + item.unregisteredGoods,
+    0,
+  )
   const rents = data.rentals.reduce((sum, item) => sum + item.total, 0)
   const accountant = data.accountantInvoices.reduce(
     (sum, item) => sum + item.total,
@@ -163,6 +168,7 @@ export function ReportsPage() {
   )
   const fixedCosts = rents + accountant + expenseCosts
   const operatingCosts = purchases + fixedCosts
+  const realOperatingCosts = operatingCosts + unregisteredGoods
   const expenseByType = {
     stipendi: data.expenses
       .filter((item) => item.type === 'stipendio')
@@ -278,7 +284,7 @@ export function ReportsPage() {
       target.real += realTaking(item)
     })
     source.invoices.forEach((item) => {
-      ensure(month(item.date)).costs += item.total
+      ensure(month(item.date)).costs += item.total + item.unregisteredGoods
     })
     source.rentals.forEach((item) => {
       ensure(month(item.date)).costs += item.total
@@ -336,7 +342,10 @@ export function ReportsPage() {
   const yearCosts =
     source.invoices
       .filter((item) => inRange(item.date, currentYearStart, today()))
-      .reduce((sum, item) => sum + item.total, 0) +
+      .reduce(
+        (sum, item) => sum + item.total + item.unregisteredGoods,
+        0,
+      ) +
     source.rentals
       .filter((item) => inRange(item.date, currentYearStart, today()))
       .reduce((sum, item) => sum + item.total, 0) +
@@ -383,6 +392,15 @@ export function ReportsPage() {
     reference: `${item.number || 'Senza numero'} · ${item.sellerName || 'Venditore non indicato'}`,
     amount: item.total,
   }))
+  const unregisteredGoodsRows: MetricDetailRow[] = data.invoices
+    .map((item) => ({
+      date: item.date,
+      category: 'Merce acquistata senza fattura',
+      description: item.supplierName || item.description || 'Acquisto',
+      reference: `${item.number || 'Senza numero'} · ${item.sellerName || 'Venditore non indicato'}`,
+      amount: item.unregisteredGoods,
+    }))
+    .filter((row) => row.amount !== 0)
   const fixedCostRows: MetricDetailRow[] = [
     ...data.rentals.map((item) => ({
       date: item.date,
@@ -456,6 +474,13 @@ export function ReportsPage() {
       amount: -row.amount,
     }),
   )
+  const negativeRealOperatingRows = [
+    ...negativeOperatingRows,
+    ...unregisteredGoodsRows.map((row) => ({
+      ...row,
+      amount: -row.amount,
+    })),
+  ]
   const metricDetails: Record<
     MetricKey,
     {
@@ -487,6 +512,13 @@ export function ReportsPage() {
       rows: purchaseRows,
       tone: 'amber',
     },
+    'unregistered-goods': {
+      title: 'Merce acquistata senza fattura',
+      note: 'Spese pagate dalla cassa, escluse dall’IVA e dai costi documentati.',
+      value: unregisteredGoods,
+      rows: unregisteredGoodsRows,
+      tone: 'red',
+    },
     'fixed-costs': {
       title: 'Spese fisse e ripartite',
       note: 'Affitti, stipendi, tasse, contabile e altre spese del periodo.',
@@ -496,17 +528,17 @@ export function ReportsPage() {
     },
     'official-profit': {
       title: 'Utile fiscale',
-      note: 'Incasso fiscale meno fatture fornitori e spese fisse.',
+      note: 'Incasso fiscale meno fatture fornitori e spese documentate.',
       value: official - operatingCosts,
       rows: [...officialRows, ...negativeOperatingRows],
       tone: official - operatingCosts >= 0 ? 'green' : 'red',
     },
     'real-profit': {
       title: 'Utile reale',
-      note: 'Incasso reale meno fatture fornitori e spese fisse.',
-      value: real - operatingCosts,
-      rows: [...realRows, ...negativeOperatingRows],
-      tone: real - operatingCosts >= 0 ? 'cyan' : 'red',
+      note: 'Incasso reale meno costi documentati e merce senza fattura.',
+      value: real - realOperatingCosts,
+      rows: [...realRows, ...negativeRealOperatingRows],
+      tone: real - realOperatingCosts >= 0 ? 'cyan' : 'red',
     },
     'input-vat': {
       title: 'IVA a credito',
@@ -624,6 +656,7 @@ export function ReportsPage() {
           Fornitore: invoice.supplierName,
           Totale: invoice.total,
           'Venit previsto': invoice.theoreticalRevenue,
+          'Merce senza fattura': invoice.unregisteredGoods,
           'Ricarico %': invoice.markupPercent,
         })),
       ),
@@ -639,6 +672,8 @@ export function ReportsPage() {
           'Incasso fiscale': officialTaking(taking),
           'Incasso reale': realTaking(taking),
           'IVA inclusa': taking.vat,
+          'Cash ritirato': taking.withdrawal,
+          'Merce acquistata senza fattura': taking.unregisteredGoods,
         })),
       ),
       'Incassi',
@@ -663,6 +698,7 @@ export function ReportsPage() {
           Imponibile: invoice.taxableAmount,
           IVA: invoice.vat,
           Totale: invoice.total,
+          'Merce senza fattura': invoice.unregisteredGoods,
           Pagato: invoice.total - invoiceRemaining(invoice),
           Residuo: invoiceRemaining(invoice),
           Scadenza: invoice.dueDate,
@@ -753,6 +789,10 @@ export function ReportsPage() {
       (sum, item) => sum + item.theoreticalRevenue,
       0,
     )
+    const sellerUnregisteredGoods = sellerInvoices.reduce(
+      (sum, item) => sum + item.unregisteredGoods,
+      0,
+    )
     return (
       <div className="page-stack">
         <DetailHeader
@@ -779,6 +819,11 @@ export function ReportsPage() {
           />
           <ReportCard label="Venit previsto" value={sellerTheoretical} tone="violet" />
           <ReportCard
+            label="Merce senza fattura"
+            value={sellerUnregisteredGoods}
+            tone="red"
+          />
+          <ReportCard
             label="Venit stock"
             value={sellerTheoretical - sellerReal}
             tone="amber"
@@ -800,6 +845,7 @@ export function ReportsPage() {
                     <th>Fornitore</th>
                     <th>Costo</th>
                     <th>Venit previsto</th>
+                    <th>Merce senza fattura</th>
                     <th>Ricarico</th>
                   </tr>
                 </thead>
@@ -812,6 +858,7 @@ export function ReportsPage() {
                         <td>{invoice.supplierName || '—'}</td>
                         <td>{money(invoice.total)}</td>
                         <td>{money(invoice.theoreticalRevenue)}</td>
+                        <td>{money(invoice.unregisteredGoods)}</td>
                         <td>{invoice.markupPercent.toFixed(2)}%</td>
                       </tr>
                     ))}
@@ -835,6 +882,7 @@ export function ReportsPage() {
                     <th>POS</th>
                     <th>Fiscale</th>
                     <th>Reale</th>
+                    <th>Merce senza fattura</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -847,6 +895,7 @@ export function ReportsPage() {
                         <td>{money(taking.pos)}</td>
                         <td>{money(officialTaking(taking))}</td>
                         <td>{money(realTaking(taking))}</td>
+                        <td>{money(taking.unregisteredGoods)}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -1015,6 +1064,14 @@ export function ReportsPage() {
           onClick={() => setDetail({ type: 'metric', metric: 'purchases' })}
         />
         <ReportCard
+          label="Merce acquistata senza fattura"
+          value={unregisteredGoods}
+          tone="red"
+          onClick={() =>
+            setDetail({ type: 'metric', metric: 'unregistered-goods' })
+          }
+        />
+        <ReportCard
           label="Spese fisse e ripartite"
           value={fixedCosts}
           tone="amber"
@@ -1030,8 +1087,8 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Utile reale"
-          value={real - operatingCosts}
-          tone={real - operatingCosts >= 0 ? 'cyan' : 'red'}
+          value={real - realOperatingCosts}
+          tone={real - realOperatingCosts >= 0 ? 'cyan' : 'red'}
           onClick={() =>
             setDetail({ type: 'metric', metric: 'real-profit' })
           }
@@ -1077,6 +1134,7 @@ export function ReportsPage() {
         </div>
         <div className="stats-strip expense-breakdown">
           <div><span>Fatture fornitori</span><strong>{money(purchases)}</strong></div>
+          <div><span>Merce senza fattura</span><strong>{money(unregisteredGoods)}</strong></div>
           <div><span>Affitti</span><strong>{money(rents)}</strong></div>
           <div><span>Fatture contabile</span><strong>{money(accountant)}</strong></div>
           <div><span>Stipendi</span><strong>{money(expenseByType.stipendi)}</strong></div>

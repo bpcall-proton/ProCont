@@ -137,6 +137,7 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
     taxableAmount: amount(value.imponibile),
     vat: amount(value.iva),
     theoreticalRevenue,
+    unregisteredGoods: amount(value.merceSenzaFattura),
     total,
     markupPercent:
       typeof value.ricaricoPercentuale === 'number'
@@ -192,6 +193,7 @@ function mapTaking(value: JsonRecord): AccountingTaking {
     cash: amount(value.cash),
     pos: amount(value.pos),
     withdrawal: amount(value.ritiro),
+    unregisteredGoods: amount(value.merceSenzaFattura),
     vat: amount(value.iva),
     realTotal: amount(value.reale),
   }
@@ -506,6 +508,7 @@ export function normalizeStoredState(
         taxableAmount,
         vat,
         lines,
+        unregisteredGoods: invoice.unregisteredGoods ?? 0,
         markupPercent:
           invoice.markupPercent ??
           markupPercent(invoice.total, invoice.theoreticalRevenue),
@@ -606,6 +609,7 @@ export function normalizeStoredState(
         takings: (accounting.takings ?? []).map((taking) => ({
           ...taking,
           companyId: taking.companyId || fallbackCompanyId,
+          unregisteredGoods: taking.unregisteredGoods ?? 0,
         })),
         rentals: (accounting.rentals ?? []).map((rental) => ({
           ...rental,
@@ -877,6 +881,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           imponibile: invoice.taxableAmount,
           iva: invoice.vat,
           venit: invoice.theoreticalRevenue,
+          merceSenzaFattura: invoice.unregisteredGoods,
           importo: invoice.total,
           ricaricoPercentuale: invoice.markupPercent,
           righe: invoice.lines.map((line) => ({
@@ -913,6 +918,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           cash: taking.cash,
           pos: taking.pos,
           ritiro: taking.withdrawal,
+          merceSenzaFattura: taking.unregisteredGoods,
           iva: taking.vat,
           reale: taking.realTotal,
         })),
