@@ -222,6 +222,7 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
     city: text(value.citta),
     notes: text(value.note),
     paymentTermsDays: positiveInteger(value.giorniPagamento, 10),
+    cashUnregisteredByDefault: flag(value.sempreCashSenzaFattura),
   }
 }
 
@@ -580,6 +581,8 @@ export function normalizeStoredState(
             supplier.paymentTermsDays,
             10,
           ),
+          cashUnregisteredByDefault:
+            supplier.cashUnregisteredByDefault ?? false,
         })),
         products: (accounting.products ?? []).map((product) => ({
           ...product,
@@ -941,6 +944,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           citta: supplier.city,
           note: supplier.notes,
           giorniPagamento: supplier.paymentTermsDays,
+          sempreCashSenzaFattura: supplier.cashUnregisteredByDefault,
         })),
         prodotti: state.products.map((product) => ({
           id: product.id,

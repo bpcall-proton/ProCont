@@ -2693,7 +2693,7 @@ select {
 }
 
 .supplier-create-form {
-  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto;
+  grid-template-columns: 1fr 1fr minmax(130px, 0.65fr) auto auto;
 }
 
 .vertical-form {
@@ -2727,7 +2727,7 @@ select {
 
 .supplier-card {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) auto auto;
+  grid-template-columns: minmax(160px, 1fr) auto auto auto;
 }
 
 .supplier-payment-terms {
@@ -2740,6 +2740,21 @@ select {
 
 .supplier-payment-terms input {
   width: 70px;
+}
+
+.supplier-cash-default {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  gap: 0.45rem;
+}
+
+.supplier-cash-default input {
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0;
+  width: 1rem;
 }
 
 .report-filter {

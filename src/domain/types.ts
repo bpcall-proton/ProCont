@@ -184,6 +184,7 @@ export interface AccountingSupplier {
   city: string
   notes: string
   paymentTermsDays: number
+  cashUnregisteredByDefault: boolean
 }
 
 export interface Rental {
