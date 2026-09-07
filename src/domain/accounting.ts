@@ -60,6 +60,43 @@ export function sellerColorClass(sellerName: string) {
   return `seller-color-${hash % 8}`
 }
 
+function normalizedContactName(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function contactNameMatchScore(referenceName: string, candidateName: string) {
+  const reference = normalizedContactName(referenceName)
+  const candidate = normalizedContactName(candidateName)
+  if (!reference || !candidate) return 0
+  if (reference === candidate) return 10_000 + candidate.length
+  if (
+    ` ${reference} `.includes(` ${candidate} `) ||
+    ` ${candidate} `.includes(` ${reference} `)
+  ) {
+    return Math.min(reference.length, candidate.length)
+  }
+  return 0
+}
+
+export function bestContactNameMatch<T extends { name: string }>(
+  referenceName: string,
+  contacts: T[],
+) {
+  return contacts.reduce<{ contact: T; score: number } | null>(
+    (best, contact) => {
+      const score = contactNameMatchScore(referenceName, contact.name)
+      return score > (best?.score ?? 0) ? { contact, score } : best
+    },
+    null,
+  )?.contact
+}
+
 export function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
