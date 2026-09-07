@@ -185,6 +185,7 @@ export interface AccountingSeller {
 export interface AccountingSupplier {
   id: string
   companyId: string
+  linkedSellerId: string | null
   name: string
   taxId: string
   email: string

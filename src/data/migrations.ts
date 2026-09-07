@@ -234,6 +234,7 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
+    linkedSellerId: nullableText(value.venditoreCollegatoId),
     name: text(value.nome),
     taxId: text(value.partitaIva),
     email: text(value.email),
@@ -645,6 +646,7 @@ export function normalizeStoredState(
         suppliers: (accounting.suppliers ?? []).map((supplier) => ({
           ...supplier,
           companyId: supplier.companyId || fallbackCompanyId,
+          linkedSellerId: supplier.linkedSellerId ?? null,
           paymentTermsDays: positiveInteger(
             supplier.paymentTermsDays,
             10,
@@ -1109,6 +1111,7 @@ export function exportLegacyAccounting(state: AccountingState) {
         fornitori: state.suppliers.map((supplier) => ({
           id: supplier.id,
           aziendaId: supplier.companyId,
+          venditoreCollegatoId: supplier.linkedSellerId,
           nome: supplier.name,
           partitaIva: supplier.taxId,
           email: supplier.email,

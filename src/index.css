@@ -2922,7 +2922,8 @@ select {
   gap: 6px;
 }
 
-.contact-field input {
+.contact-field input,
+.contact-field select {
   min-width: 0;
   width: 100%;
 }
