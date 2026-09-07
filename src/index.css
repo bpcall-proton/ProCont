@@ -2595,6 +2595,12 @@ select {
   align-items: flex-start;
 }
 
+.invoice-selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .invoice-selection-total {
   min-width: 180px;
   display: grid;
@@ -2614,6 +2620,15 @@ select {
 .invoice-selection-total strong {
   color: #6ee7b7;
   font-size: 1.08rem;
+}
+
+.invoice-selection-revenue {
+  border-color: rgba(167, 139, 250, 0.42);
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.invoice-selection-revenue strong {
+  color: #c4b5fd;
 }
 
 .invoice-filters {

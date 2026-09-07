@@ -424,6 +424,10 @@ export function InvoicesPanel({
     (sum, invoice) => sum + invoice.total,
     0,
   )
+  const selectedInvoiceRevenue = selectedInvoices.reduce(
+    (sum, invoice) => sum + invoice.theoreticalRevenue,
+    0,
+  )
   const allVisibleInvoicesSelected =
     invoices.length > 0 && selectedInvoices.length === invoices.length
   const invoiceTotal = roundMoney(
@@ -1272,13 +1276,20 @@ export function InvoicesPanel({
       <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ''}`}>
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
-          <div className="invoice-selection-total" aria-live="polite">
-            <small>Totale fatture selezionate</small>
-            <strong>{money(selectedInvoiceTotal)}</strong>
-            <span>
-              {selectedInvoices.length}{' '}
-              {selectedInvoices.length === 1 ? 'fattura' : 'fatture'}
-            </span>
+          <div className="invoice-selection-summary" aria-live="polite">
+            <div className="invoice-selection-total">
+              <small>Totale fatture selezionate</small>
+              <strong>{money(selectedInvoiceTotal)}</strong>
+              <span>
+                {selectedInvoices.length}{' '}
+                {selectedInvoices.length === 1 ? 'fattura' : 'fatture'}
+              </span>
+            </div>
+            <div className="invoice-selection-total invoice-selection-revenue">
+              <small>Venit fatture selezionate</small>
+              <strong>{money(selectedInvoiceRevenue)}</strong>
+              <span>Stessa selezione</span>
+            </div>
           </div>
           <div className="invoice-filters">
             <select
