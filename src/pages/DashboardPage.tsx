@@ -544,12 +544,11 @@ export function DashboardPage() {
     )
     if (!supplier) return []
     const linkedSellerId =
-      supplier.linkedSellerId ??
       accounting.sellers.find(
         (seller) =>
           normalizedContactName(seller.name) ===
             normalizedContactName(supplier.name),
-      )?.id
+      )?.id ?? supplier.linkedSellerId
     if (
       !linkedSellerId ||
       linkedSellerId === invoice.sellerId ||
