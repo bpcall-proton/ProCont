@@ -77,6 +77,10 @@ function filenamePart(value: string) {
   )
 }
 
+function normalizedContactName(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
@@ -544,15 +548,56 @@ export function DashboardPage() {
       if (!product) return []
       return [
         {
-          transfer,
-          product,
+          fromSellerId: transfer.fromSellerId,
+          toSellerId: transfer.toSellerId,
+          date: transfer.date,
           amount: roundMoney(
             transfer.quantity * productSalePrice(product),
           ),
+          reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
+          acquiredInInvoice: false,
         },
       ]
     },
   )
+  const supplierSellerRevenueTransfers = sellerInvoices.flatMap((invoice) => {
+    if (!invoice.sellerId || invoice.theoreticalRevenue === 0) return []
+    const supplier = accounting.suppliers.find(
+      (item) => item.id === invoice.supplierId,
+    )
+    if (!supplier) return []
+    const fromSellerId =
+      supplier.linkedSellerId ??
+      accounting.sellers.find(
+        (seller) =>
+          normalizedContactName(seller.name) ===
+            normalizedContactName(supplier.name),
+      )?.id
+    if (
+      !fromSellerId ||
+      fromSellerId === invoice.sellerId ||
+      !knownSellerIds.has(fromSellerId) ||
+      !knownSellerIds.has(invoice.sellerId)
+    ) {
+      return []
+    }
+    return [
+      {
+        fromSellerId,
+        toSellerId: invoice.sellerId,
+        date: invoice.date,
+        amount: roundMoney(invoice.theoreticalRevenue),
+        reference: `Fattura ${invoice.number || 'senza numero'} · ${
+          supplier.name
+        }`,
+        acquiredInInvoice: true,
+      },
+    ]
+  })
+  const allSellerRevenueTransfers = [
+    ...sellerRevenueTransfers,
+    ...supplierSellerRevenueTransfers,
+  ]
   const sellerSummaries = accounting.sellers.map((seller) => {
     const invoices = sellerInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
@@ -585,11 +630,11 @@ export function DashboardPage() {
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
     )
-    const revenueAcquiredTransfers = sellerRevenueTransfers.filter(
-      ({ transfer }) => transfer.toSellerId === seller.id,
+    const revenueAcquiredTransfers = allSellerRevenueTransfers.filter(
+      (transfer) => transfer.toSellerId === seller.id,
     )
-    const revenueCededTransfers = sellerRevenueTransfers.filter(
-      ({ transfer }) => transfer.fromSellerId === seller.id,
+    const revenueCededTransfers = allSellerRevenueTransfers.filter(
+      (transfer) => transfer.fromSellerId === seller.id,
     )
     const revenueAcquired = revenueAcquiredTransfers.reduce(
       (sum, transfer) => sum + transfer.amount,
@@ -599,8 +644,13 @@ export function DashboardPage() {
       (sum, transfer) => sum + transfer.amount,
       0,
     )
+    const revenueAcquiredOutsideInvoices = revenueAcquiredTransfers.reduce(
+      (sum, transfer) =>
+        sum + (transfer.acquiredInInvoice ? 0 : transfer.amount),
+      0,
+    )
     const sellerTheoretical = roundMoney(
-      sellerBaseTheoretical + revenueAcquired - revenueCeded,
+      sellerBaseTheoretical + revenueAcquiredOutsideInvoices - revenueCeded,
     )
     return {
       id: seller.id,
@@ -773,7 +823,7 @@ export function DashboardPage() {
             }))
             .filter((row) => row.amount !== 0)
           const revenueAcquiredRows = selectedSeller.revenueAcquiredTransfers
-            .map(({ transfer, product, amount }) => ({
+            .map((transfer) => ({
               date: transfer.date,
               category: 'Venit acquisito',
               description: `Da ${
@@ -781,12 +831,13 @@ export function DashboardPage() {
                   (seller) => seller.id === transfer.fromSellerId,
                 )?.name ?? 'venditore non disponibile'
               }`,
-              reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
-              amount,
+              reference: transfer.reference,
+              amount: transfer.amount,
+              acquiredInInvoice: transfer.acquiredInInvoice,
             }))
             .filter((row) => row.amount !== 0)
           const revenueCededRows = selectedSeller.revenueCededTransfers
-            .map(({ transfer, product, amount }) => ({
+            .map((transfer) => ({
               date: transfer.date,
               category: 'Venit ceduto',
               description: `A ${
@@ -794,13 +845,13 @@ export function DashboardPage() {
                   (seller) => seller.id === transfer.toSellerId,
                 )?.name ?? 'venditore non disponibile'
               }`,
-              reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
-              amount,
+              reference: transfer.reference,
+              amount: transfer.amount,
             }))
             .filter((row) => row.amount !== 0)
           const theoreticalRows = [
             ...invoiceTheoreticalRows,
-            ...revenueAcquiredRows,
+            ...revenueAcquiredRows.filter((row) => !row.acquiredInInvoice),
             ...revenueCededRows.map((row) => ({
               ...row,
               amount: -row.amount,

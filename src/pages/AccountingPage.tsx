@@ -46,6 +46,10 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function normalizedContactName(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
 function amountExpression(value: string) {
   const expression = value
     .trim()
@@ -1761,6 +1765,7 @@ function ContactsPanel() {
   )
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
+  const [supplierLinkedSellerId, setSupplierLinkedSellerId] = useState('')
   const [supplierCashUnregistered, setSupplierCashUnregistered] =
     useState(false)
   const [supplierPaymentTerms, setSupplierPaymentTerms] = useState(
@@ -1836,6 +1841,13 @@ function ContactsPanel() {
     event.preventDefault()
     const name = supplierName.trim()
     const taxId = supplierTaxId.trim()
+    const linkedSellerId =
+      supplierLinkedSellerId ||
+      data.sellers.find(
+        (seller) =>
+          normalizedContactName(seller.name) === normalizedContactName(name),
+      )?.id ||
+      null
     const paymentTermsDays = Math.max(
       0,
       Math.min(365, Math.round(numberValue(supplierPaymentTerms))),
@@ -1850,6 +1862,7 @@ function ContactsPanel() {
                     ...supplier,
                     name,
                     taxId,
+                    linkedSellerId,
                     paymentTermsDays,
                     cashUnregisteredByDefault: supplierCashUnregistered,
                   }
@@ -1861,6 +1874,7 @@ function ContactsPanel() {
                 companyId,
                 name,
                 taxId,
+                linkedSellerId,
                 email: '',
                 phone: '',
                 city: '',
@@ -1889,14 +1903,23 @@ function ContactsPanel() {
     setEditingSupplierId(null)
     setSupplierName('')
     setSupplierTaxId('')
+    setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
     setSupplierCashUnregistered(false)
   }
 
   function editSupplier(supplier: AccountingSupplier) {
+    const matchingSeller = data.sellers.find(
+      (seller) =>
+        normalizedContactName(seller.name) ===
+        normalizedContactName(supplier.name),
+    )
     setEditingSupplierId(supplier.id)
     setSupplierName(supplier.name)
     setSupplierTaxId(supplier.taxId)
+    setSupplierLinkedSellerId(
+      supplier.linkedSellerId ?? matchingSeller?.id ?? '',
+    )
     setSupplierPaymentTerms(String(supplier.paymentTermsDays))
     setSupplierCashUnregistered(supplier.cashUnregisteredByDefault)
   }
@@ -1905,6 +1928,7 @@ function ContactsPanel() {
     setEditingSupplierId(null)
     setSupplierName('')
     setSupplierTaxId('')
+    setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
     setSupplierCashUnregistered(false)
   }
@@ -1930,7 +1954,7 @@ function ContactsPanel() {
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id) }))}>Elimina</button></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))}>Elimina</button></span></div>
         })}</div>
       </article>
       <article className="panel">
@@ -1943,6 +1967,13 @@ function ContactsPanel() {
           <label className="contact-field">
             <span>Partita IVA</span>
             <input placeholder="Inserisci la Partita IVA" value={supplierTaxId} onChange={(event) => setSupplierTaxId(event.target.value)} />
+          </label>
+          <label className="contact-field">
+            <span>Venditore collegato (fornitore interno)</span>
+            <select value={supplierLinkedSellerId} onChange={(event) => setSupplierLinkedSellerId(event.target.value)}>
+              <option value="">Nessun venditore collegato</option>
+              {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+            </select>
           </label>
           <label className="contact-field">
             <span>Giorni per il pagamento</span>
@@ -1959,11 +1990,18 @@ function ContactsPanel() {
         </form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
+          const linkedSeller = data.sellers.find(
+            (seller) =>
+              seller.id === supplier.linkedSellerId ||
+              (!supplier.linkedSellerId &&
+                normalizedContactName(seller.name) ===
+                  normalizedContactName(supplier.name)),
+          )
           const total = invoices.reduce(
             (sum, item) => sum + item.total + item.unregisteredGoods,
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
         })}</div>
       </article>
     </section>
