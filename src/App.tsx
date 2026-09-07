@@ -19,6 +19,7 @@ import { Logo } from './components/Logo'
 import { DataModeBadge, SyncBadge } from './components/StatusBadge'
 import { DashboardPage } from './pages/DashboardPage'
 import { AccountingPage } from './pages/AccountingPage'
+import { AccountingVerificationPage } from './pages/AccountingVerificationPage'
 import { InvoiceArchivePage } from './pages/InvoiceArchivePage'
 import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
@@ -39,6 +40,7 @@ type Page =
   | 'paidInvoices'
   | 'products'
   | 'production'
+  | 'accountingVerification'
   | 'reports'
   | 'stores'
   | 'review'
@@ -76,6 +78,16 @@ const navigation: {
       en: 'Product cost',
     },
     icon: ProductionIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'accountingVerification',
+    label: {
+      it: 'Verifica contabile',
+      ro: 'Verificare contabilă',
+      en: 'Accounting check',
+    },
+    icon: ScanIcon,
     permission: 'manageAccounting',
   },
   {
@@ -183,6 +195,9 @@ function Workspace() {
     ),
     products: <ProductsPage />,
     production: <ProductionPage key={activeCompany?.id} />,
+    accountingVerification: (
+      <AccountingVerificationPage key={activeCompany?.id} />
+    ),
     paidInvoices: <PaidInvoicesPage />,
     reports: <ReportsPage />,
     stores: <StoresPage />,

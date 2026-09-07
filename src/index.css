@@ -2384,6 +2384,141 @@ select {
   background: rgba(6, 8, 16, 0.36);
 }
 
+.invoice-verification-box {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--violet) 42%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--violet) 9%, rgba(6, 8, 16, 0.36));
+}
+
+.invoice-verification-box .panel-heading {
+  margin: 0;
+}
+
+.invoice-verification-actions,
+.verification-settings-actions,
+.verification-filter,
+.verification-number-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.invoice-verification-actions {
+  flex-wrap: wrap;
+}
+
+.review-photo-strip figure {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  margin: 0;
+}
+
+.review-photo-strip figure img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.verification-settings-panel {
+  grid-column: 1 / -1;
+}
+
+.verification-sellers {
+  margin-bottom: 14px;
+}
+
+.verification-settings-actions {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.verification-filter {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.verification-filter label {
+  display: grid;
+  gap: 5px;
+}
+
+.verification-entry-grid,
+.verification-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.verification-number-row > * {
+  min-width: 0;
+  flex: 1;
+}
+
+.verification-table {
+  min-width: 1180px;
+}
+
+.verification-anomaly {
+  background: color-mix(in srgb, var(--red) 13%, transparent);
+}
+
+.verification-anomaly td,
+.verification-anomaly strong {
+  color: var(--red);
+}
+
+.movement-list {
+  display: grid;
+  gap: 9px;
+}
+
+.movement-list .record-card {
+  padding: 11px 0;
+}
+
+.verification-invoice-list,
+.verification-line-tags {
+  display: grid;
+  gap: 10px;
+}
+
+.verification-invoice {
+  align-items: flex-start;
+}
+
+.verification-invoice > div:first-child {
+  display: grid;
+  flex: 1;
+  gap: 7px;
+  min-width: 0;
+}
+
+.verification-line-tags {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.verification-line-tags span {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.78rem;
+}
+
+.verification-invoice pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
 .invoice-lines-editor .panel-heading {
   margin: 0;
 }
@@ -2975,6 +3110,11 @@ select {
   .expense-grid {
     grid-template-columns: 1fr;
   }
+
+  .verification-entry-grid,
+  .verification-history-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -3002,6 +3142,14 @@ select {
   }
 
   .invoice-entry-options {
+    flex-direction: column;
+  }
+
+  .invoice-verification-box .panel-heading,
+  .invoice-verification-actions,
+  .verification-filter,
+  .verification-number-row {
+    align-items: stretch;
     flex-direction: column;
   }
 

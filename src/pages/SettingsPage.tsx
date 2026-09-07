@@ -160,6 +160,7 @@ export function SettingsPage() {
     setActiveAccountingCompany,
     addAccountingCompany,
     updateAccountingCompany,
+    updateAccounting,
     setDataMode,
     setDriveBackup,
     selectDriveFolder,
@@ -201,6 +202,12 @@ export function SettingsPage() {
   const [seasonName, setSeasonName] = useState('')
   const [seasonBusy, setSeasonBusy] = useState(false)
   const [seasonMessage, setSeasonMessage] = useState<string | null>(null)
+  const [verificationSellerDrafts, setVerificationSellerDrafts] = useState<
+    Record<string, string[]>
+  >({})
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(
+    null,
+  )
   const fileInput = useRef<HTMLInputElement>(null)
   const seasonArchiveInput = useRef<HTMLInputElement>(null)
   const accountingCompany =
@@ -218,6 +225,16 @@ export function SettingsPage() {
   const products = state.accounting.products.filter(
     (product) => product.companyId === companyId,
   )
+  const verificationSettings = state.accounting.verificationSettings.find(
+    (settings) => settings.companyId === companyId,
+  )
+  const verificationSellers = state.accounting.sellers.filter(
+    (seller) => seller.companyId === companyId && seller.name.trim(),
+  )
+  const verificationSellerIds =
+    verificationSellerDrafts[companyId ?? ''] ??
+    verificationSettings?.sellerIds ??
+    []
   const driveFolderIsUrl = /^https?:\/\//i.test(
     dataSettings.driveFolder.trim(),
   )
@@ -238,6 +255,65 @@ export function SettingsPage() {
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
           : 'Sincronizzato'
+
+  function setVerificationEnabled(enabled: boolean) {
+    if (!companyId) return
+    if (enabled && (verificationSettings?.sellerIds.length ?? 0) === 0) {
+      setVerificationMessage(
+        'Seleziona e conferma almeno un venditore prima di attivare.',
+      )
+      return
+    }
+    updateAccounting((current) => ({
+      ...current,
+      verificationSettings: [
+        ...current.verificationSettings.filter(
+          (settings) => settings.companyId !== companyId,
+        ),
+        {
+          companyId,
+          enabled,
+          sellerIds: verificationSettings?.sellerIds ?? [],
+        },
+      ],
+    }))
+    setVerificationMessage(
+      enabled
+        ? 'Verifica contabile attiva fino alla disattivazione manuale.'
+        : 'Verifica contabile disattivata.',
+    )
+  }
+
+  function confirmVerificationSellers() {
+    if (!companyId || verificationSellerIds.length === 0) {
+      setVerificationMessage('Seleziona almeno un venditore.')
+      return
+    }
+    const names = verificationSellers
+      .filter((seller) => verificationSellerIds.includes(seller.id))
+      .map((seller) => seller.name)
+    if (
+      !window.confirm(
+        `Confermi la verifica contabile permanente per: ${names.join(', ')}?`,
+      )
+    ) {
+      return
+    }
+    updateAccounting((current) => ({
+      ...current,
+      verificationSettings: [
+        ...current.verificationSettings.filter(
+          (settings) => settings.companyId !== companyId,
+        ),
+        {
+          companyId,
+          enabled: verificationSettings?.enabled ?? false,
+          sellerIds: verificationSellerIds,
+        },
+      ],
+    }))
+    setVerificationMessage(`Venditori confermati: ${names.join(', ')}.`)
+  }
 
   function requestDriveFolderChange() {
     if (driveFolderConfigured) {
@@ -578,6 +654,79 @@ export function SettingsPage() {
       </header>
 
       <section className="settings-grid">
+        <article className="panel verification-settings-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">CONTROLLO MERCE</span>
+              <h2>Verifica contabile</h2>
+              <p>
+                Separa carichi, produzione e trasferimenti dalla contabilità
+                ordinaria.
+              </p>
+            </div>
+            <button
+              aria-label="Attiva o disattiva verifica contabile"
+              className={`toggle ${
+                verificationSettings?.enabled ? 'on' : ''
+              }`}
+              onClick={() =>
+                setVerificationEnabled(!verificationSettings?.enabled)
+              }
+              type="button"
+            >
+              <span />
+            </button>
+          </div>
+          <fieldset className="production-sellers verification-sellers">
+            <legend>Venditori sottoposti a verifica</legend>
+            {verificationSellers.length === 0 ? (
+              <p>Registra prima almeno un venditore.</p>
+            ) : (
+              verificationSellers.map((seller) => (
+                <label className="checkbox-row" key={seller.id}>
+                  <input
+                    checked={verificationSellerIds.includes(seller.id)}
+                    onChange={(event) =>
+                      setVerificationSellerDrafts((current) => {
+                        const selected =
+                          current[companyId ?? ''] ??
+                          verificationSettings?.sellerIds ??
+                          []
+                        return {
+                          ...current,
+                          [companyId ?? '']: event.target.checked
+                            ? [...selected, seller.id]
+                            : selected.filter(
+                                (sellerId) => sellerId !== seller.id,
+                              ),
+                        }
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  {seller.name}
+                </label>
+              ))
+            )}
+          </fieldset>
+          <div className="verification-settings-actions">
+            <button
+              className="button button-primary"
+              onClick={confirmVerificationSellers}
+              type="button"
+            >
+              Conferma venditori
+            </button>
+            <small>
+              La selezione confermata resta attiva finché non la modifichi o
+              disattivi manualmente.
+            </small>
+          </div>
+          {verificationMessage && (
+            <p className="import-message">{verificationMessage}</p>
+          )}
+        </article>
+
         <article className="panel">
           <div className="panel-heading">
             <div>

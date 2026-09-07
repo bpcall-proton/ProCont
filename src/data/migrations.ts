@@ -158,6 +158,10 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
     payments,
     paymentDate: nullableText(value.dataPagamento),
     paymentMethod: paymentMethod(value.metodoPagamento),
+    verificationIncluded: false,
+    verificationImages: [],
+    verificationOcrText: '',
+    verificationOcrConfidence: null,
   }
 }
 
@@ -179,6 +183,7 @@ function mapInvoiceLine(value: JsonRecord): InvoiceLine {
     productCode: text(value.codiceProdotto),
     description: text(value.descrizione),
     quantity,
+    unit: text(value.unita, 'pz'),
     unitPurchaseCostInclVat,
     unitSalePriceInclVat,
     purchaseTotalInclVat,
@@ -248,6 +253,7 @@ function mapProduct(value: JsonRecord): AccountingProduct {
     supplierName: text(value.fornitoreNome),
     code: text(value.codice),
     name: text(value.nome),
+    unit: text(value.unita, 'pz'),
     purchaseCostInclVat: amount(value.costoIvaInclusa),
     pricingMode: pricingMode(value.regolaVenit),
     salePriceInclVat: amount(value.venditaIvaInclusa),
@@ -438,6 +444,10 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     productionSettings: [],
     productionEntries: [],
     productionViewSettings: [],
+    verificationSettings: [],
+    verificationStockLoads: [],
+    verificationProductionEntries: [],
+    verificationTransfers: [],
   }
 }
 
@@ -454,7 +464,8 @@ export function normalizeStoredState(
       value.schemaVersion === 6 ||
       value.schemaVersion === 7 ||
       value.schemaVersion === 8 ||
-      value.schemaVersion === 9) &&
+      value.schemaVersion === 9 ||
+      value.schemaVersion === 10) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -516,7 +527,10 @@ export function normalizeStoredState(
         .map((seller) => seller.accountingSellerId),
     )
     const invoices = (accounting.invoices ?? []).map((invoice) => {
-      const lines = invoice.lines ?? []
+      const lines = (invoice.lines ?? []).map((line) => ({
+        ...line,
+        unit: line.unit ?? 'pz',
+      }))
       const vat = invoice.vat ?? 0
       const storedTaxableAmount = invoice.taxableAmount ?? 0
       const taxableAmount =
@@ -533,6 +547,16 @@ export function normalizeStoredState(
         markupPercent:
           invoice.markupPercent ??
           markupPercent(invoice.total, invoice.theoreticalRevenue),
+        verificationIncluded: invoice.verificationIncluded ?? false,
+        verificationImages: Array.isArray(invoice.verificationImages)
+          ? invoice.verificationImages
+          : [],
+        verificationOcrText: invoice.verificationOcrText ?? '',
+        verificationOcrConfidence: Number.isFinite(
+          invoice.verificationOcrConfidence,
+        )
+          ? invoice.verificationOcrConfidence
+          : null,
       }
     })
     const expenses = (accounting.expenses ?? []).map((expense) => ({
@@ -567,7 +591,7 @@ export function normalizeStoredState(
     )
     return {
       ...state,
-      schemaVersion: 9,
+      schemaVersion: 10,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -634,6 +658,7 @@ export function normalizeStoredState(
           supplierId: product.supplierId ?? null,
           supplierName: product.supplierName ?? '',
           code: product.code ?? '',
+          unit: product.unit ?? 'pz',
           purchaseCostInclVat: product.purchaseCostInclVat ?? 0,
           pricingMode: product.pricingMode ?? 'manual',
           salePriceInclVat: product.salePriceInclVat ?? 0,
@@ -653,6 +678,51 @@ export function normalizeStoredState(
         ).map((settings) =>
           mapProductionViewSettings(settings, fallbackCompanyId),
         ),
+        verificationSettings: records(accounting.verificationSettings).map(
+          (settings) => ({
+            companyId: text(settings.companyId, fallbackCompanyId),
+            enabled: flag(settings.enabled),
+            sellerIds: Array.isArray(settings.sellerIds)
+              ? settings.sellerIds.filter(
+                  (sellerId): sellerId is string =>
+                    typeof sellerId === 'string',
+                )
+              : [],
+          }),
+        ),
+        verificationStockLoads: records(
+          accounting.verificationStockLoads,
+        ).map((entry) => ({
+          id: text(entry.id, crypto.randomUUID()),
+          companyId: text(entry.companyId, fallbackCompanyId),
+          sellerId: text(entry.sellerId),
+          productId: text(entry.productId),
+          date: text(entry.date),
+          quantity: Math.max(0, amount(entry.quantity)),
+          note: text(entry.note),
+        })),
+        verificationProductionEntries: records(
+          accounting.verificationProductionEntries,
+        ).map((entry) => ({
+          id: text(entry.id, crypto.randomUUID()),
+          companyId: text(entry.companyId, fallbackCompanyId),
+          sellerId: text(entry.sellerId),
+          productId: text(entry.productId),
+          date: text(entry.date),
+          quantity: Math.max(0, amount(entry.quantity)),
+        })),
+        verificationTransfers: records(
+          accounting.verificationTransfers,
+        ).map((transfer) => ({
+          id: text(transfer.id, crypto.randomUUID()),
+          companyId: text(transfer.companyId, fallbackCompanyId),
+          fromSellerId: text(transfer.fromSellerId),
+          toSellerId: text(transfer.toSellerId),
+          productId: text(transfer.productId),
+          date: text(transfer.date),
+          quantity: Math.max(0, amount(transfer.quantity)),
+          reassignRevenue: transfer.reassignRevenue !== false,
+        })),
         takings: (accounting.takings ?? []).map((taking) => ({
           ...taking,
           companyId: taking.companyId || fallbackCompanyId,
@@ -749,6 +819,27 @@ export function importLegacyIntoState(
       ),
       ...accounting.productionViewSettings,
     ],
+    verificationSettings: [
+      ...current.accounting.verificationSettings.filter(
+        (settings) =>
+          !accounting.verificationSettings.some(
+            (imported) => imported.companyId === settings.companyId,
+          ),
+      ),
+      ...accounting.verificationSettings,
+    ],
+    verificationStockLoads: mergeById(
+      current.accounting.verificationStockLoads,
+      accounting.verificationStockLoads,
+    ),
+    verificationProductionEntries: mergeById(
+      current.accounting.verificationProductionEntries,
+      accounting.verificationProductionEntries,
+    ),
+    verificationTransfers: mergeById(
+      current.accounting.verificationTransfers,
+      accounting.verificationTransfers,
+    ),
   }
   return {
     ...current,
@@ -814,6 +905,18 @@ export function importLegacyIntoActiveCompany(
     }))
   const productionViewSettings = companyRecords(
     imported.accounting.productionViewSettings,
+  )
+  const verificationSettings = companyRecords(
+    imported.accounting.verificationSettings,
+  )
+  const verificationStockLoads = companyRecords(
+    imported.accounting.verificationStockLoads,
+  )
+  const verificationProductionEntries = companyRecords(
+    imported.accounting.verificationProductionEntries,
+  )
+  const verificationTransfers = companyRecords(
+    imported.accounting.verificationTransfers,
   )
 
   return {
@@ -882,6 +985,26 @@ export function importLegacyIntoActiveCompany(
             ...productionViewSettings,
           ]
         : current.accounting.productionViewSettings,
+      verificationSettings: verificationSettings.length
+        ? [
+            ...current.accounting.verificationSettings.filter(
+              (settings) => settings.companyId !== targetCompanyId,
+            ),
+            ...verificationSettings,
+          ]
+        : current.accounting.verificationSettings,
+      verificationStockLoads: mergeById(
+        current.accounting.verificationStockLoads,
+        verificationStockLoads,
+      ),
+      verificationProductionEntries: mergeById(
+        current.accounting.verificationProductionEntries,
+        verificationProductionEntries,
+      ),
+      verificationTransfers: mergeById(
+        current.accounting.verificationTransfers,
+        verificationTransfers,
+      ),
     },
   }
 }
@@ -890,7 +1013,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 9,
+      version: 10,
       exportedAt: new Date().toISOString(),
       data: state,
     },

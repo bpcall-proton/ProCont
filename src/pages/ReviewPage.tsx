@@ -181,6 +181,10 @@ export function ReviewPage() {
       payments: [],
       paymentDate: null,
       paymentMethod: null,
+      verificationIncluded: false,
+      verificationImages: [],
+      verificationOcrText: '',
+      verificationOcrConfidence: null,
     }
     updateAccounting((current) => ({
       ...current,

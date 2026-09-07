@@ -174,5 +174,16 @@ export function activeAccounting(state: AccountingState) {
     productionViewSettings:
       state.productionViewSettings.find((item) => item.companyId === id) ??
       null,
+    verificationSettings:
+      state.verificationSettings.find((item) => item.companyId === id) ?? null,
+    verificationStockLoads: state.verificationStockLoads.filter(
+      (item) => item.companyId === id,
+    ),
+    verificationProductionEntries: state.verificationProductionEntries.filter(
+      (item) => item.companyId === id,
+    ),
+    verificationTransfers: state.verificationTransfers.filter(
+      (item) => item.companyId === id,
+    ),
   }
 }
