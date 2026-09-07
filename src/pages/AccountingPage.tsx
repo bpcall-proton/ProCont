@@ -1939,7 +1939,7 @@ function ContactsPanel() {
     setSupplierName(supplier.name)
     setSupplierTaxId(supplier.taxId)
     setSupplierLinkedSellerId(
-      supplier.linkedSellerId ?? matchingSeller?.id ?? '',
+      matchingSeller?.id ?? supplier.linkedSellerId ?? '',
     )
     setSupplierPaymentTerms(String(supplier.paymentTermsDays))
     setSupplierCashUnregistered(supplier.cashUnregisteredByDefault)
@@ -2011,13 +2011,14 @@ function ContactsPanel() {
         </form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
-          const linkedSeller = data.sellers.find(
+          const matchingSeller = data.sellers.find(
             (seller) =>
-              seller.id === supplier.linkedSellerId ||
-              (!supplier.linkedSellerId &&
-                normalizedContactName(seller.name) ===
-                  normalizedContactName(supplier.name)),
+              normalizedContactName(seller.name) ===
+              normalizedContactName(supplier.name),
           )
+          const linkedSeller =
+            matchingSeller ??
+            data.sellers.find((seller) => seller.id === supplier.linkedSellerId)
           const total = invoices.reduce(
             (sum, item) => sum + item.total + item.unregisteredGoods,
             0,
