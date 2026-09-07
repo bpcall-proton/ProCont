@@ -1033,6 +1033,26 @@ select {
   color: var(--amber);
 }
 
+.dashboard-seller-metrics .seller-revenue-acquired {
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  background: color-mix(in srgb, var(--green) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-revenue-acquired span,
+.dashboard-seller-metrics .seller-revenue-acquired strong {
+  color: var(--green);
+}
+
+.dashboard-seller-metrics .seller-revenue-ceded {
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  background: color-mix(in srgb, var(--red) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-revenue-ceded span,
+.dashboard-seller-metrics .seller-revenue-ceded strong {
+  color: var(--red);
+}
+
 .settings-grid {
   align-items: start;
 }

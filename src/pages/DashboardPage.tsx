@@ -5,7 +5,9 @@ import {
   invoiceRemaining,
   money,
   officialTaking,
+  productSalePrice,
   realTaking,
+  roundMoney,
 } from '../domain/accounting'
 import { useAppStore } from '../store/AppStoreContext'
 
@@ -39,6 +41,8 @@ type SellerMetricKey =
   | 'withdrawals'
   | 'unregistered-goods'
   | 'cash-residual'
+  | 'revenue-acquired'
+  | 'revenue-ceded'
   | 'stock-residual'
 
 interface SellerMetricDetail {
@@ -524,6 +528,31 @@ export function DashboardPage() {
     (taking) => !sellerAsOfDate || taking.date <= sellerAsOfDate,
   )
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
+  const sellerRevenueTransfers = accounting.verificationTransfers.flatMap(
+    (transfer) => {
+      if (
+        !transfer.reassignRevenue ||
+        (sellerAsOfDate && transfer.date > sellerAsOfDate) ||
+        !knownSellerIds.has(transfer.fromSellerId) ||
+        !knownSellerIds.has(transfer.toSellerId)
+      ) {
+        return []
+      }
+      const product = accounting.products.find(
+        (item) => item.id === transfer.productId,
+      )
+      if (!product) return []
+      return [
+        {
+          transfer,
+          product,
+          amount: roundMoney(
+            transfer.quantity * productSalePrice(product),
+          ),
+        },
+      ]
+    },
+  )
   const sellerSummaries = accounting.sellers.map((seller) => {
     const invoices = sellerInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
@@ -552,9 +581,26 @@ export function DashboardPage() {
       (sum, taking) => sum + taking.unregisteredGoods,
       0,
     )
-    const sellerTheoretical = invoices.reduce(
+    const sellerBaseTheoretical = invoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
+    )
+    const revenueAcquiredTransfers = sellerRevenueTransfers.filter(
+      ({ transfer }) => transfer.toSellerId === seller.id,
+    )
+    const revenueCededTransfers = sellerRevenueTransfers.filter(
+      ({ transfer }) => transfer.fromSellerId === seller.id,
+    )
+    const revenueAcquired = revenueAcquiredTransfers.reduce(
+      (sum, transfer) => sum + transfer.amount,
+      0,
+    )
+    const revenueCeded = revenueCededTransfers.reduce(
+      (sum, transfer) => sum + transfer.amount,
+      0,
+    )
+    const sellerTheoretical = roundMoney(
+      sellerBaseTheoretical + revenueAcquired - revenueCeded,
     )
     return {
       id: seller.id,
@@ -581,6 +627,10 @@ export function DashboardPage() {
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: sellerTheoretical,
+      revenueAcquired,
+      revenueCeded,
+      revenueAcquiredTransfers,
+      revenueCededTransfers,
       stockResidual: sellerTheoretical - sellerReal,
     }
   })
@@ -644,6 +694,10 @@ export function DashboardPage() {
       real: unassignedReal,
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
       theoretical: unassignedTheoretical,
+      revenueAcquired: 0,
+      revenueCeded: 0,
+      revenueAcquiredTransfers: [],
+      revenueCededTransfers: [],
       stockResidual: unassignedTheoretical - unassignedReal,
     })
   }
@@ -709,7 +763,7 @@ export function DashboardPage() {
             reference: `Fattura ${invoice.number || 'senza numero'}`,
             amount: invoice.total,
           }))
-          const theoreticalRows = selectedSeller.invoices
+          const invoiceTheoreticalRows = selectedSeller.invoices
             .map((invoice) => ({
               date: invoice.date,
               category: 'Venit teorico',
@@ -718,6 +772,40 @@ export function DashboardPage() {
               amount: invoice.theoreticalRevenue,
             }))
             .filter((row) => row.amount !== 0)
+          const revenueAcquiredRows = selectedSeller.revenueAcquiredTransfers
+            .map(({ transfer, product, amount }) => ({
+              date: transfer.date,
+              category: 'Venit acquisito',
+              description: `Da ${
+                accounting.sellers.find(
+                  (seller) => seller.id === transfer.fromSellerId,
+                )?.name ?? 'venditore non disponibile'
+              }`,
+              reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
+              amount,
+            }))
+            .filter((row) => row.amount !== 0)
+          const revenueCededRows = selectedSeller.revenueCededTransfers
+            .map(({ transfer, product, amount }) => ({
+              date: transfer.date,
+              category: 'Venit ceduto',
+              description: `A ${
+                accounting.sellers.find(
+                  (seller) => seller.id === transfer.toSellerId,
+                )?.name ?? 'venditore non disponibile'
+              }`,
+              reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
+              amount,
+            }))
+            .filter((row) => row.amount !== 0)
+          const theoreticalRows = [
+            ...invoiceTheoreticalRows,
+            ...revenueAcquiredRows,
+            ...revenueCededRows.map((row) => ({
+              ...row,
+              amount: -row.amount,
+            })),
+          ]
           const sellerTakingRows = (
             category: string,
             amount: (taking: (typeof accounting.takings)[number]) => number,
@@ -839,7 +927,7 @@ export function DashboardPage() {
             },
             theoretical: {
               title: `Venit teorico · ${selectedSeller.name}`,
-              note: `Venit delle fatture attribuite al venditore.${periodNote}`,
+              note: `Venit delle fatture, più acquisito e meno ceduto.${periodNote}`,
               value: selectedSeller.theoretical,
               tone: 'violet',
               rows: theoreticalRows,
@@ -899,6 +987,20 @@ export function DashboardPage() {
               value: selectedSeller.cashResidual,
               tone: 'green',
               rows: cashResidualRows,
+            },
+            'revenue-acquired': {
+              title: `Venit acquisito dall'altro · ${selectedSeller.name}`,
+              note: `Venit trasferito dagli altri venditori.${periodNote}`,
+              value: selectedSeller.revenueAcquired,
+              tone: 'green',
+              rows: revenueAcquiredRows,
+            },
+            'revenue-ceded': {
+              title: `Venit ceduto all'altro · ${selectedSeller.name}`,
+              note: `Venit trasferito agli altri venditori.${periodNote}`,
+              value: selectedSeller.revenueCeded,
+              tone: 'red',
+              rows: revenueCededRows,
             },
             'stock-residual': {
               title: `Stock residuo · ${selectedSeller.name}`,
@@ -1138,11 +1240,25 @@ export function DashboardPage() {
             value={money(selectedStore.seller.invoiceValue)}
           />
           <StatCard
-            detail="Vendita teorica delle fatture assegnate"
+            detail="Fatture + Venit acquisito − Venit ceduto"
             label="Venit teorico"
             onClick={() => openMetric('theoretical')}
             tone="violet"
             value={money(selectedStore.seller.theoretical)}
+          />
+          <StatCard
+            detail="Venit ricevuto da altri punti vendita"
+            label="Venit acquisito dall'altro"
+            onClick={() => openMetric('revenue-acquired')}
+            tone="green"
+            value={money(selectedStore.seller.revenueAcquired)}
+          />
+          <StatCard
+            detail="Venit trasferito ad altri punti vendita"
+            label="Venit ceduto all'altro"
+            onClick={() => openMetric('revenue-ceded')}
+            tone="red"
+            value={money(selectedStore.seller.revenueCeded)}
           />
           <StatCard
             detail="Venit teorico meno Incasso reale"
@@ -1425,6 +1541,34 @@ export function DashboardPage() {
                   >
                     <span>Venit teorico</span>
                     <strong>{money(seller.theoretical)}</strong>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-revenue-acquired"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'revenue-acquired',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Venit acquisito dall'altro</span>
+                    <strong>{money(seller.revenueAcquired)}</strong>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-revenue-ceded"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'revenue-ceded',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Venit ceduto all'altro</span>
+                    <strong>{money(seller.revenueCeded)}</strong>
                     <em>Apri dettaglio</em>
                   </button>
                   <button
