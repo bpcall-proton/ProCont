@@ -1868,6 +1868,23 @@ select {
   box-shadow: 0 0 10px var(--cyan);
 }
 
+.verification-toggle-control {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.verification-toggle-control strong {
+  min-width: 2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+.verification-toggle-control strong.active {
+  color: var(--cyan);
+}
+
 @media (max-width: 1180px) {
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

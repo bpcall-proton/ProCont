@@ -264,19 +264,24 @@ export function SettingsPage() {
       )
       return
     }
-    updateAccounting((current) => ({
-      ...current,
-      verificationSettings: [
-        ...current.verificationSettings.filter(
-          (settings) => settings.companyId !== companyId,
-        ),
-        {
-          companyId,
-          enabled,
-          sellerIds: verificationSettings?.sellerIds ?? [],
-        },
-      ],
-    }))
+    updateAccounting((current) => {
+      const currentSettings = current.verificationSettings.find(
+        (settings) => settings.companyId === companyId,
+      )
+      return {
+        ...current,
+        verificationSettings: [
+          ...current.verificationSettings.filter(
+            (settings) => settings.companyId !== companyId,
+          ),
+          {
+            companyId,
+            enabled,
+            sellerIds: currentSettings?.sellerIds ?? [],
+          },
+        ],
+      }
+    })
     setVerificationMessage(
       enabled
         ? 'Verifica contabile attiva fino alla disattivazione manuale.'
@@ -307,12 +312,14 @@ export function SettingsPage() {
         ),
         {
           companyId,
-          enabled: verificationSettings?.enabled ?? false,
+          enabled: true,
           sellerIds: verificationSellerIds,
         },
       ],
     }))
-    setVerificationMessage(`Venditori confermati: ${names.join(', ')}.`)
+    setVerificationMessage(
+      `Verifica contabile attiva per: ${names.join(', ')}.`,
+    )
   }
 
   function requestDriveFolderChange() {
@@ -664,18 +671,24 @@ export function SettingsPage() {
                 ordinaria.
               </p>
             </div>
-            <button
-              aria-label="Attiva o disattiva verifica contabile"
-              className={`toggle ${
-                verificationSettings?.enabled ? 'on' : ''
-              }`}
-              onClick={() =>
-                setVerificationEnabled(!verificationSettings?.enabled)
-              }
-              type="button"
-            >
-              <span />
-            </button>
+            <div className="verification-toggle-control">
+              <strong className={verificationSettings?.enabled ? 'active' : ''}>
+                {verificationSettings?.enabled ? 'ON' : 'OFF'}
+              </strong>
+              <button
+                aria-label="Attiva o disattiva verifica contabile"
+                aria-pressed={Boolean(verificationSettings?.enabled)}
+                className={`toggle ${
+                  verificationSettings?.enabled ? 'on' : ''
+                }`}
+                onClick={() =>
+                  setVerificationEnabled(!verificationSettings?.enabled)
+                }
+                type="button"
+              >
+                <span />
+              </button>
+            </div>
           </div>
           <fieldset className="production-sellers verification-sellers">
             <legend>Venditori sottoposti a verifica</legend>
@@ -715,7 +728,7 @@ export function SettingsPage() {
               onClick={confirmVerificationSellers}
               type="button"
             >
-              Conferma venditori
+              Conferma e attiva
             </button>
             <small>
               La selezione confermata resta attiva finché non la modifichi o
