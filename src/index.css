@@ -2767,6 +2767,32 @@ select {
   overflow-x: auto;
 }
 
+.accounting-records-panel {
+  position: sticky;
+  z-index: 7;
+  top: var(--accounting-sticky-offset, 0px);
+  display: flex;
+  max-height: calc(100dvh - var(--accounting-sticky-offset, 0px));
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.accounting-records-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.accounting-records-table-wrap .data-table thead th {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  background: rgb(13, 18, 32);
+  box-shadow: 0 1px 0 var(--border);
+}
+
 .invoice-archive-panel {
   min-height: 0;
 }
