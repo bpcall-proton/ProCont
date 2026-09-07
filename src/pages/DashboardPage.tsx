@@ -566,7 +566,7 @@ export function DashboardPage() {
       (item) => item.id === invoice.supplierId,
     )
     if (!supplier) return []
-    const fromSellerId =
+    const linkedSellerId =
       supplier.linkedSellerId ??
       accounting.sellers.find(
         (seller) =>
@@ -574,17 +574,17 @@ export function DashboardPage() {
             normalizedContactName(supplier.name),
       )?.id
     if (
-      !fromSellerId ||
-      fromSellerId === invoice.sellerId ||
-      !knownSellerIds.has(fromSellerId) ||
+      !linkedSellerId ||
+      linkedSellerId === invoice.sellerId ||
+      !knownSellerIds.has(linkedSellerId) ||
       !knownSellerIds.has(invoice.sellerId)
     ) {
       return []
     }
     return [
       {
-        fromSellerId,
-        toSellerId: invoice.sellerId,
+        fromSellerId: invoice.sellerId,
+        toSellerId: linkedSellerId,
         date: invoice.date,
         amount: roundMoney(invoice.theoreticalRevenue),
         reference: `Fattura ${invoice.number || 'senza numero'} · ${
@@ -1041,14 +1041,14 @@ export function DashboardPage() {
             },
             'revenue-acquired': {
               title: `Venit acquisito dall'altro · ${selectedSeller.name}`,
-              note: `Venit trasferito dagli altri venditori.${periodNote}`,
+              note: `Venit acquisito già conteggiato nel Venit principale.${periodNote}`,
               value: selectedSeller.revenueAcquired,
               tone: 'green',
               rows: revenueAcquiredRows,
             },
             'revenue-ceded': {
               title: `Venit ceduto all'altro · ${selectedSeller.name}`,
-              note: `Venit trasferito agli altri venditori.${periodNote}`,
+              note: `Venit ceduto all'altro venditore e tolto dallo Stock residuo.${periodNote}`,
               value: selectedSeller.revenueCeded,
               tone: 'red',
               rows: revenueCededRows,
@@ -1298,18 +1298,11 @@ export function DashboardPage() {
             value={money(selectedStore.seller.theoretical)}
           />
           <StatCard
-            detail="Venit ricevuto da altri punti vendita"
+            detail="Già conteggiato nel Venit principale"
             label="Venit acquisito dall'altro"
             onClick={() => openMetric('revenue-acquired')}
             tone="green"
             value={money(selectedStore.seller.revenueAcquired)}
-          />
-          <StatCard
-            detail="Venit trasferito ad altri punti vendita"
-            label="Venit ceduto all'altro"
-            onClick={() => openMetric('revenue-ceded')}
-            tone="red"
-            value={money(selectedStore.seller.revenueCeded)}
           />
           <StatCard
             detail="Venit teorico meno Incasso reale"
@@ -1366,6 +1359,13 @@ export function DashboardPage() {
             onClick={() => openMetric('vat')}
             tone="amber"
             value={money(selectedStore.seller.vat)}
+          />
+          <StatCard
+            detail="Venit ceduto e tolto dallo Stock residuo"
+            label="Venit ceduto all'altro"
+            onClick={() => openMetric('revenue-ceded')}
+            tone="red"
+            value={money(selectedStore.seller.revenueCeded)}
           />
         </section>
       </div>
@@ -1606,21 +1606,7 @@ export function DashboardPage() {
                   >
                     <span>Venit acquisito dall'altro</span>
                     <strong>{money(seller.revenueAcquired)}</strong>
-                    <em>Apri dettaglio</em>
-                  </button>
-                  <button
-                    className="seller-revenue-ceded"
-                    onClick={() =>
-                      setSellerDetail({
-                        sellerId: seller.id,
-                        metric: 'revenue-ceded',
-                      })
-                    }
-                    type="button"
-                  >
-                    <span>Venit ceduto all'altro</span>
-                    <strong>{money(seller.revenueCeded)}</strong>
-                    <em>Apri dettaglio</em>
+                    <em>Già conteggiato nel Venit principale</em>
                   </button>
                   <button
                     onClick={() =>
@@ -1730,6 +1716,20 @@ export function DashboardPage() {
                     <span>Stock residuo</span>
                     <strong>{money(seller.stockResidual)}</strong>
                     <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-revenue-ceded"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'revenue-ceded',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Venit ceduto all'altro</span>
+                    <strong>{money(seller.revenueCeded)}</strong>
+                    <em>Tolto dallo Stock residuo</em>
                   </button>
                 </div>
               </article>
