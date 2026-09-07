@@ -10,6 +10,7 @@ import {
 import {
   activeAccounting,
   addDays,
+  bestContactNameMatch,
   defaultPaymentTermsDays,
   expenseCategories,
   invoiceDueState,
@@ -45,10 +46,6 @@ type Section = 'invoices' | 'takings' | 'contacts' | 'expenses'
 function numberValue(value: string) {
   const parsed = Number(value.replace(',', '.'))
   return Number.isFinite(parsed) ? parsed : 0
-}
-
-function normalizedContactName(value: string) {
-  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
 }
 
 function amountExpression(value: string) {
@@ -1864,10 +1861,7 @@ function ContactsPanel() {
     const taxId = supplierTaxId.trim()
     const linkedSellerId =
       supplierLinkedSellerId ||
-      data.sellers.find(
-        (seller) =>
-          normalizedContactName(seller.name) === normalizedContactName(name),
-      )?.id ||
+      bestContactNameMatch(name, data.sellers)?.id ||
       null
     const paymentTermsDays = Math.max(
       0,
@@ -1930,10 +1924,9 @@ function ContactsPanel() {
   }
 
   function editSupplier(supplier: AccountingSupplier) {
-    const matchingSeller = data.sellers.find(
-      (seller) =>
-        normalizedContactName(seller.name) ===
-        normalizedContactName(supplier.name),
+    const matchingSeller = bestContactNameMatch(
+      supplier.name,
+      data.sellers,
     )
     setEditingSupplierId(supplier.id)
     setSupplierName(supplier.name)
@@ -2011,10 +2004,9 @@ function ContactsPanel() {
         </form>
         <div className="record-list">{data.suppliers.map((supplier) => {
           const invoices = data.invoices.filter((item) => item.supplierId === supplier.id)
-          const matchingSeller = data.sellers.find(
-            (seller) =>
-              normalizedContactName(seller.name) ===
-              normalizedContactName(supplier.name),
+          const matchingSeller = bestContactNameMatch(
+            supplier.name,
+            data.sellers,
           )
           const linkedSeller =
             matchingSeller ??

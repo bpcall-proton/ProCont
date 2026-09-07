@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { StatCard } from '../components/StatCard'
 import {
   activeAccounting,
+  bestContactNameMatch,
   invoiceRemaining,
   money,
   officialTaking,
@@ -74,10 +75,6 @@ function filenamePart(value: string) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'azienda'
   )
-}
-
-function normalizedContactName(value: string) {
-  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
 }
 
 export function DashboardPage() {
@@ -544,10 +541,9 @@ export function DashboardPage() {
     )
     if (!supplier) return []
     const linkedSellerId =
-      accounting.sellers.find(
-        (seller) =>
-          normalizedContactName(seller.name) ===
-            normalizedContactName(supplier.name),
+      bestContactNameMatch(
+        invoice.supplierName || supplier.name,
+        accounting.sellers,
       )?.id ?? supplier.linkedSellerId
     if (
       !linkedSellerId ||
