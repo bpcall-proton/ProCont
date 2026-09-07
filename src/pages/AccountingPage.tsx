@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -197,7 +198,27 @@ export function AccountingPage({
   const [section, setSection] = useState<Section>('invoices')
   const [companyName, setCompanyName] = useState('')
   const [companyError, setCompanyError] = useState<string | null>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
+  const stickyHeaderRef = useRef<HTMLDivElement>(null)
   const active = activeAccounting(state.accounting)
+
+  useEffect(() => {
+    const page = pageRef.current
+    const header = stickyHeaderRef.current
+    if (!page || !header) return
+
+    const updateOffset = () => {
+      page.style.setProperty(
+        '--accounting-sticky-offset',
+        `${header.offsetHeight}px`,
+      )
+    }
+
+    updateOffset()
+    const observer = new ResizeObserver(updateOffset)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [])
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
@@ -215,8 +236,8 @@ export function AccountingPage({
   }
 
   return (
-    <div className="page-stack">
-      <div className="accounting-sticky-header">
+    <div className="page-stack accounting-page" ref={pageRef}>
+      <div className="accounting-sticky-header" ref={stickyHeaderRef}>
         <header className="page-heading accounting-heading">
           <div>
             <span className="eyebrow">GESTIONE COMPLETA</span>
@@ -1277,7 +1298,7 @@ export function InvoicesPanel({
       </form>
       )}
 
-      <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ''}`}>
+      <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ' accounting-records-panel'}`}>
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
           <div className="invoice-selection-summary" aria-live="polite">
@@ -1342,7 +1363,7 @@ export function InvoicesPanel({
             <button className="button button-secondary" disabled={invoices.length === 0} onClick={() => void exportInvoicesExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
-        <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ''}`}>
+        <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ' accounting-records-table-wrap'}`}>
           <table className="data-table">
             <thead><tr><th className="invoice-selection-column"><input
               aria-label="Seleziona tutte le fatture visualizzate"
@@ -1729,7 +1750,7 @@ function TakingsPanel() {
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra incasso'}</button>
         </div>
       </form>
-      <section className="panel">
+      <section className="panel accounting-records-panel">
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Storico incassi</h2>
           <div className="invoice-filters">
@@ -1741,7 +1762,7 @@ function TakingsPanel() {
             <button className="button button-secondary" disabled={takings.length === 0} onClick={() => void exportTakingsExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
-        <div className="data-table-wrap">
+        <div className="data-table-wrap accounting-records-table-wrap">
           <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Merce aq. senza fattura</th><th>Cash in mano</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
               <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td>{money(taking.unregisteredGoods)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
