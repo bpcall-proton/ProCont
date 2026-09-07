@@ -5,7 +5,6 @@ import {
   invoiceRemaining,
   money,
   officialTaking,
-  productSalePrice,
   realTaking,
   roundMoney,
 } from '../domain/accounting'
@@ -532,34 +531,6 @@ export function DashboardPage() {
     (taking) => !sellerAsOfDate || taking.date <= sellerAsOfDate,
   )
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
-  const sellerRevenueTransfers = accounting.verificationTransfers.flatMap(
-    (transfer) => {
-      if (
-        !transfer.reassignRevenue ||
-        (sellerAsOfDate && transfer.date > sellerAsOfDate) ||
-        !knownSellerIds.has(transfer.fromSellerId) ||
-        !knownSellerIds.has(transfer.toSellerId)
-      ) {
-        return []
-      }
-      const product = accounting.products.find(
-        (item) => item.id === transfer.productId,
-      )
-      if (!product) return []
-      return [
-        {
-          fromSellerId: transfer.fromSellerId,
-          toSellerId: transfer.toSellerId,
-          date: transfer.date,
-          amount: roundMoney(
-            transfer.quantity * productSalePrice(product),
-          ),
-          reference: `${product.name} · ${transfer.quantity} ${product.unit}`,
-          acquiredInInvoice: false,
-        },
-      ]
-    },
-  )
   const supplierSellerRevenueTransfers = sellerInvoices.flatMap((invoice) => {
     if (
       !invoice.sellerId ||
@@ -596,14 +567,9 @@ export function DashboardPage() {
         reference: `Fattura ${invoice.number || 'senza numero'} · ${
           supplier.name
         }`,
-        acquiredInInvoice: true,
       },
     ]
   })
-  const allSellerRevenueTransfers = [
-    ...sellerRevenueTransfers,
-    ...supplierSellerRevenueTransfers,
-  ]
   const sellerSummaries = accounting.sellers.map((seller) => {
     const invoices = sellerInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
@@ -636,10 +602,10 @@ export function DashboardPage() {
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
     )
-    const revenueAcquiredTransfers = allSellerRevenueTransfers.filter(
+    const revenueAcquiredTransfers = supplierSellerRevenueTransfers.filter(
       (transfer) => transfer.toSellerId === seller.id,
     )
-    const revenueCededTransfers = allSellerRevenueTransfers.filter(
+    const revenueCededTransfers = supplierSellerRevenueTransfers.filter(
       (transfer) => transfer.fromSellerId === seller.id,
     )
     const revenueAcquired = revenueAcquiredTransfers.reduce(
@@ -650,13 +616,8 @@ export function DashboardPage() {
       (sum, transfer) => sum + transfer.amount,
       0,
     )
-    const revenueAcquiredOutsideInvoices = revenueAcquiredTransfers.reduce(
-      (sum, transfer) =>
-        sum + (transfer.acquiredInInvoice ? 0 : transfer.amount),
-      0,
-    )
     const sellerTheoretical = roundMoney(
-      sellerBaseTheoretical + revenueAcquiredOutsideInvoices - revenueCeded,
+      sellerBaseTheoretical - revenueCeded,
     )
     return {
       id: seller.id,
@@ -839,7 +800,6 @@ export function DashboardPage() {
               }`,
               reference: transfer.reference,
               amount: transfer.amount,
-              acquiredInInvoice: transfer.acquiredInInvoice,
             }))
             .filter((row) => row.amount !== 0)
           const revenueCededRows = selectedSeller.revenueCededTransfers
@@ -857,7 +817,6 @@ export function DashboardPage() {
             .filter((row) => row.amount !== 0)
           const theoreticalRows = [
             ...invoiceTheoreticalRows,
-            ...revenueAcquiredRows.filter((row) => !row.acquiredInInvoice),
             ...revenueCededRows,
           ]
           const sellerTakingRows = (
@@ -981,7 +940,7 @@ export function DashboardPage() {
             },
             theoretical: {
               title: `Venit teorico · ${selectedSeller.name}`,
-              note: `Venit delle fatture, più acquisito e meno ceduto.${periodNote}`,
+              note: `Venit delle fatture meno il Venit ceduto; quello acquisito è già compreso.${periodNote}`,
               value: selectedSeller.theoretical,
               tone: 'violet',
               rows: theoreticalRows,
@@ -1294,7 +1253,7 @@ export function DashboardPage() {
             value={money(selectedStore.seller.invoiceValue)}
           />
           <StatCard
-            detail="Fatture + Venit acquisito − Venit ceduto"
+            detail="Fatture − Venit ceduto; acquisito già compreso"
             label="Venit teorico"
             onClick={() => openMetric('theoretical')}
             tone="violet"
