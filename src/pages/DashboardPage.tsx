@@ -561,7 +561,13 @@ export function DashboardPage() {
     },
   )
   const supplierSellerRevenueTransfers = sellerInvoices.flatMap((invoice) => {
-    if (!invoice.sellerId || invoice.theoreticalRevenue === 0) return []
+    if (
+      !invoice.sellerId ||
+      invoice.taxableAmount !== 0 ||
+      invoice.theoreticalRevenue === 0
+    ) {
+      return []
+    }
     const supplier = accounting.suppliers.find(
       (item) => item.id === invoice.supplierId,
     )
@@ -583,10 +589,10 @@ export function DashboardPage() {
     }
     return [
       {
-        fromSellerId: invoice.sellerId,
-        toSellerId: linkedSellerId,
+        fromSellerId: linkedSellerId,
+        toSellerId: invoice.sellerId,
         date: invoice.date,
-        amount: roundMoney(invoice.theoreticalRevenue),
+        amount: roundMoney(Math.abs(invoice.theoreticalRevenue)),
         reference: `Fattura ${invoice.number || 'senza numero'} · ${
           supplier.name
         }`,
@@ -846,16 +852,13 @@ export function DashboardPage() {
                 )?.name ?? 'venditore non disponibile'
               }`,
               reference: transfer.reference,
-              amount: transfer.amount,
+              amount: -Math.abs(transfer.amount),
             }))
             .filter((row) => row.amount !== 0)
           const theoreticalRows = [
             ...invoiceTheoreticalRows,
             ...revenueAcquiredRows.filter((row) => !row.acquiredInInvoice),
-            ...revenueCededRows.map((row) => ({
-              ...row,
-              amount: -row.amount,
-            })),
+            ...revenueCededRows,
           ]
           const sellerTakingRows = (
             category: string,
@@ -1049,7 +1052,7 @@ export function DashboardPage() {
             'revenue-ceded': {
               title: `Venit ceduto all'altro · ${selectedSeller.name}`,
               note: `Venit ceduto all'altro venditore e tolto dallo Stock residuo.${periodNote}`,
-              value: selectedSeller.revenueCeded,
+              value: -selectedSeller.revenueCeded,
               tone: 'red',
               rows: revenueCededRows,
             },
@@ -1365,7 +1368,7 @@ export function DashboardPage() {
             label="Venit ceduto all'altro"
             onClick={() => openMetric('revenue-ceded')}
             tone="red"
-            value={money(selectedStore.seller.revenueCeded)}
+            value={money(-selectedStore.seller.revenueCeded)}
           />
         </section>
       </div>
@@ -1728,7 +1731,7 @@ export function DashboardPage() {
                     type="button"
                   >
                     <span>Venit ceduto all'altro</span>
-                    <strong>{money(seller.revenueCeded)}</strong>
+                    <strong>{money(-seller.revenueCeded)}</strong>
                     <em>Tolto dallo Stock residuo</em>
                   </button>
                 </div>
