@@ -532,7 +532,7 @@ export function DashboardPage() {
     if (
       !invoice.sellerId ||
       invoice.taxableAmount !== 0 ||
-      invoice.theoreticalRevenue === 0
+      invoice.theoreticalRevenue <= 0
     ) {
       return []
     }
@@ -558,7 +558,7 @@ export function DashboardPage() {
         fromSellerId: linkedSellerId,
         toSellerId: invoice.sellerId,
         date: invoice.date,
-        amount: roundMoney(Math.abs(invoice.theoreticalRevenue)),
+        amount: roundMoney(invoice.theoreticalRevenue),
         reference: `Fattura ${invoice.number || 'senza numero'} · ${
           supplier.name
         }`,
