@@ -1033,6 +1033,26 @@ select {
   color: var(--amber);
 }
 
+.dashboard-seller-metrics .seller-revenue-acquired {
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  background: color-mix(in srgb, var(--green) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-revenue-acquired span,
+.dashboard-seller-metrics .seller-revenue-acquired strong {
+  color: var(--green);
+}
+
+.dashboard-seller-metrics .seller-revenue-ceded {
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  background: color-mix(in srgb, var(--red) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-revenue-ceded span,
+.dashboard-seller-metrics .seller-revenue-ceded strong {
+  color: var(--red);
+}
+
 .settings-grid {
   align-items: start;
 }
@@ -2595,6 +2615,12 @@ select {
   align-items: flex-start;
 }
 
+.invoice-selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .invoice-selection-total {
   min-width: 180px;
   display: grid;
@@ -2614,6 +2640,15 @@ select {
 .invoice-selection-total strong {
   color: #6ee7b7;
   font-size: 1.08rem;
+}
+
+.invoice-selection-revenue {
+  border-color: rgba(167, 139, 250, 0.42);
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.invoice-selection-revenue strong {
+  color: #c4b5fd;
 }
 
 .invoice-filters {
