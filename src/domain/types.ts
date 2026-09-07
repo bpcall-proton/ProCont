@@ -104,6 +104,7 @@ export interface AccountingProduct {
   supplierName: string
   code: string
   name: string
+  unit: string
   purchaseCostInclVat: number
   pricingMode: ProductPricingMode
   salePriceInclVat: number
@@ -117,6 +118,7 @@ export interface InvoiceLine {
   productCode: string
   description: string
   quantity: number
+  unit: string
   unitPurchaseCostInclVat: number
   unitSalePriceInclVat: number
   purchaseTotalInclVat: number
@@ -148,6 +150,10 @@ export interface AccountingInvoice {
   payments: InvoicePayment[]
   paymentDate: string | null
   paymentMethod: PaymentMethod | null
+  verificationIncluded: boolean
+  verificationImages: string[]
+  verificationOcrText: string
+  verificationOcrConfidence: number | null
 }
 
 export interface AccountingTaking {
@@ -262,6 +268,42 @@ export interface ProductionViewSettings {
   reportPeriod: ProductionReportPeriod
 }
 
+export interface AccountingVerificationSettings {
+  companyId: string
+  enabled: boolean
+  sellerIds: string[]
+}
+
+export interface VerificationProductionEntry {
+  id: string
+  companyId: string
+  sellerId: string
+  productId: string
+  date: string
+  quantity: number
+}
+
+export interface VerificationStockLoad {
+  id: string
+  companyId: string
+  sellerId: string
+  productId: string
+  date: string
+  quantity: number
+  note: string
+}
+
+export interface VerificationTransfer {
+  id: string
+  companyId: string
+  fromSellerId: string
+  toSellerId: string
+  productId: string
+  date: string
+  quantity: number
+  reassignRevenue: boolean
+}
+
 export interface AccountingState {
   companies: AccountingCompany[]
   activeCompanyId: string | null
@@ -276,6 +318,10 @@ export interface AccountingState {
   productionSettings: ProductionSettings[]
   productionEntries: ProductionEntry[]
   productionViewSettings: ProductionViewSettings[]
+  verificationSettings: AccountingVerificationSettings[]
+  verificationStockLoads: VerificationStockLoad[]
+  verificationProductionEntries: VerificationProductionEntry[]
+  verificationTransfers: VerificationTransfer[]
 }
 
 export interface ReviewInvoiceSuggestion {
@@ -301,7 +347,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 9
+  schemaVersion: 10
   company: Company
   stores: Store[]
   sellers: Seller[]

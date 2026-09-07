@@ -2,6 +2,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
@@ -23,6 +24,7 @@ import {
   today,
 } from '../domain/accounting'
 import { createId } from '../domain/defaults'
+import { analyzeInvoiceImages } from '../domain/invoiceOcr'
 import type {
   AccountantInvoice,
   AccountingExpense,
@@ -118,6 +120,15 @@ function filenamePart(value: string) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'azienda'
   )
+}
+
+function fileDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 function cashBalanceByTaking(takings: AccountingTaking[]) {
@@ -324,6 +335,16 @@ export function InvoicesPanel({
   const [repeatDate, setRepeatDate] = useState(false)
   const [lines, setLines] = useState<InvoiceLine[]>([])
   const [lineForm, setLineForm] = useState(emptyInvoiceLine)
+  const [verificationIncluded, setVerificationIncluded] = useState(false)
+  const [verificationImages, setVerificationImages] = useState<string[]>([])
+  const [verificationOcrText, setVerificationOcrText] = useState('')
+  const [verificationOcrConfidence, setVerificationOcrConfidence] = useState<
+    number | null
+  >(null)
+  const [verificationBusy, setVerificationBusy] = useState(false)
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(
+    null,
+  )
   const invoiceFormRef = useRef<HTMLFormElement>(null)
   const submitAfterValidationRef = useRef(false)
   const dateInputRef = useRef<HTMLInputElement>(null)
@@ -426,6 +447,71 @@ export function InvoicesPanel({
   const automaticCashPurchase =
     (selectedSupplier?.cashUnregisteredByDefault ?? false) &&
     !preservesDocumentedInvoice
+  const verificationSettings = data.verificationSettings
+  const verificationAvailable =
+    verificationSettings?.enabled === true &&
+    verificationSettings.sellerIds.includes(form.sellerId)
+
+  async function analyzeVerificationPhotos(images = verificationImages) {
+    if (images.length === 0) {
+      setVerificationMessage('Carica almeno una foto della fattura.')
+      return
+    }
+    if (data.products.every((product) => !product.code.trim())) {
+      setVerificationMessage(
+        'Inserisci prima i codici nella pagina Prodotti.',
+      )
+      return
+    }
+    setVerificationBusy(true)
+    setVerificationMessage('Analisi della fattura in corso...')
+    try {
+      const result = await analyzeInvoiceImages(images, data.products)
+      setVerificationOcrText(result.text)
+      setVerificationOcrConfidence(result.confidence)
+      if (result.date) {
+        setForm((current) => ({ ...current, date: result.date ?? current.date }))
+      }
+      if (result.invoiceNumber) {
+        setForm((current) => ({
+          ...current,
+          number: result.invoiceNumber,
+        }))
+      }
+      if (result.lines.length > 0) {
+        setLines(result.lines)
+        setVerificationMessage(
+          `${result.lines.length} prodotti riconosciuti. Controlla quantità e valori prima di salvare.`,
+        )
+      } else {
+        setVerificationMessage(
+          'Nessun codice prodotto riconosciuto: inserisci le righe manualmente.',
+        )
+      }
+    } catch {
+      setVerificationMessage(
+        'Analisi non riuscita. Le foto restano salvabili e puoi inserire le quantità manualmente.',
+      )
+    } finally {
+      setVerificationBusy(false)
+    }
+  }
+
+  async function uploadVerificationImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
+    const images = await Promise.all(files.map(fileDataUrl))
+    setVerificationImages(images)
+    setVerificationOcrText('')
+    setVerificationOcrConfidence(null)
+    setVerificationMessage(
+      `${images.length} foto pronte. Saranno conservate nell’archivio JSON dell’azienda.`,
+    )
+    if (verificationIncluded) {
+      await analyzeVerificationPhotos(images)
+    }
+    event.target.value = ''
+  }
 
   function selectInvoiceSupplier(supplierId: string) {
     const supplier = data.suppliers.find((item) => item.id === supplierId)
@@ -525,6 +611,7 @@ export function InvoicesPanel({
         productCode: product?.code ?? '',
         description: lineForm.description.trim(),
         quantity,
+        unit: product?.unit ?? 'pz',
         unitPurchaseCostInclVat,
         unitSalePriceInclVat,
         purchaseTotalInclVat,
@@ -544,6 +631,11 @@ export function InvoicesPanel({
     setForm({ ...emptyInvoice, date: today() })
     setLines([])
     setLineForm(emptyInvoiceLine)
+    setVerificationIncluded(false)
+    setVerificationImages([])
+    setVerificationOcrText('')
+    setVerificationOcrConfidence(null)
+    setVerificationMessage(null)
   }
 
   function submit(event: FormEvent) {
@@ -564,6 +656,9 @@ export function InvoicesPanel({
           ? invoiceTotal
           : numberValue(form.unregisteredGoods)
         const settled = cashUnregistered || form.settled
+        const storedVerificationIncluded = verificationAvailable
+          ? verificationIncluded
+          : previous?.verificationIncluded ?? false
         const invoice: AccountingInvoice = {
           id: editingId ?? createId('invoice'),
           companyId,
@@ -600,6 +695,10 @@ export function InvoicesPanel({
             ? previous?.paymentMethod ??
               (cashUnregistered ? 'Contanti' : 'Bonifico')
             : previous?.paymentMethod ?? null,
+          verificationIncluded: storedVerificationIncluded,
+          verificationImages,
+          verificationOcrText,
+          verificationOcrConfidence,
         }
         return {
           ...current,
@@ -624,6 +723,11 @@ export function InvoicesPanel({
     setForm(nextForm)
     setLines([])
     setLineForm(emptyInvoiceLine)
+    setVerificationIncluded(false)
+    setVerificationImages([])
+    setVerificationOcrText('')
+    setVerificationOcrConfidence(null)
+    setVerificationMessage(null)
     if (!editingId) {
       window.requestAnimationFrame(() => {
         const nextInput = !repeatDate
@@ -665,6 +769,15 @@ export function InvoicesPanel({
       settled: invoice.settled,
     })
     setLines(invoice.lines)
+    setVerificationIncluded(invoice.verificationIncluded)
+    setVerificationImages(invoice.verificationImages)
+    setVerificationOcrText(invoice.verificationOcrText)
+    setVerificationOcrConfidence(invoice.verificationOcrConfidence)
+    setVerificationMessage(
+      invoice.verificationIncluded
+        ? 'Dati di verifica caricati. Puoi correggerli e salvare.'
+        : null,
+    )
     window.requestAnimationFrame(() => {
       invoiceFormRef.current?.scrollIntoView({
         behavior: 'smooth',
@@ -927,6 +1040,97 @@ export function InvoicesPanel({
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
           <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
+        <section className="invoice-verification-box">
+          <div className="panel-heading">
+            <div>
+              <strong>Foto e verifica contabile</strong>
+              <small>
+                Le foto restano nel JSON separato dell’azienda: Google Drive in
+                modalità Cloud, archivio locale in modalità Locale.
+              </small>
+            </div>
+            <label className="checkbox-row">
+              <input
+                checked={verificationIncluded}
+                disabled={!verificationAvailable}
+                onChange={(event) => {
+                  const checked = event.target.checked
+                  setVerificationIncluded(checked)
+                  if (checked && verificationImages.length > 0) {
+                    void analyzeVerificationPhotos()
+                  }
+                }}
+                type="checkbox"
+              />
+              Analizza per verifica contabile
+            </label>
+          </div>
+          {!verificationSettings?.enabled ? (
+            <small>
+              Le foto possono essere archiviate; attiva Verifica contabile
+              nelle Impostazioni per analizzarle.
+            </small>
+          ) : !verificationAvailable ? (
+            <small>
+              Le foto possono essere archiviate; seleziona un venditore
+              confermato per abilitarne l’analisi.
+            </small>
+          ) : null}
+          <div className="invoice-verification-actions">
+            <label className="button button-secondary">
+              Carica foto fattura
+              <input
+                accept="image/*"
+                hidden
+                multiple
+                onChange={(event) => void uploadVerificationImages(event)}
+                type="file"
+              />
+            </label>
+            <button
+              className="button button-secondary"
+              disabled={
+                !verificationAvailable ||
+                verificationBusy ||
+                verificationImages.length === 0
+              }
+              onClick={() => void analyzeVerificationPhotos()}
+              type="button"
+            >
+              {verificationBusy ? 'Analisi in corso...' : 'Analizza foto'}
+            </button>
+            {verificationOcrConfidence !== null && (
+              <small>
+                Qualità lettura OCR {verificationOcrConfidence.toFixed(0)}%
+              </small>
+            )}
+          </div>
+          {verificationImages.length > 0 && (
+            <div className="review-photo-strip">
+              {verificationImages.map((image, index) => (
+                <figure key={`${image.slice(0, 40)}-${index}`}>
+                  <img alt={`Foto fattura ${index + 1}`} src={image} />
+                  <button
+                    className="danger-text"
+                    onClick={() =>
+                      setVerificationImages((current) =>
+                        current.filter(
+                          (_, imageIndex) => imageIndex !== index,
+                        ),
+                      )
+                    }
+                    type="button"
+                  >
+                    Rimuovi
+                  </button>
+                </figure>
+              ))}
+            </div>
+          )}
+          {verificationMessage && (
+            <p className="import-message">{verificationMessage}</p>
+          )}
+        </section>
         <section className="invoice-lines-editor">
           <div className="panel-heading">
             <div>
@@ -1022,7 +1226,9 @@ export function InvoicesPanel({
                         {line.description}
                         <small>{line.productCode || 'Riga manuale'}</small>
                       </td>
-                      <td>{line.quantity}</td>
+                      <td>
+                        {line.quantity} {line.unit}
+                      </td>
                       <td>{money(line.purchaseTotalInclVat)}</td>
                       <td>{money(line.saleTotalInclVat)}</td>
                       <td>{line.markupPercent}%</td>
@@ -1159,7 +1365,7 @@ export function InvoicesPanel({
                     </small>
                   </td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
-                  <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe</small></td>
+                  <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe{invoice.verificationIncluded ? ' · Verifica attiva' : ''}</small></td>
                   <td>{money(invoice.unregisteredGoods)}</td>
                   <td>
                     <span className={`record-status ${dueState}`}>

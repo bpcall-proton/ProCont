@@ -16,6 +16,7 @@ const emptyProduct = {
   supplierId: '',
   code: '',
   name: '',
+  unit: 'pz',
   purchaseCostInclVat: '',
   pricingMode: 'sale-price' as ProductPricingMode,
   salePriceInclVat: '',
@@ -67,6 +68,7 @@ export function ProductsPage() {
       supplierName: supplier?.name ?? '',
       code: form.code.trim(),
       name: form.name.trim(),
+      unit: form.unit.trim() || 'pz',
       purchaseCostInclVat: numberValue(form.purchaseCostInclVat),
       pricingMode: form.pricingMode,
       salePriceInclVat:
@@ -97,6 +99,7 @@ export function ProductsPage() {
       supplierId: product.supplierId ?? '',
       code: product.code,
       name: product.name,
+      unit: product.unit,
       purchaseCostInclVat: String(product.purchaseCostInclVat),
       pricingMode: product.pricingMode,
       salePriceInclVat: String(product.salePriceInclVat),
@@ -168,6 +171,21 @@ export function ProductsPage() {
               required
               value={form.name}
             />
+          </label>
+          <label>
+            Unità di misura
+            <select
+              onChange={(event) =>
+                setForm({ ...form, unit: event.target.value })
+              }
+              value={form.unit}
+            >
+              <option value="pz">Pezzi</option>
+              <option value="kg">Kg</option>
+              <option value="g">Grammi</option>
+              <option value="l">Litri</option>
+              <option value="ml">Millilitri</option>
+            </select>
           </label>
           <label>
             Costo unitario IVA inclusa

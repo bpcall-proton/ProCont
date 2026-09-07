@@ -38,6 +38,10 @@ export function createWorkspaceState(state: AppState): AppState {
       productionSettings: [],
       productionEntries: [],
       productionViewSettings: [],
+      verificationSettings: [],
+      verificationStockLoads: [],
+      verificationProductionEntries: [],
+      verificationTransfers: [],
     },
   }
 }
@@ -102,6 +106,19 @@ export function createCompanyState(
       productionViewSettings: state.accounting.productionViewSettings.filter(
         (settings) => settings.companyId === companyId,
       ),
+      verificationSettings: state.accounting.verificationSettings.filter(
+        (settings) => settings.companyId === companyId,
+      ),
+      verificationStockLoads: state.accounting.verificationStockLoads.filter(
+        (entry) => entry.companyId === companyId,
+      ),
+      verificationProductionEntries:
+        state.accounting.verificationProductionEntries.filter(
+          (entry) => entry.companyId === companyId,
+        ),
+      verificationTransfers: state.accounting.verificationTransfers.filter(
+        (transfer) => transfer.companyId === companyId,
+      ),
     },
   }
 }
@@ -135,6 +152,18 @@ export function mergeCompanyStates(
       ),
       productionViewSettings: companies.flatMap(
         (state) => state.accounting.productionViewSettings,
+      ),
+      verificationSettings: companies.flatMap(
+        (state) => state.accounting.verificationSettings,
+      ),
+      verificationStockLoads: companies.flatMap(
+        (state) => state.accounting.verificationStockLoads,
+      ),
+      verificationProductionEntries: companies.flatMap(
+        (state) => state.accounting.verificationProductionEntries,
+      ),
+      verificationTransfers: companies.flatMap(
+        (state) => state.accounting.verificationTransfers,
       ),
     },
   }
