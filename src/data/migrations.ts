@@ -247,6 +247,7 @@ function mapSupplier(value: JsonRecord): AccountingSupplier {
     city: text(value.citta),
     notes: text(value.note),
     paymentTermsDays: positiveInteger(value.giorniPagamento, 10),
+    sellerRevenueTransferEnabled: flag(value.calcolaVenitTrasferito),
     cashUnregisteredByDefault: flag(value.sempreCashSenzaFattura),
     paidOnDeliveryByDefault: flag(value.giaPagatoAllaConsegna),
   }
@@ -713,6 +714,8 @@ export function normalizeStoredState(
             supplier.paymentTermsDays,
             10,
           ),
+          sellerRevenueTransferEnabled:
+            supplier.sellerRevenueTransferEnabled ?? false,
           cashUnregisteredByDefault:
             supplier.cashUnregisteredByDefault ?? false,
           paidOnDeliveryByDefault:
@@ -1231,6 +1234,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           citta: supplier.city,
           note: supplier.notes,
           giorniPagamento: supplier.paymentTermsDays,
+          calcolaVenitTrasferito: supplier.sellerRevenueTransferEnabled,
           sempreCashSenzaFattura: supplier.cashUnregisteredByDefault,
           giaPagatoAllaConsegna: supplier.paidOnDeliveryByDefault,
         })),

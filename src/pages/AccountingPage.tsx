@@ -1903,6 +1903,10 @@ function ContactsPanel() {
   const [supplierName, setSupplierName] = useState('')
   const [supplierTaxId, setSupplierTaxId] = useState('')
   const [supplierLinkedSellerId, setSupplierLinkedSellerId] = useState('')
+  const [
+    supplierRevenueTransferEnabled,
+    setSupplierRevenueTransferEnabled,
+  ] = useState(false)
   const [supplierCashUnregistered, setSupplierCashUnregistered] =
     useState(false)
   const [supplierPaidOnDelivery, setSupplierPaidOnDelivery] = useState(false)
@@ -2027,6 +2031,8 @@ function ContactsPanel() {
                     taxId,
                     linkedSellerId,
                     paymentTermsDays,
+                    sellerRevenueTransferEnabled:
+                      supplierRevenueTransferEnabled,
                     cashUnregisteredByDefault: supplierCashUnregistered,
                     paidOnDeliveryByDefault: supplierPaidOnDelivery,
                   }
@@ -2044,6 +2050,8 @@ function ContactsPanel() {
                 city: '',
                 notes: '',
                 paymentTermsDays,
+                sellerRevenueTransferEnabled:
+                  supplierRevenueTransferEnabled,
                 cashUnregisteredByDefault: supplierCashUnregistered,
                 paidOnDeliveryByDefault: supplierPaidOnDelivery,
               },
@@ -2070,6 +2078,7 @@ function ContactsPanel() {
     setSupplierTaxId('')
     setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
+    setSupplierRevenueTransferEnabled(false)
     setSupplierCashUnregistered(false)
     setSupplierPaidOnDelivery(false)
   }
@@ -2086,6 +2095,7 @@ function ContactsPanel() {
       matchingSeller?.id ?? supplier.linkedSellerId ?? '',
     )
     setSupplierPaymentTerms(String(supplier.paymentTermsDays))
+    setSupplierRevenueTransferEnabled(supplier.sellerRevenueTransferEnabled)
     setSupplierCashUnregistered(supplier.cashUnregisteredByDefault)
     setSupplierPaidOnDelivery(supplier.paidOnDeliveryByDefault)
   }
@@ -2096,6 +2106,7 @@ function ContactsPanel() {
     setSupplierTaxId('')
     setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
+    setSupplierRevenueTransferEnabled(false)
     setSupplierCashUnregistered(false)
     setSupplierPaidOnDelivery(false)
   }
@@ -2155,6 +2166,10 @@ function ContactsPanel() {
             <input min="0" max="365" placeholder="Esempio: 10" type="number" value={supplierPaymentTerms} onChange={(event) => setSupplierPaymentTerms(event.target.value)} />
           </label>
           <label className="supplier-cash-default contact-checkbox-field">
+            <input checked={supplierRevenueTransferEnabled} onChange={(event) => setSupplierRevenueTransferEnabled(event.target.checked)} type="checkbox" />
+            Calcola Venit acquisito e ceduto
+          </label>
+          <label className="supplier-cash-default contact-checkbox-field">
             <input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" />
             Sempre cash senza fattura
           </label>
@@ -2189,7 +2204,7 @@ function ContactsPanel() {
               ),
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : supplier.paidOnDeliveryByDefault ? 'Già pagato alla consegna' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>{supplier.sellerRevenueTransferEnabled ? 'Calcola Venit acquisito/ceduto' : 'Escluso dal Venit acquisito/ceduto'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : supplier.paidOnDeliveryByDefault ? 'Già pagato alla consegna' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
         })}</div>
       </article>
     </section>
