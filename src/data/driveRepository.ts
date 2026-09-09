@@ -20,6 +20,19 @@ interface StoredState {
   revision: string
 }
 
+function updatedAfter(candidate: string, reference: string) {
+  const candidateTime = Date.parse(candidate)
+  const referenceTime = Date.parse(reference)
+  if (Number.isFinite(candidateTime) && Number.isFinite(referenceTime)) {
+    return candidateTime > referenceTime
+  }
+  return candidate > reference
+}
+
+function waitForCloudWrite() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 200))
+}
+
 export interface DriveRevision {
   id: string
   modifiedTime: string
@@ -36,8 +49,19 @@ export interface DriveRevisionList {
 export class DriveRepository implements AppRepository {
   readonly mode = 'cloud' as const
   private readonly revisions = new Map<string, string>()
+  private operationQueue: Promise<void> = Promise.resolve()
+  private latestKnownUpdatedAt: string | null = null
 
   constructor(private readonly accountId: string) {}
+
+  private runExclusive<Result>(operation: () => Promise<Result>) {
+    const result = this.operationQueue.then(operation, operation)
+    this.operationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
 
   private session() {
     const session = loadDriveSession()
@@ -176,7 +200,7 @@ export class DriveRepository implements AppRepository {
     this.revisions.set(key, result.revision)
   }
 
-  async load() {
+  private async loadState(attempt = 0): Promise<AppState | null> {
     const workspace = await this.loadKey('workspace')
     if (!workspace) return null
     const companyStates = await Promise.all(
@@ -184,47 +208,78 @@ export class DriveRepository implements AppRepository {
         this.loadKey(`company-${company.id}`),
       ),
     )
+    const cloudWriteInProgress = companyStates.some(
+      (state) =>
+        state !== null && updatedAfter(state.updatedAt, workspace.updatedAt),
+    )
+    if (cloudWriteInProgress) {
+      if (attempt < 2) {
+        await waitForCloudWrite()
+        return this.loadState(attempt + 1)
+      }
+      throw new Error('Archivio Cloud in aggiornamento: riprova tra poco')
+    }
     return mergeCompanyStates(
       workspace,
       companyStates.filter((state): state is AppState => state !== null),
     )
   }
 
+  async load() {
+    return this.runExclusive(async () => {
+      const state = await this.loadState()
+      this.latestKnownUpdatedAt = state?.updatedAt ?? null
+      return state
+    })
+  }
+
   async save(state: AppState) {
-    const activeCompanyId = state.accounting.activeCompanyId
-    if (activeCompanyId) {
-      await this.saveKey(
-        `company-${activeCompanyId}`,
-        createCompanyState(state, activeCompanyId),
-      )
-    }
-    await this.saveKey('workspace', createWorkspaceState(state))
+    await this.runExclusive(async () => {
+      const activeCompanyId = state.accounting.activeCompanyId
+      if (activeCompanyId) {
+        await this.saveKey(
+          `company-${activeCompanyId}`,
+          createCompanyState(state, activeCompanyId),
+        )
+      }
+      await this.saveKey('workspace', createWorkspaceState(state))
+      this.latestKnownUpdatedAt = state.updatedAt
+    })
   }
 
   async saveAll(state: AppState) {
-    await Promise.all(
-      state.accounting.companies.map((company) =>
-        this.saveKey(
-          `company-${company.id}`,
-          createCompanyState(state, company.id),
+    await this.runExclusive(async () => {
+      await Promise.all(
+        state.accounting.companies.map((company) =>
+          this.saveKey(
+            `company-${company.id}`,
+            createCompanyState(state, company.id),
+          ),
         ),
-      ),
-    )
-    await this.saveKey('workspace', createWorkspaceState(state))
+      )
+      await this.saveKey('workspace', createWorkspaceState(state))
+      this.latestKnownUpdatedAt = state.updatedAt
+    })
   }
 
   subscribe(listener: (state: AppState) => void) {
     let cancelled = false
     let loading = false
-    let lastUpdatedAt = ''
+    let lastUpdatedAt = this.latestKnownUpdatedAt
     const refresh = async () => {
       if (cancelled || loading) return
       loading = true
       try {
         const state = await this.load()
-        if (state && state.updatedAt !== lastUpdatedAt) {
+        if (
+          state &&
+          lastUpdatedAt !== null &&
+          state.updatedAt !== lastUpdatedAt
+        ) {
           lastUpdatedAt = state.updatedAt
           listener(state)
+        } else if (state) {
+          lastUpdatedAt = state.updatedAt
         }
       } catch {
         return

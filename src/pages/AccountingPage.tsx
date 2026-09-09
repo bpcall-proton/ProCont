@@ -575,22 +575,24 @@ export function InvoicesPanel({
 
   function selectInvoiceSupplier(supplierId: string) {
     const supplier = data.suppliers.find((item) => item.id === supplierId)
-    const previousSupplier = data.suppliers.find(
-      (item) => item.id === form.supplierId,
-    )
-    setForm((current) => ({
-      ...current,
-      supplierId,
-      settled:
-        supplier?.cashUnregisteredByDefault ||
-        supplier?.paidOnDeliveryByDefault
-        ? true
-        : previousSupplier?.cashUnregisteredByDefault ||
-            previousSupplier?.paidOnDeliveryByDefault
-          ? false
-          : current.settled,
-      vat: supplier?.cashUnregisteredByDefault ? '' : current.vat,
-    }))
+    setForm((current) => {
+      const previousSupplier = data.suppliers.find(
+        (item) => item.id === current.supplierId,
+      )
+      return {
+        ...current,
+        supplierId,
+        settled:
+          supplier?.cashUnregisteredByDefault ||
+          supplier?.paidOnDeliveryByDefault
+            ? true
+            : previousSupplier?.cashUnregisteredByDefault ||
+                previousSupplier?.paidOnDeliveryByDefault
+              ? false
+              : current.settled,
+        vat: supplier?.cashUnregisteredByDefault ? '' : current.vat,
+      }
+    })
   }
 
   function handleInvoiceEnter(event: KeyboardEvent<HTMLFormElement>) {
@@ -709,14 +711,18 @@ export function InvoicesPanel({
     const wasEditing = editingId !== null
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
-        const supplier = data.suppliers.find(
+        const supplier = current.suppliers.find(
           (item) => item.id === form.supplierId,
         )
-        const seller = data.sellers.find((item) => item.id === form.sellerId)
+        const seller = current.sellers.find(
+          (item) => item.id === form.sellerId,
+        )
         const previous = current.invoices.find(
           (item) => item.id === editingId,
         )
-        const cashUnregistered = automaticCashPurchase
+        const cashUnregistered =
+          (supplier?.cashUnregisteredByDefault ?? false) &&
+          !(previous?.supplierId === form.supplierId && previous.total > 0)
         const storedTotal = cashUnregistered ? 0 : invoiceTotal
         const storedUnregisteredGoods = cashUnregistered
           ? invoiceTotal
@@ -1106,19 +1112,19 @@ export function InvoicesPanel({
           </div>
         </div>
         <div className="form-grid accounting-fields">
-          <label>Data<input data-invoice-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
-          <label>Venditore<select data-invoice-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Data<input data-invoice-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label>
+          <label>Venditore<select data-invoice-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm((current) => ({ ...current, sellerId: event.target.value }))}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => selectInvoiceSupplier(event.target.value)}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}{item.cashUnregisteredByDefault ? ' · cash senza fattura' : item.paidOnDeliveryByDefault ? ' · pagato alla consegna' : ''}</option>)}</select></label>
-          <label>Numero fattura<input data-invoice-entry placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
-          <label>Descrizione<input data-invoice-entry value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <label>Categoria<select data-invoice-entry value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Imponibile<input data-invoice-entry ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm({ ...form, taxableAmount: event.target.value })} /></label>
-          <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm({ ...form, vat: event.target.value })} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
+          <label>Numero fattura<input data-invoice-entry placeholder="Facoltativo" value={form.number} onChange={(event) => setForm((current) => ({ ...current, number: event.target.value }))} /></label>
+          <label>Descrizione<input data-invoice-entry value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+          <label>Categoria<select data-invoice-entry value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Imponibile<input data-invoice-entry ref={taxableAmountInputRef} inputMode="decimal" min="0" required value={form.taxableAmount} onChange={(event) => setForm((current) => ({ ...current, taxableAmount: event.target.value }))} /></label>
+          <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm((current) => ({ ...current, vat: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
           <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
-          <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm({ ...form, theoreticalRevenue: event.target.value })} /></label>
-          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" readOnly={automaticCashPurchase} value={automaticCashPurchase ? String(invoiceTotal) : form.unregisteredGoods} onChange={(event) => setForm({ ...form, unregisteredGoods: event.target.value })} /></label>
+          <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm((current) => ({ ...current, theoreticalRevenue: event.target.value }))} /></label>
+          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" readOnly={automaticCashPurchase} value={automaticCashPurchase ? String(invoiceTotal) : form.unregisteredGoods} onChange={(event) => setForm((current) => ({ ...current, unregisteredGoods: event.target.value }))} /></label>
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
-          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
+          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm((current) => ({ ...current, settled: event.target.checked }))} /> Già pagata</label>
         </div>
         {!archiveOnly && (
           <section className="invoice-verification-box">

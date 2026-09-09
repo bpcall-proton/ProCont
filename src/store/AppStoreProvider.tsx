@@ -102,6 +102,15 @@ function withTimestamp(state: AppState): AppState {
   }
 }
 
+function isNewerState(candidate: AppState, current: AppState) {
+  const candidateTime = Date.parse(candidate.updatedAt)
+  const currentTime = Date.parse(current.updatedAt)
+  if (Number.isFinite(candidateTime) && Number.isFinite(currentTime)) {
+    return candidateTime > currentTime
+  }
+  return candidate.updatedAt > current.updatedAt
+}
+
 function modePreferenceKey(companyId: string) {
   return `fip:data-mode:${companyId}`
 }
@@ -352,17 +361,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           applyState(next)
           return
         }
-        void mirrorCloudStateLocally(next)
-          .then(() => applyState(next))
-          .catch((error: unknown) => {
-            applyState(next)
+        saveQueue.current = saveQueue.current.then(async () => {
+          if (
+            activeRepository.current !== repository ||
+            !isNewerState(next, stateRef.current)
+          ) {
+            return
+          }
+          applyState(next)
+          try {
+            await mirrorCloudStateLocally(next)
+          } catch (error) {
             setSyncState('error')
             setSyncMessage(
               error instanceof Error
                 ? `Cloud aggiornato, copia locale non riuscita: ${error.message}`
                 : 'Cloud aggiornato, copia locale non riuscita',
             )
-          })
+          }
+        })
       }) ?? (() => undefined),
     [applyState, mirrorCloudStateLocally],
   )
