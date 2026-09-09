@@ -36,9 +36,11 @@ export interface AppStoreContextValue {
   localStoragePaths: LocalStoragePaths | null
   driveSyncState: SyncState
   driveSyncMessage: string | null
-  driveAccountEmail: string | null
+  driveFolderLocation: string | null
   cloudAvailable: boolean
-  refreshDriveConnection: () => void
+  refreshDriveFolder: () => Promise<void>
+  selectPrimaryDriveFolder: () => Promise<{ ok: boolean; error?: string }>
+  openPrimaryDriveFolder: () => Promise<void>
   retrySync: () => Promise<void>
   updateCompany: (patch: Partial<Company>) => void
   setActiveAccountingCompany: (companyId: string) => void

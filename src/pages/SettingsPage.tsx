@@ -12,17 +12,6 @@ import type {
 } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
 import {
-  DriveRepository,
-  type DriveRevisionList,
-} from '../data/driveRepository'
-import {
-  createDrivePairing,
-  disconnectDriveSession,
-  driveServiceConfigured,
-  readDrivePairing,
-  type DrivePairing,
-} from '../data/driveSession'
-import {
   useAppStore,
   type AccountingCompanyInput,
 } from '../store/AppStoreContext'
@@ -150,10 +139,12 @@ export function SettingsPage() {
   const {
     state,
     cloudAvailable,
-    driveAccountEmail,
+    driveFolderLocation,
     driveSyncMessage,
     localStoragePaths,
-    refreshDriveConnection,
+    refreshDriveFolder,
+    selectPrimaryDriveFolder,
+    openPrimaryDriveFolder,
     syncMessage,
     syncState,
     updateCompany,
@@ -187,16 +178,6 @@ export function SettingsPage() {
   const [localCloudBusy, setLocalCloudBusy] = useState(false)
   const [backupBusy, setBackupBusy] = useState(false)
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
-  const [cloudRevisionBusy, setCloudRevisionBusy] = useState(false)
-  const [cloudRevisionMessage, setCloudRevisionMessage] = useState<
-    string | null
-  >(null)
-  const [cloudRevisionCompanyId, setCloudRevisionCompanyId] = useState<
-    string | null
-  >(null)
-  const [cloudRevisions, setCloudRevisions] =
-    useState<DriveRevisionList | null>(null)
-  const [drivePairing, setDrivePairing] = useState<DrivePairing | null>(null)
   const [driveFolderConfirmation, setDriveFolderConfirmation] = useState<
     'warning' | 'final' | null
   >(null)
@@ -399,77 +380,31 @@ export function SettingsPage() {
     event.target.value = ''
   }
 
-  async function prepareGoogleConnection() {
+  async function choosePrimaryDriveFolder() {
     setGoogleBusy(true)
     setGoogleMessage(null)
     try {
-      const device = window.desktopApp
-        ? `Computer ${window.desktopApp.platform}`
-        : /Android/i.test(navigator.userAgent)
-          ? 'Android'
-          : /iPad|iPhone/i.test(navigator.userAgent)
-            ? 'iPhone o iPad'
-            : 'Browser web'
-      setDrivePairing(await createDrivePairing(device))
-      setGoogleMessage(
-        'Apri Google, autorizza Drive e lascia aperta questa schermata.',
-      )
-    } catch (error) {
-      setGoogleMessage(
-        error instanceof Error
-          ? error.message
-          : 'Preparazione accesso Google non riuscita',
-      )
-    }
-    setGoogleBusy(false)
-  }
-
-  async function waitForGoogleConnection() {
-    if (!drivePairing) return
-    setGoogleBusy(true)
-    try {
-      while (Date.now() / 1000 < drivePairing.expiresAt) {
-        const session = await readDrivePairing(drivePairing.pairingId)
-        if (session) {
-          refreshDriveConnection()
-          setDrivePairing(null)
-          setGoogleMessage(
-            `${session.email} collegato. Scegli quale archivio usare.`,
-          )
-          return
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+      const result = await selectPrimaryDriveFolder()
+      if (result.ok) {
+        await refreshDriveFolder()
+        setGoogleMessage(
+          'Cartella Google Drive selezionata. Ora puoi aprire i JSON sincronizzati.',
+        )
+      } else if (result.error) {
+        setGoogleMessage(result.error)
       }
-      setGoogleMessage('Collegamento scaduto: riprova.')
-      setDrivePairing(null)
-    } catch (error) {
-      setGoogleMessage(
-        error instanceof Error
-          ? error.message
-          : 'Collegamento Google non riuscito',
-      )
     } finally {
       setGoogleBusy(false)
     }
   }
 
-  async function disconnectGoogleDrive() {
-    setGoogleBusy(true)
-    if (dataSettings.mode === 'cloud') await setDataMode('local')
-    await disconnectDriveSession()
-    refreshDriveConnection()
-    setDrivePairing(null)
-    setGoogleMessage('Dispositivo scollegato da Google Drive.')
-    setGoogleBusy(false)
-  }
-
   async function confirmLocalDataToCloud() {
     if (
       !window.confirm(
-        'Copiare nel Cloud i JSON locali dell’EXE? I file locali non saranno modificati.',
+        'Copiare i JSON locali dell’EXE nella cartella Google Drive? I file locali non saranno modificati.',
       ) ||
       !window.confirm(
-        'Conferma: i dati locali sostituiranno la versione attuale nel Cloud.',
+        'Conferma: i dati locali sostituiranno i JSON presenti nella cartella Google Drive.',
       )
     ) {
       return
@@ -478,8 +413,8 @@ export function SettingsPage() {
     const result = await copyLocalDataToCloud()
     setGoogleMessage(
       result.ok
-        ? 'Dati locali copiati nel Cloud. EXE e sito possono ora usare lo stesso archivio.'
-        : result.error ?? 'Copia nel Cloud non riuscita.',
+        ? 'Dati locali copiati nella cartella Google Drive.'
+        : result.error ?? 'Copia nella cartella Google Drive non riuscita.',
     )
     setLocalCloudBusy(false)
   }
@@ -488,72 +423,12 @@ export function SettingsPage() {
     if (
       dataSettings.mode !== 'cloud' &&
       !window.confirm(
-        'Aprire i dati già presenti nel Cloud? Per inviare i dati corretti dell’EXE usa invece “Copia dati locali nel Cloud”.',
+        'Aprire i JSON presenti nella cartella Google Drive? I dati locali non verranno caricati né uniti.',
       )
     ) {
       return
     }
     await setDataMode('cloud')
-  }
-
-  async function loadCloudRevisions() {
-    if (!companyId) return
-    setCloudRevisionBusy(true)
-    setCloudRevisionMessage(null)
-    try {
-      const result = await new DriveRepository(companyId).listCompanyRevisions(
-        companyId,
-      )
-      setCloudRevisions(result)
-      setCloudRevisionCompanyId(companyId)
-      setCloudRevisionMessage(
-        result.revisions.length > 1
-          ? 'Versioni disponibili: confronta data e dimensione prima di ripristinare.'
-          : 'Non sono disponibili versioni precedenti recuperabili.',
-      )
-    } catch (error) {
-      setCloudRevisions(null)
-      setCloudRevisionCompanyId(companyId)
-      setCloudRevisionMessage(
-        error instanceof Error
-          ? error.message
-          : 'Ricerca versioni Cloud non riuscita',
-      )
-    } finally {
-      setCloudRevisionBusy(false)
-    }
-  }
-
-  async function restoreCloudRevision(revisionId: string) {
-    if (!companyId || !cloudRevisions) return
-    const firstConfirmation = window.confirm(
-      'ATTENZIONE: stai per ripristinare una versione precedente dell’archivio Cloud. La versione attuale resterà nella cronologia. Continuare?',
-    )
-    if (!firstConfirmation) return
-    const finalConfirmation = window.confirm(
-      'SEI SICURO AL 100% DI VOLER RIPRISTINARE QUESTA VERSIONE?',
-    )
-    if (!finalConfirmation) return
-    setCloudRevisionBusy(true)
-    setCloudRevisionMessage('Ripristino Cloud in corso. Non chiudere l’app.')
-    try {
-      await new DriveRepository(companyId).restoreCompanyRevision(
-        companyId,
-        revisionId,
-        cloudRevisions.currentRevision,
-      )
-      setCloudRevisionMessage(
-        'Versione ripristinata. Ricaricamento dei dati in corso.',
-      )
-      window.location.reload()
-    } catch (error) {
-      setCloudRevisionMessage(
-        error instanceof Error
-          ? error.message
-          : 'Ripristino Cloud non riuscito',
-      )
-      setCloudRevisionBusy(false)
-    }
   }
 
   function addCompany(event: FormEvent) {
@@ -1026,14 +901,13 @@ export function SettingsPage() {
               <span className="mode-icon violet-icon">
                 <CloudIcon size={26} />
               </span>
-              <strong>Cloud</strong>
-              <span>Sincronizzazione continua tra web e desktop.</span>
+              <strong>Google Drive</strong>
+              <span>Usa direttamente i JSON nella cartella sincronizzata.</span>
             </button>
           </div>
           {!cloudAvailable && (
             <p className="settings-note">
-              Collega Google Drive per attivare la sincronizzazione senza
-              Firebase.
+              Seleziona la cartella sincronizzata da Google Drive Desktop.
             </p>
           )}
           <div className="archive-location-stack">
@@ -1083,69 +957,58 @@ export function SettingsPage() {
               </div>
             )}
             <div
-              aria-label={`Sincronizzazione Cloud: ${cloudStatusLabel}`}
+              aria-label={`Archivio Google Drive: ${cloudStatusLabel}`}
               className={`cloud-status-compact ${cloudStatusClass}`}
               title={
                 syncMessage ??
                 (dataSettings.mode === 'cloud'
-                  ? 'Google Drive collegato e senza dati in attesa'
-                  : 'Seleziona Cloud per sincronizzare i dati')
+                  ? 'JSON Google Drive attivi'
+                  : 'Seleziona Google Drive per usare i JSON condivisi')
               }
             >
               <span className="drive-status-dot" />
-              <small>Cloud</small>
+              <small>Google Drive</small>
               <strong>{cloudStatusLabel}</strong>
             </div>
           </div>
           <div className="setting-row google-account-row">
             <span>
-              <strong>Accesso Google Drive</strong>
+              <strong>Cartella dati Google Drive</strong>
               <small>
-                {driveAccountEmail
-                  ? `${driveAccountEmail} · rinnovo automatico attivo`
-                  : 'Non collegato · token Google protetti dal servizio'}
+                {driveFolderLocation ??
+                  'Nessuna cartella selezionata'}
               </small>
             </span>
             <button
               className="button button-secondary"
-              disabled={!driveServiceConfigured || googleBusy}
-              onClick={() =>
-                driveAccountEmail
-                  ? void disconnectGoogleDrive()
-                  : void prepareGoogleConnection()
-              }
+              disabled={googleBusy}
+              onClick={() => void choosePrimaryDriveFolder()}
               type="button"
             >
-              {googleBusy
-                ? 'Collegamento...'
-                : driveAccountEmail
-                  ? 'Scollega dispositivo'
-                  : 'Accedi con Google Drive'}
+              {googleBusy ? 'Apertura...' : 'Scegli cartella'}
             </button>
+            {window.desktopApp && driveFolderLocation && (
+              <button
+                className="button"
+                onClick={() => void openPrimaryDriveFolder()}
+                type="button"
+              >
+                Apri cartella
+              </button>
+            )}
           </div>
-          {drivePairing && (
-            <a
-              className="button button-primary"
-              href={drivePairing.authorizationUrl}
-              onClick={() => void waitForGoogleConnection()}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Apri Google e autorizza
-            </a>
-          )}
           {googleMessage && (
             <p aria-live="polite" className="import-message">
               {googleMessage}
             </p>
           )}
-          {window.desktopApp && driveAccountEmail && (
+          {window.desktopApp && driveFolderLocation && (
             <div className="cloud-recovery-panel">
               <div>
-                <strong>Copia sicura EXE → Cloud</strong>
+                <strong>Copia sicura locale → Google Drive</strong>
                 <small>
                   Usa i JSON locali dell’EXE come dati corretti, senza
-                  modificarli, e sostituisce la versione presente nel Cloud.
+                  modificarli, e sostituisce i file nella cartella scelta.
                 </small>
               </div>
               <button
@@ -1156,83 +1019,24 @@ export function SettingsPage() {
               >
                 {localCloudBusy
                   ? 'Copia in corso...'
-                  : 'Copia dati locali nel Cloud'}
+                  : 'Copia dati locali nella cartella'}
               </button>
-            </div>
-          )}
-          {driveAccountEmail && accountingCompany && (
-            <div className="cloud-recovery-panel">
-              <div>
-                <strong>Recupero versioni Cloud</strong>
-                <small>
-                  Cerca le copie precedenti dell’archivio di{' '}
-                  {accountingCompany.name}. Nessun dato viene sovrascritto
-                  durante la ricerca.
-                </small>
-              </div>
-              <button
-                className="button button-secondary"
-                disabled={cloudRevisionBusy}
-                onClick={() => void loadCloudRevisions()}
-                type="button"
-              >
-                {cloudRevisionBusy
-                  ? 'Ricerca in corso...'
-                  : 'Cerca versioni precedenti'}
-              </button>
-              {cloudRevisionCompanyId === companyId &&
-                cloudRevisions?.revisions.map((item) => {
-                  const current =
-                    item.id === cloudRevisions.currentRevisionId
-                  return (
-                    <div className="cloud-revision-row" key={item.id}>
-                      <span>
-                        <strong>
-                          {new Intl.DateTimeFormat('it-IT', {
-                            dateStyle: 'short',
-                            timeStyle: 'medium',
-                          }).format(new Date(item.modifiedTime))}
-                        </strong>
-                        <small>
-                          {(item.size / 1024).toLocaleString('it-IT', {
-                            maximumFractionDigits: 1,
-                          })}{' '}
-                          KB
-                          {current ? ' · versione attuale' : ''}
-                        </small>
-                      </span>
-                      <button
-                        className="button"
-                        disabled={cloudRevisionBusy || current}
-                        onClick={() => void restoreCloudRevision(item.id)}
-                        type="button"
-                      >
-                        {current ? 'Attuale' : 'Ripristina'}
-                      </button>
-                    </div>
-                  )
-                })}
-              {cloudRevisionMessage && (
-                <p aria-live="polite" className="import-message">
-                  {cloudRevisionMessage}
-                </p>
-              )}
             </div>
           )}
           <p className="settings-note">
-            I file JSON restano nel tuo Google Drive. Il programma conserva
-            sul dispositivo solo un codice revocabile, mai la password o il
-            token Google.
+            L’EXE legge la cartella locale sincronizzata; il sito richiede il
+            permesso del browser alla stessa cartella.
           </p>
           <ol className="settings-steps">
-            <li>Premi “Accedi con Google Drive”.</li>
-            <li>Apri Google e autorizza l'accesso ai file dell'app.</li>
+            <li>Installa Google Drive Desktop e attendi la sincronizzazione.</li>
+            <li>Premi “Scegli cartella” e seleziona la cartella dei JSON.</li>
             <li>
-              Nell’EXE usa “Copia dati locali nel Cloud” se i dati corretti
-              sono sul PC.
+              Apri Google Drive: verranno letti workspace.json e i file delle
+              aziende, senza unire i dati locali.
             </li>
             <li>
-              Ripeti una sola volta su ogni nuovo PC, Android, iPhone o tablet.
+              Ripeti la scelta su ogni nuovo PC. Su iPhone e Android usa
+              import/export se il browser non consente l’accesso alla cartella.
             </li>
           </ol>
         </article>

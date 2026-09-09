@@ -15,6 +15,66 @@ function statePath(companyId) {
   return path.join(app.getPath('userData'), `state-${companyId}.json`)
 }
 
+function driveFolderPreferencePath() {
+  return path.join(app.getPath('userData'), 'google-drive-folder.json')
+}
+
+async function savedDriveFolder() {
+  try {
+    const raw = await fs.readFile(driveFolderPreferencePath(), 'utf8')
+    const value = JSON.parse(raw)
+    if (typeof value?.folderPath !== 'string' || !path.isAbsolute(value.folderPath)) {
+      return null
+    }
+    return value.folderPath
+  } catch {
+    return null
+  }
+}
+
+async function configuredDriveFolder() {
+  const folderPath = await savedDriveFolder()
+  if (!folderPath) return null
+  try {
+    await fs.access(folderPath, constants.R_OK | constants.W_OK)
+    return folderPath
+  } catch {
+    return null
+  }
+}
+
+async function saveDriveFolderPreference(folderPath) {
+  await fs.access(folderPath, constants.R_OK | constants.W_OK)
+  const destination = driveFolderPreferencePath()
+  const temporary = `${destination}.tmp`
+  await fs.mkdir(path.dirname(destination), { recursive: true })
+  await fs.writeFile(temporary, JSON.stringify({ folderPath }), 'utf8')
+  await fs.rename(temporary, destination)
+}
+
+function driveStateFilename(storageId) {
+  if (
+    typeof storageId !== 'string' ||
+    !/^[a-zA-Z0-9_-]{1,160}$/.test(storageId)
+  ) {
+    throw new Error('Identificativo archivio Google Drive non valido')
+  }
+  return `${storageId}.json`
+}
+
+async function driveStatePath(storageId) {
+  const folderPath = await savedDriveFolder()
+  if (!folderPath) {
+    throw new Error('Seleziona la cartella locale di Google Drive')
+  }
+  try {
+    await fs.access(folderPath, constants.R_OK | constants.W_OK)
+  } catch {
+    throw new Error(`Cartella Google Drive non accessibile: ${folderPath}`)
+  }
+  return path.join(folderPath, driveStateFilename(storageId))
+}
+
 function preferredBackupDirectoryPath() {
   return path.join(path.dirname(app.getPath('exe')), 'Backup json')
 }
@@ -47,7 +107,12 @@ function safeBackupName(value) {
 }
 
 function backupLabel(filename, content) {
-  if (filename.endsWith('-workspace.json')) return 'Archivio generale'
+  if (
+    filename === 'workspace.json' ||
+    filename.endsWith('-workspace.json')
+  ) {
+    return 'Archivio generale'
+  }
   try {
     const state = JSON.parse(content)
     const companies = state?.accounting?.companies
@@ -65,10 +130,20 @@ function backupLabel(filename, content) {
 }
 
 async function backupLocalStates() {
-  const sourceDirectory = app.getPath('userData')
+  const savedFolder = await savedDriveFolder()
+  const driveFolder = await configuredDriveFolder()
+  if (savedFolder && !driveFolder) {
+    throw new Error(`Cartella Google Drive non accessibile: ${savedFolder}`)
+  }
+  const sourceDirectory = driveFolder ?? app.getPath('userData')
   const backupDirectory = await backupDirectoryPath()
   const sourceFiles = (await fs.readdir(sourceDirectory))
-    .filter((filename) => /^state-.+\.json$/.test(filename))
+    .filter((filename) =>
+      driveFolder
+        ? filename === 'workspace.json' ||
+          /^company-.+\.json$/.test(filename)
+        : /^state-.+\.json$/.test(filename),
+    )
     .sort()
   for (const filename of sourceFiles) {
     const content = await fs.readFile(path.join(sourceDirectory, filename), 'utf8')
@@ -156,6 +231,49 @@ ipcMain.handle('drive-backup:select-folder', async () => {
     title: 'Seleziona la cartella locale di Google Drive',
   })
   return result.canceled ? null : result.filePaths[0]
+})
+
+ipcMain.handle('drive-data:get-folder', () => savedDriveFolder())
+
+ipcMain.handle('drive-data:select-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Seleziona la cartella sincronizzata da Google Drive',
+  })
+  if (result.canceled) return null
+  const folderPath = result.filePaths[0]
+  await saveDriveFolderPreference(folderPath)
+  return folderPath
+})
+
+ipcMain.handle('drive-data:open-folder', async () => {
+  const folderPath = await savedDriveFolder()
+  if (!folderPath) return 'Seleziona prima la cartella Google Drive'
+  return (await shell.openPath(folderPath)) || null
+})
+
+ipcMain.handle('drive-data:load', async (_event, storageId) => {
+  try {
+    return await fs.readFile(await driveStatePath(storageId), 'utf8')
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return null
+    throw error
+  }
+})
+
+ipcMain.handle('drive-data:save', async (_event, storageId, content) => {
+  if (typeof content !== 'string') {
+    throw new Error('Contenuto archivio Google Drive non valido')
+  }
+  const destination = await driveStatePath(storageId)
+  const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`
+  try {
+    await fs.writeFile(temporary, content, 'utf8')
+    await fs.rename(temporary, destination)
+  } catch (error) {
+    await fs.unlink(temporary).catch(() => undefined)
+    throw error
+  }
 })
 
 ipcMain.handle(
