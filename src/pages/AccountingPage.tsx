@@ -1022,7 +1022,10 @@ export function InvoicesPanel({
                 <label className="checkbox-row">
                   <input
                     checked={repeatDate}
-                    onChange={(event) => setRepeatDate(event.target.checked)}
+                    onChange={(event) => {
+                      setRepeatDate(event.target.checked)
+                      if (event.target.checked) setRepeatSupplier(true)
+                    }}
                     type="checkbox"
                   />
                   Mantieni ultima data
