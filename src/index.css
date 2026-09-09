@@ -3016,6 +3016,12 @@ select {
   overflow: hidden;
 }
 
+.accounting-records-panel.accounting-records-panel-editing {
+  position: static;
+  max-height: none;
+  overflow: visible;
+}
+
 .accounting-records-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
