@@ -2417,6 +2417,86 @@ select {
   order: 4;
 }
 
+.production-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.production-wage-filter {
+  align-items: end;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(140px, 1fr));
+}
+
+.production-wage-filter > div {
+  background: rgba(6, 8, 16, 0.36);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  min-height: 74px;
+  padding: 12px 14px;
+}
+
+.production-wage-filter > div span,
+.production-worker-rate span,
+.production-worker-totals span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.production-wage-filter > div strong,
+.production-worker-totals strong {
+  font-size: 1.25rem;
+}
+
+.production-wage-form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+}
+
+.production-work-form {
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+}
+
+.production-worker-rates,
+.production-worker-totals {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-top: 16px;
+}
+
+.production-worker-rate,
+.production-worker-totals > div {
+  background: rgba(6, 8, 16, 0.36);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: inherit;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  text-align: left;
+}
+
+.production-worker-rate {
+  cursor: pointer;
+}
+
+.production-worker-rate:hover {
+  border-color: var(--violet);
+}
+
+.production-wage-history {
+  display: grid;
+  gap: 10px;
+}
+
 .wide-field {
   grid-column: span 2;
 }
@@ -3251,6 +3331,12 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .production-wage-filter,
+  .production-wage-form,
+  .production-work-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .accounting-fields,
   .product-fields,
   .contact-columns,
@@ -3333,7 +3419,10 @@ select {
   .production-grid,
   .production-settings-fields,
   .production-entry-fields,
-  .production-sellers {
+  .production-sellers,
+  .production-wage-filter,
+  .production-wage-form,
+  .production-work-form {
     grid-template-columns: 1fr;
   }
 

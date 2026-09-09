@@ -25,6 +25,7 @@ import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ProductionPage } from './pages/ProductionPage'
+import { ProductionWagesPage } from './pages/ProductionWagesPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -42,6 +43,7 @@ type Page =
   | 'paidInvoices'
   | 'products'
   | 'production'
+  | 'productionWages'
   | 'accountingVerification'
   | 'reports'
   | 'stores'
@@ -202,7 +204,18 @@ function Workspace() {
       <TakingsArchivePage onBack={() => setPage('accounting')} />
     ),
     products: <ProductsPage />,
-    production: <ProductionPage key={activeCompany?.id} />,
+    production: (
+      <ProductionPage
+        key={activeCompany?.id}
+        onOpenWages={() => setPage('productionWages')}
+      />
+    ),
+    productionWages: (
+      <ProductionWagesPage
+        key={activeCompany?.id}
+        onBack={() => setPage('production')}
+      />
+    ),
     accountingVerification: (
       <AccountingVerificationPage key={activeCompany?.id} />
     ),
