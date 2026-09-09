@@ -986,8 +986,11 @@ export function ProductionPage() {
       </section>
 
       {selectedProductId !== 'all' && (
-        <section className="production-grid">
-        <form className="panel accounting-form" onSubmit={saveSettings}>
+        <>
+        <form
+          className="panel accounting-form production-settings-panel"
+          onSubmit={saveSettings}
+        >
           <div className="panel-heading">
             <div>
               <span className="eyebrow">IMPOSTAZIONI DELLA PAGINA</span>
@@ -1105,7 +1108,10 @@ export function ProductionPage() {
           </button>
         </form>
 
-        <form className="panel accounting-form" onSubmit={saveEntry}>
+        <form
+          className="panel accounting-form production-entry-panel"
+          onSubmit={saveEntry}
+        >
           <div className="panel-heading">
             <div>
               <span className="eyebrow">QUANTITÀ PRODOTTA</span>
@@ -1170,7 +1176,7 @@ export function ProductionPage() {
             Registra quantità
           </button>
         </form>
-        </section>
+        </>
       )}
 
       {formError && <p className="form-error">{formError}</p>}
@@ -1211,7 +1217,7 @@ export function ProductionPage() {
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel production-history-panel">
         <div className="panel-heading">
           <div>
             <span className="eyebrow">STORICO PRODUZIONE</span>
