@@ -350,7 +350,15 @@ export function InvoicesPanel({
 }: InvoicesPanelProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
-  const [form, setForm] = useState(emptyInvoice)
+  const [form, setForm] = useState(() => ({
+    ...emptyInvoice,
+    sellerId:
+      state.accounting.sellers.find(
+        (seller) =>
+          seller.companyId === state.accounting.activeCompanyId &&
+          seller.autoSelect,
+      )?.id ?? '',
+  }))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [repeatSupplier, setRepeatSupplier] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
@@ -400,7 +408,7 @@ export function InvoicesPanel({
 
   const invoices = useMemo(
     () =>
-      data.invoices
+      [...data.invoices]
         .filter((invoice) =>
           filter === 'paid'
             ? invoice.settled
@@ -430,6 +438,8 @@ export function InvoicesPanel({
       monthFilter,
     ],
   )
+  const defaultSellerId =
+    data.sellers.find((seller) => seller.autoSelect)?.id ?? ''
   const total = invoices.reduce((sum, item) => sum + item.total, 0)
   const paid = invoices.reduce(
     (sum, item) => sum + (item.settled ? item.total : item.paidAmount),
@@ -663,7 +673,7 @@ export function InvoicesPanel({
   function resetInvoiceForm() {
     submitAfterValidationRef.current = false
     setEditingId(null)
-    setForm({ ...emptyInvoice, date: today() })
+    setForm({ ...emptyInvoice, sellerId: defaultSellerId, date: today() })
     setLines([])
     setLineForm(emptyInvoiceLine)
     setVerificationIncluded(false)
@@ -746,11 +756,11 @@ export function InvoicesPanel({
       }),
     )
     const nextForm = editingId
-      ? { ...emptyInvoice, date: today() }
+      ? { ...emptyInvoice, sellerId: defaultSellerId, date: today() }
       : {
           ...emptyInvoice,
           supplierId: repeatSupplier ? form.supplierId : '',
-          sellerId: repeatSeller ? form.sellerId : '',
+          sellerId: repeatSeller ? form.sellerId : defaultSellerId,
           date: repeatDate ? form.date : today(),
           settled:
             repeatSupplier &&
@@ -1474,7 +1484,12 @@ const emptyTaking = {
 function TakingsPanel() {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
-  const [form, setForm] = useState(emptyTaking)
+  const defaultSellerId =
+    data.sellers.find((seller) => seller.autoSelect)?.id ?? ''
+  const [form, setForm] = useState({
+    ...emptyTaking,
+    sellerId: defaultSellerId,
+  })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [repeatDate, setRepeatDate] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
@@ -1607,11 +1622,11 @@ function TakingsPanel() {
     setEditingId(null)
     setForm(
       wasEditing
-        ? { ...emptyTaking, date: today() }
+        ? { ...emptyTaking, sellerId: defaultSellerId, date: today() }
         : {
             ...emptyTaking,
             date: repeatDate ? form.date : today(),
-            sellerId: repeatSeller ? form.sellerId : '',
+            sellerId: repeatSeller ? form.sellerId : defaultSellerId,
           },
     )
     setFormError(null)
@@ -1761,7 +1776,7 @@ function TakingsPanel() {
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
-          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm(emptyTaking); setFormError(null) }}>Annulla</button>}
+          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm({ ...emptyTaking, sellerId: defaultSellerId }); setFormError(null) }}>Annulla</button>}
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra incasso'}</button>
         </div>
       </form>
@@ -1796,6 +1811,8 @@ function ContactsPanel() {
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null)
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
+  const [sellerAutoSelect, setSellerAutoSelect] = useState(false)
+  const [sellerOverviewPriority, setSellerOverviewPriority] = useState('')
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(
     null,
   )
@@ -1813,65 +1830,93 @@ function ContactsPanel() {
     event.preventDefault()
     const name = sellerName.trim()
     const phone = sellerPhone.trim()
+    const overviewPriority = Math.max(
+      0,
+      Math.round(numberValue(sellerOverviewPriority)),
+    )
     updateAccounting((current) =>
-      mutateCompany(current, (companyId) => ({
-        ...current,
-        sellers: editingSellerId
-          ? current.sellers.map((seller) =>
-              seller.id === editingSellerId
-                ? { ...seller, name, phone }
-                : seller,
-            )
-          : [
-              {
-                id: createId('accounting-seller'),
-                companyId,
-                name,
-                email: '',
-                phone,
-                city: '',
-                notes: '',
-              },
-              ...current.sellers,
-            ],
-        invoices: editingSellerId
-          ? current.invoices.map((invoice) =>
-              invoice.sellerId === editingSellerId
-                ? { ...invoice, sellerName: name }
-                : invoice,
-            )
-          : current.invoices,
-        takings: editingSellerId
-          ? current.takings.map((taking) =>
-              taking.sellerId === editingSellerId
-                ? { ...taking, sellerName: name }
-                : taking,
-            )
-          : current.takings,
-        expenses: editingSellerId
-          ? current.expenses.map((expense) =>
-              expense.sellerId === editingSellerId
-                ? { ...expense, sellerName: name }
-                : expense,
-            )
-          : current.expenses,
-      })),
+      mutateCompany(current, (companyId) => {
+        const sellers = sellerAutoSelect
+          ? current.sellers.map((seller) => ({
+              ...seller,
+              autoSelect: false,
+            }))
+          : current.sellers
+        return {
+          ...current,
+          sellers: editingSellerId
+            ? sellers.map((seller) =>
+                seller.id === editingSellerId
+                  ? {
+                      ...seller,
+                      name,
+                      phone,
+                      autoSelect: sellerAutoSelect,
+                      overviewPriority,
+                    }
+                  : seller,
+              )
+            : [
+                {
+                  id: createId('accounting-seller'),
+                  companyId,
+                  name,
+                  email: '',
+                  phone,
+                  city: '',
+                  notes: '',
+                  autoSelect: sellerAutoSelect,
+                  overviewPriority,
+                },
+                ...sellers,
+              ],
+          invoices: editingSellerId
+            ? current.invoices.map((invoice) =>
+                invoice.sellerId === editingSellerId
+                  ? { ...invoice, sellerName: name }
+                  : invoice,
+              )
+            : current.invoices,
+          takings: editingSellerId
+            ? current.takings.map((taking) =>
+                taking.sellerId === editingSellerId
+                  ? { ...taking, sellerName: name }
+                  : taking,
+              )
+            : current.takings,
+          expenses: editingSellerId
+            ? current.expenses.map((expense) =>
+                expense.sellerId === editingSellerId
+                  ? { ...expense, sellerName: name }
+                  : expense,
+              )
+            : current.expenses,
+        }
+      }),
     )
     setEditingSellerId(null)
     setSellerName('')
     setSellerPhone('')
+    setSellerAutoSelect(false)
+    setSellerOverviewPriority('')
   }
 
   function editSeller(seller: AccountingSeller) {
     setEditingSellerId(seller.id)
     setSellerName(seller.name)
     setSellerPhone(seller.phone)
+    setSellerAutoSelect(seller.autoSelect)
+    setSellerOverviewPriority(
+      seller.overviewPriority > 0 ? String(seller.overviewPriority) : '',
+    )
   }
 
   function cancelSellerEdit() {
     setEditingSellerId(null)
     setSellerName('')
     setSellerPhone('')
+    setSellerAutoSelect(false)
+    setSellerOverviewPriority('')
   }
 
   function addSupplier(event: FormEvent) {
@@ -1984,6 +2029,14 @@ function ContactsPanel() {
             <span>Telefono</span>
             <input placeholder="Inserisci il telefono" value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} />
           </label>
+          <label className="contact-field">
+            <span>Priorità panoramica</span>
+            <input min="1" placeholder="Esempio: 1" type="number" value={sellerOverviewPriority} onChange={(event) => setSellerOverviewPriority(event.target.value)} />
+          </label>
+          <label className="contact-checkbox-field">
+            <input checked={sellerAutoSelect} onChange={(event) => setSellerAutoSelect(event.target.checked)} type="checkbox" />
+            Selezione automatica in fatture e incassi
+          </label>
           <div className="contact-form-actions">
             <button className="button button-primary" type="submit">{editingSellerId ? 'Salva modifiche' : 'Aggiungi venditore'}</button>
             {editingSellerId ? <button type="button" onClick={cancelSellerEdit}>Annulla</button> : null}
@@ -1992,7 +2045,7 @@ function ContactsPanel() {
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))}>Elimina</button></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))}>Elimina</button></span></div>
         })}</div>
       </article>
       <article className="panel">

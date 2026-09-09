@@ -617,6 +617,7 @@ export function DashboardPage() {
     return {
       id: seller.id,
       name: seller.name,
+      overviewPriority: seller.overviewPriority,
       invoices,
       takings,
       invoiceValue: invoices.reduce(
@@ -645,6 +646,17 @@ export function DashboardPage() {
       revenueCededTransfers,
       stockResidual: sellerTheoretical - sellerReal,
     }
+  })
+  sellerSummaries.sort((left, right) => {
+    const leftPriority =
+      left.overviewPriority > 0
+        ? left.overviewPriority
+        : Number.POSITIVE_INFINITY
+    const rightPriority =
+      right.overviewPriority > 0
+        ? right.overviewPriority
+        : Number.POSITIVE_INFINITY
+    return leftPriority === rightPriority ? 0 : leftPriority - rightPriority
   })
   const unassignedInvoices = sellerInvoices.filter(
     (invoice) => !invoice.sellerId || !knownSellerIds.has(invoice.sellerId),
@@ -684,6 +696,7 @@ export function DashboardPage() {
     sellerSummaries.push({
       id: 'unassigned',
       name: 'Non assegnato',
+      overviewPriority: 0,
       invoices: unassignedInvoices,
       takings: unassignedTakings,
       invoiceValue: unassignedInvoices.reduce(
