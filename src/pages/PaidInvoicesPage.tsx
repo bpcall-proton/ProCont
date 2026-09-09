@@ -1,23 +1,35 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   invoiceDueState,
   invoiceRemaining,
   money,
   sellerColorClass,
 } from '../domain/accounting'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 type PaymentFilter = 'paid' | 'partial' | 'all'
 
 export function PaidInvoicesPage() {
   const { state, setActiveAccountingCompany } = useAppStore()
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<PaymentFilter>('paid')
-  const [supplierFilter, setSupplierFilter] = useState('')
-  const [sellerFilter, setSellerFilter] = useState('')
-  const [monthFilter, setMonthFilter] = useState('')
-  const normalizedQuery = query.trim().toLocaleLowerCase()
   const companyId = state.accounting.activeCompanyId
+  const filterDefaults = {
+    query: '',
+    status: 'paid' as PaymentFilter,
+    supplierId: '',
+    sellerId: '',
+    month: '',
+  }
+  const [storedFilters, setStoredFilters] = useStoredFilters(
+    `paid-invoice-filters:${companyId ?? 'none'}`,
+    filterDefaults,
+  )
+  const query = storedFilters.query
+  const filter = storedFilters.status
+  const supplierFilter = storedFilters.supplierId
+  const sellerFilter = storedFilters.sellerId
+  const monthFilter = storedFilters.month
+  const normalizedQuery = query.trim().toLocaleLowerCase()
   const suppliers = state.accounting.suppliers.filter(
     (supplier) => supplier.companyId === companyId,
   )
@@ -92,12 +104,9 @@ export function PaidInvoicesPage() {
         <div className="report-filter">
           <select
             aria-label="Azienda contabile"
-            onChange={(event) => {
-              setSupplierFilter('')
-              setSellerFilter('')
-              setMonthFilter('')
+            onChange={(event) =>
               setActiveAccountingCompany(event.target.value)
-            }}
+            }
             value={companyId ?? ''}
           >
             {state.accounting.companies.map((company) => (
@@ -109,7 +118,10 @@ export function PaidInvoicesPage() {
           <select
             aria-label="Stato pagamento"
             onChange={(event) =>
-              setFilter(event.target.value as PaymentFilter)
+              setStoredFilters((current) => ({
+                ...current,
+                status: event.target.value as PaymentFilter,
+              }))
             }
             value={filter}
           >
@@ -126,20 +138,26 @@ export function PaidInvoicesPage() {
           <div className="invoice-filters">
             <input
               aria-label="Cerca fattura o fornitore"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) =>
+                setStoredFilters((current) => ({
+                  ...current,
+                  query: event.target.value,
+                }))
+              }
               placeholder="Cerca fornitore o n. fattura"
               type="search"
               value={query}
             />
-            <select aria-label="Filtra per fornitore" value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+            <select aria-label="Filtra per fornitore" value={supplierFilter} onChange={(event) => setStoredFilters((current) => ({ ...current, supplierId: event.target.value }))}>
               <option value="">Tutti i fornitori</option>
               {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select>
-            <select aria-label="Filtra per venditore" value={sellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+            <select aria-label="Filtra per venditore" value={sellerFilter} onChange={(event) => setStoredFilters((current) => ({ ...current, sellerId: event.target.value }))}>
               <option value="">Tutti i venditori</option>
               {sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
-            <input aria-label="Filtra per mese pagamento" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+            <input aria-label="Filtra per mese pagamento" type="month" value={monthFilter} onChange={(event) => setStoredFilters((current) => ({ ...current, month: event.target.value }))} />
+            <button className="button button-secondary" onClick={() => setStoredFilters(filterDefaults)} type="button">Azzera filtri</button>
           </div>
         </div>
         <div className="data-table-wrap">

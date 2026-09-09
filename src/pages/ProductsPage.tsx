@@ -10,6 +10,7 @@ import type {
   AccountingProduct,
   ProductPricingMode,
 } from '../domain/types'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 const emptyProduct = {
@@ -34,8 +35,13 @@ export function ProductsPage() {
   const data = activeAccounting(state.accounting)
   const [form, setForm] = useState(emptyProduct)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [supplierFilter, setSupplierFilter] = useState('')
-  const [query, setQuery] = useState('')
+  const filterDefaults = { supplierId: '', query: '' }
+  const [filters, setFilters] = useStoredFilters(
+    `product-filters:${data.company?.id ?? 'none'}`,
+    filterDefaults,
+  )
+  const supplierFilter = filters.supplierId
+  const query = filters.query
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const products = useMemo(
     () =>
@@ -279,13 +285,23 @@ export function ProductsPage() {
           <h2>Catalogo prodotti</h2>
           <div className="invoice-filters">
             <input
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  query: event.target.value,
+                }))
+              }
               placeholder="Cerca nome o codice"
               type="search"
               value={query}
             />
             <select
-              onChange={(event) => setSupplierFilter(event.target.value)}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  supplierId: event.target.value,
+                }))
+              }
               value={supplierFilter}
             >
               <option value="">Tutti i fornitori</option>
@@ -295,6 +311,13 @@ export function ProductsPage() {
                 </option>
               ))}
             </select>
+            <button
+              className="button button-secondary"
+              onClick={() => setFilters(filterDefaults)}
+              type="button"
+            >
+              Azzera filtri
+            </button>
           </div>
         </div>
         <div className="data-table-wrap">

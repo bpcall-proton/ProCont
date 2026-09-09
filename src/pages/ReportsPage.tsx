@@ -13,6 +13,7 @@ import {
   sellerColorClass,
   today,
 } from '../domain/accounting'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 type Period = 'week' | 'month' | 'year' | 'all'
@@ -110,8 +111,20 @@ function filenamePart(value: string) {
 
 export function ReportsPage() {
   const { state } = useAppStore()
-  const [period, setPeriod] = useState<Period>('all')
-  const [selected, setSelected] = useState(today())
+  const reportFilterDefaults = {
+    period: 'all' as Period,
+    selected: today(),
+  }
+  const [reportFilters, setReportFilters] = useStoredFilters(
+    `report-filters:${state.accounting.activeCompanyId ?? 'none'}`,
+    reportFilterDefaults,
+  )
+  const period = reportFilters.period
+  const selected = reportFilters.selected
+  const setPeriod = (nextPeriod: Period) =>
+    setReportFilters((current) => ({ ...current, period: nextPeriod }))
+  const setSelected = (nextSelected: string) =>
+    setReportFilters((current) => ({ ...current, selected: nextSelected }))
   const [detail, setDetail] = useState<ReportDetail>(null)
   const source = activeAccounting(state.accounting)
   const range = rangeFor(period, selected)
@@ -1105,6 +1118,13 @@ export function ReportsPage() {
               onChange={(event) => setSelected(event.target.value)}
             />
           )}
+          <button
+            className="button button-secondary"
+            onClick={() => setReportFilters(reportFilterDefaults)}
+            type="button"
+          >
+            Azzera filtri
+          </button>
         </div>
       </header>
 
@@ -1452,6 +1472,16 @@ function DetailHeader({
             onChange={(event) => setSelected(event.target.value)}
           />
         )}
+        <button
+          className="button button-secondary"
+          onClick={() => {
+            setPeriod('all')
+            setSelected(today())
+          }}
+          type="button"
+        >
+          Azzera filtri
+        </button>
       </div>
     </header>
   )

@@ -5,6 +5,7 @@ import {
   today,
 } from '../domain/accounting'
 import type { ProductionPayMode } from '../domain/types'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 interface ProductionWagesPageProps {
@@ -65,7 +66,12 @@ export function ProductionWagesPage({
     ? data.sellers.filter((seller) => productionWorkerIds.has(seller.id))
     : data.sellers
   const firstSellerId = workers[0]?.id ?? ''
-  const [month, setMonth] = useState(today().slice(0, 7))
+  const wageFilterDefaults = { month: today().slice(0, 7) }
+  const [wageFilters, setWageFilters] = useStoredFilters(
+    `production-wage-filters:${data.company?.id ?? 'none'}`,
+    wageFilterDefaults,
+  )
+  const month = wageFilters.month
   const [rateForm, setRateForm] = useState<RateForm>({
     sellerId: firstSellerId,
     mode: 'hourly',
@@ -290,12 +296,21 @@ export function ProductionWagesPage({
         <label>
           Mese dello stipendio
           <input
-            onChange={(event) => setMonth(event.target.value)}
+            onChange={(event) =>
+              setWageFilters({ month: event.target.value })
+            }
             required
             type="month"
             value={month}
           />
         </label>
+        <button
+          className="button button-secondary"
+          onClick={() => setWageFilters(wageFilterDefaults)}
+          type="button"
+        >
+          Azzera filtri
+        </button>
         <div>
           <span>Totale stipendio</span>
           <strong>{money(monthlySalary)}</strong>
