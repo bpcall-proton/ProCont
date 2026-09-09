@@ -186,12 +186,13 @@ export function allocatedExpense(
 }
 
 export function activeAccounting(state: AccountingState) {
-  const id = state.activeCompanyId
+  const company =
+    state.companies.find((item) => item.id === state.activeCompanyId) ??
+    state.companies[0] ??
+    null
+  const id = company?.id ?? null
   return {
-    company:
-      state.companies.find((company) => company.id === id) ??
-      state.companies[0] ??
-      null,
+    company,
     invoices: state.invoices.filter((item) => item.companyId === id),
     takings: state.takings.filter((item) => item.companyId === id),
     sellers: state.sellers.filter((item) => item.companyId === id),

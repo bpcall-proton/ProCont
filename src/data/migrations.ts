@@ -693,6 +693,11 @@ export function normalizeStoredState(
       },
       accounting: {
         ...accounting,
+        activeCompanyId: accounting.companies.some(
+          (company) => company.id === accounting.activeCompanyId,
+        )
+          ? accounting.activeCompanyId
+          : accounting.companies[0]?.id ?? fallbackCompanyId,
         invoices,
         sellers: retainedAccountingSellers.map((seller) => ({
           ...seller,
