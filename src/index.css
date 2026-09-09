@@ -2855,9 +2855,9 @@ select {
 
 .invoice-selection-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  width: min(100%, 376px);
+  width: min(100%, 560px);
 }
 
 .invoice-selection-total {
@@ -2888,6 +2888,15 @@ select {
 
 .invoice-selection-revenue strong {
   color: #c4b5fd;
+}
+
+.invoice-count-total {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.invoice-count-total strong {
+  color: #93c5fd;
 }
 
 .invoice-filters {
