@@ -177,7 +177,16 @@ function mutateCompany(
   state: AccountingState,
   updater: (activeId: string) => AccountingState,
 ) {
-  return state.activeCompanyId ? updater(state.activeCompanyId) : state
+  const activeId =
+    state.companies.find((company) => company.id === state.activeCompanyId)
+      ?.id ??
+    state.companies[0]?.id ??
+    null
+  if (!activeId) return state
+  const updated = updater(activeId)
+  return updated.activeCompanyId === activeId
+    ? updated
+    : { ...updated, activeCompanyId: activeId }
 }
 
 interface AccountingPageProps {
@@ -697,6 +706,7 @@ export function InvoicesPanel({
   function submit(event: FormEvent) {
     event.preventDefault()
     submitAfterValidationRef.current = false
+    const wasEditing = editingId !== null
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const supplier = data.suppliers.find(
@@ -766,6 +776,12 @@ export function InvoicesPanel({
         }
       }),
     )
+    if (!wasEditing) {
+      setFilter('all')
+      setSupplierFilter('')
+      setSellerFilter('')
+      setMonthFilter('')
+    }
     const nextForm = editingId
       ? { ...emptyInvoice, sellerId: defaultSellerId, date: today() }
       : {
