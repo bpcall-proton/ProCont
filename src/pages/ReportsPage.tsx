@@ -110,7 +110,7 @@ function filenamePart(value: string) {
 
 export function ReportsPage() {
   const { state } = useAppStore()
-  const [period, setPeriod] = useState<Period>('month')
+  const [period, setPeriod] = useState<Period>('all')
   const [selected, setSelected] = useState(today())
   const [detail, setDetail] = useState<ReportDetail>(null)
   const source = activeAccounting(state.accounting)
