@@ -201,6 +201,18 @@ export class DriveRepository implements AppRepository {
     await this.saveKey('workspace', createWorkspaceState(state))
   }
 
+  async saveAll(state: AppState) {
+    await Promise.all(
+      state.accounting.companies.map((company) =>
+        this.saveKey(
+          `company-${company.id}`,
+          createCompanyState(state, company.id),
+        ),
+      ),
+    )
+    await this.saveKey('workspace', createWorkspaceState(state))
+  }
+
   subscribe(listener: (state: AppState) => void) {
     let cancelled = false
     let loading = false

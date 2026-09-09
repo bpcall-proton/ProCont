@@ -1646,20 +1646,6 @@ export function DashboardPage() {
                     <em>Apri dettaglio</em>
                   </button>
                   <button
-                    className="seller-cash-metric seller-cash-residual"
-                    onClick={() =>
-                      setSellerDetail({
-                        sellerId: seller.id,
-                        metric: 'cash-residual',
-                      })
-                    }
-                    type="button"
-                  >
-                    <span>Cash in mano attuale</span>
-                    <strong>{money(seller.cashResidual)}</strong>
-                    <em>Apri dettaglio</em>
-                  </button>
-                  <button
                     className="seller-stock-residual"
                     onClick={() =>
                       setSellerDetail({
@@ -1700,6 +1686,20 @@ export function DashboardPage() {
                     <span>Venit ceduto all'altro</span>
                     <strong>{money(-seller.revenueCeded)}</strong>
                     <em>Tolto dallo Stock residuo</em>
+                  </button>
+                  <button
+                    className="seller-cash-metric seller-cash-residual"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'cash-residual',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Cash in mano attuale</span>
+                    <strong>{money(seller.cashResidual)}</strong>
+                    <em>Apri dettaglio</em>
                   </button>
                 </div>
               </article>

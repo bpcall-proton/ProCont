@@ -167,4 +167,12 @@ export class LocalRepository implements AppRepository {
       createWorkspaceState(state),
     )
   }
+
+  async saveAll(state: AppState) {
+    await this.saveAllCompanyStates(state)
+    await this.saveState(
+      workspaceStorageId(this.companyId),
+      createWorkspaceState(state),
+    )
+  }
 }
