@@ -14,6 +14,69 @@ function statePath(companyId) {
   return path.join(app.getPath('userData'), `state-${companyId}.json`)
 }
 
+function safeBackupName(value) {
+  return (
+    value
+      .normalize('NFKD')
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+      .trim()
+      .slice(0, 120) || 'Archivio'
+  )
+}
+
+function backupLabel(filename, content) {
+  if (filename.endsWith('-workspace.json')) return 'Archivio generale'
+  try {
+    const state = JSON.parse(content)
+    const companies = state?.accounting?.companies
+    const activeCompanyId = state?.accounting?.activeCompanyId
+    const company = Array.isArray(companies)
+      ? companies.find((item) => item?.id === activeCompanyId) ?? companies[0]
+      : null
+    if (typeof company?.name === 'string' && company.name.trim()) {
+      return company.name
+    }
+  } catch {
+    return filename.replace(/^state-/, '').replace(/\.json$/, '')
+  }
+  return filename.replace(/^state-/, '').replace(/\.json$/, '')
+}
+
+async function backupLocalStates() {
+  const sourceDirectory = app.getPath('userData')
+  const backupDirectory = path.join(
+    path.dirname(app.getPath('exe')),
+    'Backup json',
+  )
+  await fs.mkdir(backupDirectory, { recursive: true })
+  const sourceFiles = (await fs.readdir(sourceDirectory))
+    .filter((filename) => /^state-.+\.json$/.test(filename))
+    .sort()
+  for (const filename of sourceFiles) {
+    const content = await fs.readFile(path.join(sourceDirectory, filename), 'utf8')
+    const label = safeBackupName(backupLabel(filename, content))
+    let sequence = 1
+    let destination = path.join(backupDirectory, `${label} ${sequence}.json`)
+    while (true) {
+      try {
+        await fs.writeFile(destination, content, {
+          encoding: 'utf8',
+          flag: 'wx',
+        })
+        await fs.chmod(destination, 0o444)
+        break
+      } catch (error) {
+        if (!error || error.code !== 'EEXIST') throw error
+        sequence += 1
+        destination = path.join(
+          backupDirectory,
+          `${label} ${sequence}.json`,
+        )
+      }
+    }
+  }
+}
+
 ipcMain.handle('local-state:load', async (_event, companyId) => {
   try {
     return await fs.readFile(statePath(companyId), 'utf8')
@@ -114,7 +177,12 @@ function createWindow() {
   void window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    await backupLocalStates()
+  } catch (error) {
+    console.error('Backup JSON automatico non riuscito', error)
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

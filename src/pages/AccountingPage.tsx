@@ -450,8 +450,12 @@ export function InvoicesPanel({
     (sum, invoice) => sum + invoice.theoreticalRevenue,
     0,
   )
+  const selectableInvoiceIds = invoices
+    .filter((invoice) => !invoice.settled)
+    .map((invoice) => invoice.id)
   const allVisibleInvoicesSelected =
-    invoices.length > 0 && selectedInvoices.length === invoices.length
+    selectableInvoiceIds.length > 0 &&
+    selectableInvoiceIds.every((id) => selectedInvoiceIds.includes(id))
   const invoiceTotal = roundMoney(
     numberValue(form.taxableAmount) + numberValue(form.vat),
   )
@@ -833,8 +837,11 @@ export function InvoicesPanel({
   }
 
   function toggleAllVisibleInvoices() {
-    setSelectedInvoiceIds(
-      allVisibleInvoicesSelected ? [] : invoices.map((invoice) => invoice.id),
+    const selectableIds = new Set(selectableInvoiceIds)
+    setSelectedInvoiceIds((current) =>
+      allVisibleInvoicesSelected
+        ? current.filter((id) => !selectableIds.has(id))
+        : [...new Set([...current, ...selectableInvoiceIds])],
     )
   }
 
@@ -1363,9 +1370,9 @@ export function InvoicesPanel({
         <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ' accounting-records-table-wrap'}`}>
           <table className="data-table">
             <thead><tr><th className="invoice-selection-column"><input
-              aria-label="Seleziona tutte le fatture visualizzate"
+              aria-label="Seleziona tutte le fatture non pagate visualizzate"
               checked={allVisibleInvoicesSelected}
-              disabled={invoices.length === 0}
+              disabled={selectableInvoiceIds.length === 0}
               onChange={toggleAllVisibleInvoices}
               type="checkbox"
             /></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Merce senza fattura</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
@@ -2011,11 +2018,20 @@ function ContactsPanel() {
           const linkedSeller =
             matchingSeller ??
             data.sellers.find((seller) => seller.id === supplier.linkedSellerId)
-          const total = invoices.reduce(
-            (sum, item) => sum + item.total + item.unregisteredGoods,
+          const turnover = invoices.reduce(
+            (sum, item) => sum + item.total,
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></div>
+          const outstanding = invoices.reduce(
+            (sum, item) =>
+              sum +
+              Math.max(
+                0,
+                item.total - (item.settled ? item.total : item.paidAmount),
+              ),
+            0,
+          )
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
         })}</div>
       </article>
     </section>

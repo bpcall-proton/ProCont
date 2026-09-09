@@ -3003,6 +3003,32 @@ select {
   grid-template-columns: minmax(160px, 1fr) auto auto;
 }
 
+.supplier-card-financials {
+  min-width: 180px;
+}
+
+.supplier-turnover {
+  font-size: 0.68rem;
+}
+
+.supplier-turnover strong {
+  font-size: 0.78rem;
+}
+
+.supplier-outstanding {
+  display: grid;
+  justify-items: end;
+}
+
+.supplier-outstanding strong {
+  font-size: 1.5rem;
+}
+
+.supplier-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .supplier-payment-terms {
   display: flex;
   align-items: center;
@@ -3337,6 +3363,10 @@ select {
 
   .supplier-card {
     grid-template-columns: 1fr;
+  }
+
+  .supplier-outstanding {
+    justify-items: start;
   }
 
   .record-card > span:last-child {
