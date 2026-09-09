@@ -2398,10 +2398,23 @@ select {
 .production-breakdown {
   display: grid;
   gap: 18px;
+  order: 1;
 }
 
 .production-breakdown .panel-heading {
   margin-bottom: 0;
+}
+
+.production-entry-panel {
+  order: 2;
+}
+
+.production-history-panel {
+  order: 3;
+}
+
+.production-settings-panel {
+  order: 4;
 }
 
 .wide-field {
