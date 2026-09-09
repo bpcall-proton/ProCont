@@ -545,13 +545,18 @@ export function InvoicesPanel({
 
   function selectInvoiceSupplier(supplierId: string) {
     const supplier = data.suppliers.find((item) => item.id === supplierId)
+    const previousSupplier = data.suppliers.find(
+      (item) => item.id === form.supplierId,
+    )
     setForm((current) => ({
       ...current,
       supplierId,
-      settled: supplier?.cashUnregisteredByDefault
+      settled:
+        supplier?.cashUnregisteredByDefault ||
+        supplier?.paidOnDeliveryByDefault
         ? true
-        : data.suppliers.find((item) => item.id === current.supplierId)
-              ?.cashUnregisteredByDefault
+        : previousSupplier?.cashUnregisteredByDefault ||
+            previousSupplier?.paidOnDeliveryByDefault
           ? false
           : current.settled,
       vat: supplier?.cashUnregisteredByDefault ? '' : current.vat,
@@ -747,7 +752,10 @@ export function InvoicesPanel({
           supplierId: repeatSupplier ? form.supplierId : '',
           sellerId: repeatSeller ? form.sellerId : '',
           date: repeatDate ? form.date : today(),
-          settled: repeatSupplier && automaticCashPurchase,
+          settled:
+            repeatSupplier &&
+            (automaticCashPurchase ||
+              (selectedSupplier?.paidOnDeliveryByDefault ?? false)),
         }
     setEditingId(null)
     setForm(nextForm)
@@ -1064,7 +1072,7 @@ export function InvoicesPanel({
         <div className="form-grid accounting-fields">
           <label>Data<input data-invoice-entry ref={dateInputRef} type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>Venditore<select data-invoice-entry ref={sellerInputRef} value={form.sellerId} onChange={(event) => setForm({ ...form, sellerId: event.target.value })}><option value="">Nessuno</option>{data.sellers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => selectInvoiceSupplier(event.target.value)}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}{item.cashUnregisteredByDefault ? ' · cash senza fattura' : ''}</option>)}</select></label>
+          <label>Fornitore<select data-invoice-entry ref={supplierInputRef} value={form.supplierId} onChange={(event) => selectInvoiceSupplier(event.target.value)}><option value="">Nessuno</option>{data.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}{item.cashUnregisteredByDefault ? ' · cash senza fattura' : item.paidOnDeliveryByDefault ? ' · pagato alla consegna' : ''}</option>)}</select></label>
           <label>Numero fattura<input data-invoice-entry placeholder="Facoltativo" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label>
           <label>Descrizione<input data-invoice-entry value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           <label>Categoria<select data-invoice-entry value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -1796,6 +1804,7 @@ function ContactsPanel() {
   const [supplierLinkedSellerId, setSupplierLinkedSellerId] = useState('')
   const [supplierCashUnregistered, setSupplierCashUnregistered] =
     useState(false)
+  const [supplierPaidOnDelivery, setSupplierPaidOnDelivery] = useState(false)
   const [supplierPaymentTerms, setSupplierPaymentTerms] = useState(
     String(defaultPaymentTermsDays),
   )
@@ -1890,6 +1899,7 @@ function ContactsPanel() {
                     linkedSellerId,
                     paymentTermsDays,
                     cashUnregisteredByDefault: supplierCashUnregistered,
+                    paidOnDeliveryByDefault: supplierPaidOnDelivery,
                   }
                 : supplier,
             )
@@ -1906,6 +1916,7 @@ function ContactsPanel() {
                 notes: '',
                 paymentTermsDays,
                 cashUnregisteredByDefault: supplierCashUnregistered,
+                paidOnDeliveryByDefault: supplierPaidOnDelivery,
               },
               ...current.suppliers,
             ],
@@ -1931,6 +1942,7 @@ function ContactsPanel() {
     setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
     setSupplierCashUnregistered(false)
+    setSupplierPaidOnDelivery(false)
   }
 
   function editSupplier(supplier: AccountingSupplier) {
@@ -1946,6 +1958,7 @@ function ContactsPanel() {
     )
     setSupplierPaymentTerms(String(supplier.paymentTermsDays))
     setSupplierCashUnregistered(supplier.cashUnregisteredByDefault)
+    setSupplierPaidOnDelivery(supplier.paidOnDeliveryByDefault)
   }
 
   function cancelSupplierEdit() {
@@ -1955,6 +1968,7 @@ function ContactsPanel() {
     setSupplierLinkedSellerId('')
     setSupplierPaymentTerms(String(defaultPaymentTermsDays))
     setSupplierCashUnregistered(false)
+    setSupplierPaidOnDelivery(false)
   }
 
   return (
@@ -2007,6 +2021,10 @@ function ContactsPanel() {
             <input checked={supplierCashUnregistered} onChange={(event) => setSupplierCashUnregistered(event.target.checked)} type="checkbox" />
             Sempre cash senza fattura
           </label>
+          <label className="supplier-cash-default contact-checkbox-field">
+            <input checked={supplierPaidOnDelivery} onChange={(event) => setSupplierPaidOnDelivery(event.target.checked)} type="checkbox" />
+            Già pagato alla consegna
+          </label>
           <div className="contact-form-actions">
             <button className="button button-primary" type="submit">{editingSupplierId ? 'Salva modifiche' : 'Aggiungi fornitore'}</button>
             {editingSupplierId ? <button type="button" onClick={cancelSupplierEdit}>Annulla</button> : null}
@@ -2034,7 +2052,7 @@ function ContactsPanel() {
               ),
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : supplier.paidOnDeliveryByDefault ? 'Già pagato alla consegna' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
         })}</div>
       </article>
     </section>
