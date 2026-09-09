@@ -29,6 +29,7 @@ import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StoresPage } from './pages/StoresPage'
+import { TakingsArchivePage } from './pages/TakingsArchivePage'
 import type { InterfaceLanguage } from './domain/types'
 import { AppStoreProvider } from './store/AppStoreProvider'
 import { useAppStore } from './store/AppStoreContext'
@@ -37,6 +38,7 @@ type Page =
   | 'dashboard'
   | 'accounting'
   | 'invoiceArchive'
+  | 'takingsArchive'
   | 'paidInvoices'
   | 'products'
   | 'production'
@@ -188,10 +190,16 @@ function Workspace() {
   const pages = {
     dashboard: <DashboardPage />,
     accounting: (
-      <AccountingPage onOpenInvoiceArchive={() => setPage('invoiceArchive')} />
+      <AccountingPage
+        onOpenInvoiceArchive={() => setPage('invoiceArchive')}
+        onOpenTakingsArchive={() => setPage('takingsArchive')}
+      />
     ),
     invoiceArchive: (
       <InvoiceArchivePage onBack={() => setPage('accounting')} />
+    ),
+    takingsArchive: (
+      <TakingsArchivePage onBack={() => setPage('accounting')} />
     ),
     products: <ProductsPage />,
     production: <ProductionPage key={activeCompany?.id} />,

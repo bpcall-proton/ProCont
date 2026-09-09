@@ -1,27 +1,27 @@
-import { InvoicesPanel } from './AccountingPage'
+import { TakingsPanel } from './AccountingPage'
 import { useAppStore } from '../store/AppStoreContext'
 
-interface InvoiceArchivePageProps {
+interface TakingsArchivePageProps {
   onBack: () => void
 }
 
-export function InvoiceArchivePage({ onBack }: InvoiceArchivePageProps) {
+export function TakingsArchivePage({ onBack }: TakingsArchivePageProps) {
   const { state, setActiveAccountingCompany } = useAppStore()
 
   return (
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">GESTIONE FATTURE</span>
-          <h1>Archivio fatture</h1>
+          <span className="eyebrow">GESTIONE INCASSI</span>
+          <h1>Incassi</h1>
           <p>
-            Registra una nuova fattura, poi scorri, filtra, modifica o gestisci
-            i pagamenti dell'azienda selezionata.
+            Registra un nuovo incasso e consulta lo storico dell'azienda
+            selezionata.
           </p>
         </div>
         <div className="invoice-archive-actions">
           <select
-            aria-label="Azienda archivio fatture"
+            aria-label="Azienda archivio incassi"
             onChange={(event) =>
               setActiveAccountingCompany(event.target.value)
             }
@@ -43,8 +43,7 @@ export function InvoiceArchivePage({ onBack }: InvoiceArchivePageProps) {
         </div>
       </header>
 
-      <InvoicesPanel
-        archiveOnly
+      <TakingsPanel
         key={state.accounting.activeCompanyId ?? 'no-company'}
       />
     </div>
