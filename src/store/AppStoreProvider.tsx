@@ -451,12 +451,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     async function hydrate() {
-      const local = await localRepository.load()
-      const initial = local ?? createInitialState(companyId)
+      const initial = createInitialState(companyId)
       const requestedMode =
         readCloudRecovery(companyId)
           ? 'cloud'
-          : readModePreference(companyId) ?? initial.dataSettings.mode
+          : readModePreference(companyId) ?? 'local'
       const repository: AppRepository =
         requestedMode === 'cloud' ? cloudRepository : localRepository
       activeRepository.current = repository
@@ -487,6 +486,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           if (repository.mode === 'cloud') {
             writeCloudRecovery(companyId, false)
           }
+          writeModePreference(companyId, repository.mode)
           applyState(hydrated)
           unsubscribe.current()
           unsubscribe.current = subscribeToRepository(repository)
