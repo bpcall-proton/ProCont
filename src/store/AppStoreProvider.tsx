@@ -797,7 +797,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           return
         }
         setSyncState('saving')
-        setSyncMessage('Migrazione archivio in corso')
+        setSyncMessage('Apertura archivio in corso')
         const destination: AppRepository =
           mode === 'cloud' ? cloudRepository : localRepository
         let migrated = withTimestamp({
@@ -806,16 +806,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         })
         try {
           await saveQueue.current
-          if (mode === 'cloud') {
-            const remote = await destination.load()
-            if (remote) {
-              migrated = withTimestamp({
-                ...remote,
-                dataSettings: { ...remote.dataSettings, mode },
-              })
-            }
+          const stored = await destination.load()
+          if (stored) {
+            migrated = withTimestamp({
+              ...stored,
+              dataSettings: { ...stored.dataSettings, mode },
+            })
+          } else {
+            await destination.save(migrated)
           }
-          await destination.save(migrated)
           unsubscribe.current()
           activeRepository.current = destination
           syncRecovery.current = 'retry-save'
@@ -835,6 +834,61 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setSyncMessage(
             error instanceof Error ? error.message : 'Migrazione non riuscita',
           )
+        }
+      },
+      copyLocalDataToCloud: async () => {
+        if (!window.desktopApp) {
+          return {
+            ok: false,
+            error: 'Questa funzione è disponibile soltanto nell’EXE.',
+          }
+        }
+        if (!driveServiceConfigured || !loadDriveSession()) {
+          return {
+            ok: false,
+            error: 'Collega Google Drive prima di copiare i dati.',
+          }
+        }
+        setSyncState('saving')
+        setSyncMessage('Copia dei dati locali nel Cloud in corso')
+        try {
+          await saveQueue.current
+          const local = await localRepository.load()
+          if (!local) {
+            throw new Error('Archivio locale non trovato: nessun dato modificato')
+          }
+          await cloudRepository.load()
+          const migrated = withTimestamp({
+            ...local,
+            dataSettings: { ...local.dataSettings, mode: 'cloud' },
+          })
+          await cloudRepository.save(migrated)
+          unsubscribe.current()
+          activeRepository.current = cloudRepository
+          syncRecovery.current = 'retry-save'
+          unsubscribe.current =
+            cloudRepository.subscribe?.((next) => applyState(next)) ??
+            (() => undefined)
+          writeModePreference(companyId, 'cloud')
+          writeCloudRecovery(companyId, false)
+          applyState(migrated)
+          setSyncState('saved')
+          setSyncMessage('Dati locali copiati nel Cloud')
+          return { ok: true }
+        } catch (error) {
+          setSyncState('error')
+          setSyncMessage(
+            error instanceof Error
+              ? error.message
+              : 'Copia nel Cloud non riuscita',
+          )
+          return {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Copia nel Cloud non riuscita',
+          }
         }
       },
       setDriveBackup: (enabled: boolean) => {

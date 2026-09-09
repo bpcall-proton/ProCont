@@ -55,6 +55,7 @@ export interface AppStoreContextValue {
   ) => { ok: boolean; error?: string }
   removeStore: (storeId: string) => void
   setDataMode: (mode: DataMode) => Promise<void>
+  copyLocalDataToCloud: () => Promise<{ ok: boolean; error?: string }>
   setDriveBackup: (enabled: boolean) => void
   setDriveFolder: (folder: string) => void
   selectDriveFolder: () => Promise<void>

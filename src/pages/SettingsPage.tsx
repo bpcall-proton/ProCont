@@ -162,6 +162,7 @@ export function SettingsPage() {
     updateAccountingCompany,
     updateAccounting,
     setDataMode,
+    copyLocalDataToCloud,
     setDriveBackup,
     selectDriveFolder,
     syncDriveBackup,
@@ -183,6 +184,7 @@ export function SettingsPage() {
   const [companyMessage, setCompanyMessage] = useState<string | null>(null)
   const [googleMessage, setGoogleMessage] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [localCloudBusy, setLocalCloudBusy] = useState(false)
   const [cloudRevisionBusy, setCloudRevisionBusy] = useState(false)
   const [cloudRevisionMessage, setCloudRevisionMessage] = useState<
     string | null
@@ -408,11 +410,8 @@ export function SettingsPage() {
           refreshDriveConnection()
           setDrivePairing(null)
           setGoogleMessage(
-            `${session.email} collegato. Sincronizzazione Drive attiva.`,
+            `${session.email} collegato. Scegli quale archivio usare.`,
           )
-          if (dataSettings.mode !== 'cloud') {
-            await setDataMode('cloud')
-          }
           return
         }
         await new Promise((resolve) => window.setTimeout(resolve, 2_000))
@@ -438,6 +437,39 @@ export function SettingsPage() {
     setDrivePairing(null)
     setGoogleMessage('Dispositivo scollegato da Google Drive.')
     setGoogleBusy(false)
+  }
+
+  async function confirmLocalDataToCloud() {
+    if (
+      !window.confirm(
+        'Copiare nel Cloud i JSON locali dell’EXE? I file locali non saranno modificati.',
+      ) ||
+      !window.confirm(
+        'Conferma: i dati locali sostituiranno la versione attuale nel Cloud.',
+      )
+    ) {
+      return
+    }
+    setLocalCloudBusy(true)
+    const result = await copyLocalDataToCloud()
+    setGoogleMessage(
+      result.ok
+        ? 'Dati locali copiati nel Cloud. EXE e sito possono ora usare lo stesso archivio.'
+        : result.error ?? 'Copia nel Cloud non riuscita.',
+    )
+    setLocalCloudBusy(false)
+  }
+
+  async function openCloudData() {
+    if (
+      dataSettings.mode !== 'cloud' &&
+      !window.confirm(
+        'Aprire i dati già presenti nel Cloud? Per inviare i dati corretti dell’EXE usa invece “Copia dati locali nel Cloud”.',
+      )
+    ) {
+      return
+    }
+    await setDataMode('cloud')
   }
 
   async function loadCloudRevisions() {
@@ -964,7 +996,7 @@ export function SettingsPage() {
                 dataSettings.mode === 'cloud' ? 'selected' : ''
               }`}
               disabled={!cloudAvailable}
-              onClick={() => void setDataMode('cloud')}
+              onClick={() => void openCloudData()}
               type="button"
             >
               <span className="mode-icon violet-icon">
@@ -1053,6 +1085,27 @@ export function SettingsPage() {
               {googleMessage}
             </p>
           )}
+          {window.desktopApp && driveAccountEmail && (
+            <div className="cloud-recovery-panel">
+              <div>
+                <strong>Copia sicura EXE → Cloud</strong>
+                <small>
+                  Usa i JSON locali dell’EXE come dati corretti, senza
+                  modificarli, e sostituisce la versione presente nel Cloud.
+                </small>
+              </div>
+              <button
+                className="button button-primary"
+                disabled={localCloudBusy}
+                onClick={() => void confirmLocalDataToCloud()}
+                type="button"
+              >
+                {localCloudBusy
+                  ? 'Copia in corso...'
+                  : 'Copia dati locali nel Cloud'}
+              </button>
+            </div>
+          )}
           {driveAccountEmail && accountingCompany && (
             <div className="cloud-recovery-panel">
               <div>
@@ -1120,7 +1173,10 @@ export function SettingsPage() {
           <ol className="settings-steps">
             <li>Premi “Accedi con Google Drive”.</li>
             <li>Apri Google e autorizza l'accesso ai file dell'app.</li>
-            <li>Torna qui: la modalità Cloud si attiva automaticamente.</li>
+            <li>
+              Nell’EXE usa “Copia dati locali nel Cloud” se i dati corretti
+              sono sul PC.
+            </li>
             <li>
               Ripeti una sola volta su ogni nuovo PC, Android, iPhone o tablet.
             </li>
