@@ -180,6 +180,8 @@ export interface AccountingSeller {
   phone: string
   city: string
   notes: string
+  autoSelect: boolean
+  overviewPriority: number
 }
 
 export interface AccountingSupplier {
