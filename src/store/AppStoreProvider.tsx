@@ -24,11 +24,12 @@ import type {
   InterfaceTextColor,
   SyncState,
 } from '../domain/types'
-import { DriveRepository } from '../data/driveRepository'
 import {
-  driveServiceConfigured,
-  loadDriveSession,
-} from '../data/driveSession'
+  configuredDriveFolderLabel,
+  DriveFolderRepository,
+  openDriveDataFolder,
+  selectDriveDataFolder,
+} from '../data/driveFolderRepository'
 import { LocalRepository } from '../data/localRepository'
 import type { AppRepository } from '../data/repository'
 import {
@@ -314,7 +315,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [companyId],
   )
   const cloudRepository = useMemo(
-    () => new DriveRepository(companyId),
+    () => new DriveFolderRepository(companyId),
     [companyId],
   )
   const [state, setState] = useState<AppState>(() =>
@@ -328,31 +329,33 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     useState<LocalStoragePaths | null>(null)
   const [driveSyncState, setDriveSyncState] = useState<SyncState>('idle')
   const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null)
-  const [driveAccountEmail, setDriveAccountEmail] = useState(
-    () => loadDriveSession()?.email ?? null,
-  )
+  const [driveFolderLocation, setDriveFolderLocation] =
+    useState<string | null>(null)
   const activeRepository = useRef<AppRepository>(localRepository)
   const saveQueue = useRef(Promise.resolve())
   const stateRef = useRef(state)
   const syncRecovery = useRef<'reload-cloud' | 'retry-save'>('retry-save')
   const unsubscribe = useRef<() => void>(() => undefined)
 
+  const refreshDriveFolder = useCallback(async () => {
+    setDriveFolderLocation(await configuredDriveFolderLabel())
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void configuredDriveFolderLabel().then((folder) => {
+      if (active) setDriveFolderLocation(folder)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const applyState = useCallback((next: AppState) => {
     const summarized = withActiveCompanySummaries(next)
     stateRef.current = summarized
     setState(summarized)
   }, [])
-
-  const mirrorCloudStateLocally = useCallback(
-    async (next: AppState, createBackup = false) => {
-      if (!window.desktopApp) return
-      await localRepository.saveAll(next)
-      if (createBackup) {
-        await window.desktopApp.backupLocalStates()
-      }
-    },
-    [localRepository],
-  )
 
   const subscribeToRepository = useCallback(
     (repository: AppRepository) =>
@@ -369,19 +372,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             return
           }
           applyState(next)
-          try {
-            await mirrorCloudStateLocally(next)
-          } catch (error) {
-            setSyncState('error')
-            setSyncMessage(
-              error instanceof Error
-                ? `Cloud aggiornato, copia locale non riuscita: ${error.message}`
-                : 'Cloud aggiornato, copia locale non riuscita',
-            )
-          }
         })
       }) ?? (() => undefined),
-    [applyState, mirrorCloudStateLocally],
+    [applyState],
   )
 
   const saveDriveBackup = useCallback(async (next: AppState) => {
@@ -432,9 +425,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       .then(async () => {
         const repository = activeRepository.current
         await repository.save(next)
-        if (repository.mode === 'cloud') {
-          await mirrorCloudStateLocally(next)
-        }
       })
       .then(async () => {
         setSyncState('saved')
@@ -446,7 +436,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           error instanceof Error ? error.message : 'Salvataggio non riuscito',
         )
       })
-  }, [mirrorCloudStateLocally, saveDriveBackup])
+  }, [saveDriveBackup])
 
   useEffect(() => {
     let cancelled = false
@@ -467,20 +457,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           )
         }
         const source = remote ?? initial
-        let mirrorError: unknown = null
         const hydrated: AppState = {
           ...source,
           dataSettings: {
             ...source.dataSettings,
             mode: repository.mode,
           },
-        }
-        if (repository.mode === 'cloud') {
-          try {
-            await mirrorCloudStateLocally(hydrated, true)
-          } catch (error) {
-            mirrorError = error
-          }
         }
         if (!cancelled) {
           if (repository.mode === 'cloud') {
@@ -490,14 +472,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           applyState(hydrated)
           unsubscribe.current()
           unsubscribe.current = subscribeToRepository(repository)
-          if (mirrorError) {
-            setSyncState('error')
-            setSyncMessage(
-              mirrorError instanceof Error
-                ? `Dati Cloud caricati, copia locale non riuscita: ${mirrorError.message}`
-                : 'Dati Cloud caricati, copia locale non riuscita',
-            )
-          }
         }
       } catch (error) {
         syncRecovery.current =
@@ -541,7 +515,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     cloudRepository,
     companyId,
     localRepository,
-    mirrorCloudStateLocally,
     subscribeToRepository,
   ])
 
@@ -590,11 +563,31 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       localStoragePaths,
       driveSyncState,
       driveSyncMessage,
-      driveAccountEmail,
-      cloudAvailable:
-        driveServiceConfigured && driveAccountEmail !== null,
-      refreshDriveConnection: () => {
-        setDriveAccountEmail(loadDriveSession()?.email ?? null)
+      driveFolderLocation,
+      cloudAvailable: driveFolderLocation !== null,
+      refreshDriveFolder,
+      selectPrimaryDriveFolder: async () => {
+        try {
+          const folder = await selectDriveDataFolder()
+          if (!folder) return { ok: false }
+          setDriveFolderLocation(folder)
+          return { ok: true }
+        } catch (error) {
+          return {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Scelta della cartella Google Drive non riuscita',
+          }
+        }
+      },
+      openPrimaryDriveFolder: async () => {
+        const error = await openDriveDataFolder()
+        if (error) {
+          setSyncState('error')
+          setSyncMessage(error)
+        }
       },
       retrySync: async () => {
         if (syncRecovery.current === 'reload-cloud') {
@@ -612,7 +605,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ...remote,
               dataSettings: { ...remote.dataSettings, mode: 'cloud' },
             }
-            await mirrorCloudStateLocally(hydrated, true)
             unsubscribe.current()
             activeRepository.current = cloudRepository
             unsubscribe.current = subscribeToRepository(cloudRepository)
@@ -639,9 +631,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           .then(async () => {
             const repository = activeRepository.current
             await repository.save(next)
-            if (repository.mode === 'cloud') {
-              await mirrorCloudStateLocally(next)
-            }
           })
           .then(async () => {
             setSyncState('saved')
@@ -910,11 +899,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (mode === state.dataSettings.mode) return
         if (
           mode === 'cloud' &&
-          (!driveServiceConfigured || !loadDriveSession())
+          driveFolderLocation === null
         ) {
           setSyncState('error')
           setSyncMessage(
-            'Collega Google Drive nelle Impostazioni per usare il cloud',
+            'Seleziona la cartella Google Drive nelle Impostazioni',
           )
           return
         }
@@ -932,7 +921,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               dataSettings: { ...stored.dataSettings, mode },
             })
             if (mode === 'cloud') {
-              await mirrorCloudStateLocally(migrated, true)
+              if (window.desktopApp) {
+                await window.desktopApp.backupLocalStates()
+              }
             }
           } else {
             if (mode === 'cloud') {
@@ -973,14 +964,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             error: 'Questa funzione è disponibile soltanto nell’EXE.',
           }
         }
-        if (!driveServiceConfigured || !loadDriveSession()) {
+        if (driveFolderLocation === null) {
           return {
             ok: false,
-            error: 'Collega Google Drive prima di copiare i dati.',
+            error: 'Seleziona la cartella Google Drive prima di copiare i dati.',
           }
         }
         setSyncState('saving')
-        setSyncMessage('Copia dei dati locali nel Cloud in corso')
+        setSyncMessage('Copia dei dati locali nella cartella Google Drive')
         try {
           await saveQueue.current
           const local = await localRepository.load()
@@ -993,7 +984,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             dataSettings: { ...local.dataSettings, mode: 'cloud' },
           })
           await cloudRepository.saveAll(migrated)
-          await mirrorCloudStateLocally(migrated, true)
+          await window.desktopApp.backupLocalStates()
           unsubscribe.current()
           activeRepository.current = cloudRepository
           syncRecovery.current = 'retry-save'
@@ -1002,21 +993,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           writeCloudRecovery(companyId, false)
           applyState(migrated)
           setSyncState('saved')
-          setSyncMessage('Dati locali copiati nel Cloud')
+          setSyncMessage('Dati locali copiati nella cartella Google Drive')
           return { ok: true }
         } catch (error) {
           setSyncState('error')
           setSyncMessage(
             error instanceof Error
               ? error.message
-              : 'Copia nel Cloud non riuscita',
+              : 'Copia nella cartella Google Drive non riuscita',
           )
           return {
             ok: false,
             error:
               error instanceof Error
                 ? error.message
-                : 'Copia nel Cloud non riuscita',
+                : 'Copia nella cartella Google Drive non riuscita',
           }
         }
       },
@@ -1134,9 +1125,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           const persistence = saveQueue.current.then(async () => {
             const repository = activeRepository.current
             await repository.save(resetState)
-            if (repository.mode === 'cloud') {
-              await mirrorCloudStateLocally(resetState)
-            }
           })
           saveQueue.current = persistence.catch(() => undefined)
           await persistence
@@ -1177,9 +1165,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           const persistence = saveQueue.current.then(async () => {
             const repository = activeRepository.current
             await repository.save(restored)
-            if (repository.mode === 'cloud') {
-              await mirrorCloudStateLocally(restored)
-            }
           })
           saveQueue.current = persistence.catch(() => undefined)
           await persistence
@@ -1298,7 +1283,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       enqueueSave,
       loading,
       localRepository,
-      mirrorCloudStateLocally,
       saveDriveBackup,
       state,
       subscribeToRepository,
@@ -1307,7 +1291,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       localStoragePaths,
       driveSyncMessage,
       driveSyncState,
-      driveAccountEmail,
+      driveFolderLocation,
+      refreshDriveFolder,
       updateState,
       companyId,
     ],

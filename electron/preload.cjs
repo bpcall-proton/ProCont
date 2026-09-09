@@ -14,6 +14,16 @@ contextBridge.exposeInMainWorld('desktopApp', {
     ipcRenderer.invoke('local-state:open-backup-directory'),
   backupLocalStates: () =>
     ipcRenderer.invoke('local-state:backup-now'),
+  getDriveDataFolder: () =>
+    ipcRenderer.invoke('drive-data:get-folder'),
+  selectDriveDataFolder: () =>
+    ipcRenderer.invoke('drive-data:select-folder'),
+  openDriveDataFolder: () =>
+    ipcRenderer.invoke('drive-data:open-folder'),
+  loadDriveState: (storageId) =>
+    ipcRenderer.invoke('drive-data:load', storageId),
+  saveDriveState: (storageId, content) =>
+    ipcRenderer.invoke('drive-data:save', storageId, content),
   selectDriveBackupFolder: () =>
     ipcRenderer.invoke('drive-backup:select-folder'),
   saveDriveBackup: (folderPath, filename, content) =>

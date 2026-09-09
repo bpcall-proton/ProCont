@@ -1,65 +1,40 @@
 # Configurazione integrazioni
 
-Queste integrazioni richiedono un backend pubblico HTTPS sempre attivo. Non
-inserire token, chiavi o credenziali nel repository, nel browser o nel backup
-JSON.
+Non inserire token, chiavi o credenziali nel repository, nel browser o nel
+backup JSON.
 
 ## Google Drive
 
-Google Drive è l'archivio sincronizzato dell'applicazione. Il servizio
-`drive_sync` conserva il refresh token cifrato lato server; i dispositivi
-ricevono soltanto un token di dispositivo revocabile, mai salvato nel JSON
-contabile.
-
-### Configurazione Google Cloud
-
-1. Crea un progetto su https://console.cloud.google.com/.
-2. Abilita **Google Drive API**.
-3. Configura la schermata di consenso OAuth e aggiungi l'account proprietario
-   come utente autorizzato.
-4. Crea una credenziale **ID client OAuth → Applicazione web**.
-5. Come URI di reindirizzamento inserisci
-   `https://SERVIZIO/oauth/google/callback`.
-6. Annota `client_id` e `client_secret`.
-
-### Avvio del servizio
-
-Il servizio consigliato è il Cloudflare Worker in
-`drive_sync/cloudflare`. Usa il binding KV `PROCONT_KV` e questi segreti:
-
-- `GOOGLE_OAUTH_CLIENT_ID`
-- `GOOGLE_OAUTH_CLIENT_SECRET`
-- `TOKEN_ENCRYPTION_KEY` (32 byte in Base64)
-- `APP_SECRET`
-
-Il backend FastAPI in `drive_sync` resta disponibile come alternativa e
-richiede anche `PUBLIC_BASE_URL`; in questo caso `TOKEN_ENCRYPTION_KEY` è una
-chiave Fernet.
-
-Il frontend richiede solo `VITE_DRIVE_SYNC_URL` con l'indirizzo pubblico del
-servizio.
+Google Drive è l'archivio sincronizzato dell'applicazione. Non serve un
+backend: Google Drive Desktop sincronizza la cartella tra i PC.
 
 ### Collegamento dei dispositivi
 
+1. Installa Google Drive Desktop e attendi che la cartella sia sincronizzata.
+2. Apri **Impostazioni → Modalità dati**.
+3. Premi **Scegli cartella** e seleziona la cartella dei JSON.
+4. Seleziona **Google Drive** per usare quei file come archivio principale.
+5. Ripeti la scelta su ogni nuovo PC.
+
+L'EXE accede direttamente al filesystem. Il sito può usare la stessa cartella
+solo dopo un gesto esplicito dell'utente e su un browser desktop compatibile
+con File System Access API. Se il browser non supporta questa funzione,
+l'applicazione mostra un errore e resta disponibile l'import/export manuale.
+
+I file sono:
+
+- `workspace.json`, con configurazione e elenco aziende;
+- `company-<id>.json`, uno per ciascuna azienda.
+
+Le scritture dell'EXE sono atomiche. La cartella `Backup json` contiene copie
+progressive e immutabili separate dalla sorgente principale.
+
+Procedura iniziale se i dati corretti sono ancora nell'archivio locale:
+
 1. Apri **Impostazioni → Modalità dati**.
-2. Premi **Accedi con Google Drive**.
-3. Autorizza l'account Google nella pagina che si apre.
-4. Torna nell'applicazione: il collegamento viene rilevato automaticamente.
-5. Seleziona **Cloud** per usare Drive come archivio principale.
-6. Ripeti la procedura una volta su ogni dispositivo (PC, Android, iPhone,
-   tablet): l'account Google resta lo stesso e i dati sono condivisi.
-
-I file vengono creati nella cartella Drive `Fatture Incassi Pro`, con un JSON
-per ogni azienda più l'archivio comune. Il salvataggio verifica la revisione
-del file e blocca la scrittura se un altro dispositivo ha già aggiornato i
-dati.
-
-La cartella locale di Google Drive per desktop resta disponibile come backup
-aggiuntivo nell'EXE.
-
-Documentazione:
-- https://developers.google.com/identity/protocols/oauth2/web-server
-- https://developers.google.com/workspace/drive/api/guides/manage-uploads
+2. Scegli la cartella Google Drive.
+3. Usa **Copia dati locali nella cartella** e conferma due volte.
+4. Da quel momento usa la modalità **Google Drive**.
 
 ## WhatsApp Business Cloud API
 

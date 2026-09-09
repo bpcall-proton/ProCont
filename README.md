@@ -51,17 +51,19 @@ npm run desktop:pack
 
 ## Google Drive
 
-La build di produzione usa il Cloudflare Worker configurato in
-`.env.production`. Per lo sviluppo si può sovrascrivere
-`VITE_DRIVE_SYNC_URL` in `.env.local`. Senza servizio configurato
-l'applicazione resta in modalità locale. Il collegamento si esegue una volta
-per dispositivo da
-**Impostazioni → Accedi con Google Drive**; il refresh token resta cifrato nel
-servizio e non viene mai scritto nel backup contabile.
+L'EXE usa direttamente una cartella locale sincronizzata da Google Drive
+Desktop. Da **Impostazioni → Modalità dati → Scegli cartella** si seleziona la
+cartella che contiene `workspace.json` e un file `company-<id>.json` per ogni
+azienda. Il sito usa gli stessi file tramite l'autorizzazione esplicita del
+browser alla cartella; Chrome o Edge desktop sono consigliati.
+
+Non è richiesto alcun servizio intermedio. Su browser mobili che non
+consentono la scelta di una cartella si usa l'importazione/esportazione
+manuale.
 
 Firebase resta utilizzabile solo per l'accesso email/password esistente.
 
-Il backend WhatsApp/Viber, l'OCR e il collegamento Google Drive vengono
+Il backend WhatsApp/Viber e l'OCR vengono
 implementati nelle fasi successive. Contabilità Pro può già essere importata
 dalle Impostazioni usando il backup JSON v5; l'esportazione compatibile
 permette anche di mantenere una copia riapribile nel programma precedente.
