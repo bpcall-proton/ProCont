@@ -1846,16 +1846,25 @@ select {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 10%, transparent);
   text-align: left;
+}
+
+.backup-path-open {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
 }
 
-.backup-path-card:hover,
-.backup-path-card:focus-visible {
+.backup-path-card:has(.backup-path-open:hover),
+.backup-path-card:has(.backup-path-open:focus-visible) {
   border-color: var(--red);
-  background: color-mix(in srgb, var(--red) 17%, transparent);
 }
 
-.backup-path-card span {
+.backup-path-open span {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1875,6 +1884,19 @@ select {
 .backup-path-card code {
   overflow-wrap: anywhere;
   font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.backup-now-button {
+  justify-self: start;
+  border-color: color-mix(in srgb, var(--red) 70%, transparent);
+  color: var(--red);
+}
+
+.backup-result {
+  color: var(--red);
+  font-size: 0.72rem;
+  font-style: normal;
   font-weight: 800;
 }
 

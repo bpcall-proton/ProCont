@@ -11,6 +11,7 @@ interface Window {
       activeCompanyId: string,
     ) => Promise<{ workspace: string; company: string; backup: string }>
     openBackupDirectory: () => Promise<string | null>
+    backupLocalStates: () => Promise<{ directory: string; files: number }>
     selectDriveBackupFolder: () => Promise<string | null>
     saveDriveBackup: (
       folderPath: string,
