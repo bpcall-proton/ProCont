@@ -1836,6 +1836,48 @@ select {
   font-size: 0.78rem;
 }
 
+.backup-path-card {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--red) 65%, transparent);
+  border-radius: 11px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.backup-path-card:hover,
+.backup-path-card:focus-visible {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 17%, transparent);
+}
+
+.backup-path-card span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.backup-path-card small,
+.backup-path-card code {
+  color: var(--red);
+}
+
+.backup-path-card small {
+  font-size: 0.67rem;
+  font-weight: 900;
+}
+
+.backup-path-card code {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -2984,176 +3026,281 @@ select {
   box-shadow: 0 1px 0 var(--border);
 }
 
-.accounting-compact-scope {
+.app-compact-scope {
   padding: clamp(14px, 2vw, 26px);
 }
 
-.accounting-compact-scope .page-stack {
+.app-compact-scope .page-stack {
   gap: 14px;
 }
 
-.accounting-compact-scope .page-heading {
+.app-compact-scope .page-heading {
   gap: 14px;
 }
 
-.accounting-compact-scope .page-heading h1 {
+.app-compact-scope .page-heading h1 {
   margin: 2px 0 4px;
   font-size: clamp(1.55rem, 3vw, 2.2rem);
 }
 
-.accounting-compact-scope .page-heading p {
+.app-compact-scope .page-heading p {
   max-width: 760px;
   font-size: 0.8rem;
   line-height: 1.35;
 }
 
-.accounting-compact-scope .accounting-sticky-header {
+.app-compact-scope .stats-grid,
+.app-compact-scope .dashboard-grid,
+.app-compact-scope .settings-grid,
+.app-compact-scope .dashboard-seller-grid,
+.app-compact-scope .store-grid,
+.app-compact-scope .review-document-grid {
+  gap: 10px;
+}
+
+.app-compact-scope .stat-card {
+  min-height: 108px;
+  padding: 13px 15px;
+  border-radius: 13px;
+}
+
+.app-compact-scope .stat-card strong {
+  margin: 7px 0 5px;
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+}
+
+.app-compact-scope .dashboard-seller-card {
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.app-compact-scope .dashboard-seller-heading {
+  gap: 8px;
+}
+
+.app-compact-scope .dashboard-seller-metrics {
+  gap: 5px;
+}
+
+.app-compact-scope .dashboard-seller-metrics button {
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.app-compact-scope .accounting-sticky-header {
   gap: 7px;
   padding: 6px 0;
 }
 
-.accounting-compact-scope .panel {
+.app-compact-scope .panel {
   padding: 14px;
   border-radius: 14px;
 }
 
-.accounting-compact-scope .panel-heading {
+.app-compact-scope .panel-heading {
   gap: 10px;
   margin-bottom: 10px;
 }
 
-.accounting-compact-scope .panel-heading h2,
-.accounting-compact-scope .table-toolbar h2 {
+.app-compact-scope .panel-heading h2,
+.app-compact-scope .table-toolbar h2 {
   margin-bottom: 0;
   font-size: 1.1rem;
 }
 
-.accounting-compact-scope .accounting-form,
-.accounting-compact-scope .payment-panel {
+.app-compact-scope .accounting-form,
+.app-compact-scope .payment-panel {
   gap: 10px;
 }
 
-.accounting-compact-scope .form-grid,
-.accounting-compact-scope .accounting-fields,
-.accounting-compact-scope .invoice-filters,
-.accounting-compact-scope .invoice-entry-options,
-.accounting-compact-scope .form-stack,
-.accounting-compact-scope .contact-columns,
-.accounting-compact-scope .report-columns,
-.accounting-compact-scope .report-filter,
-.accounting-compact-scope .expense-grid,
-.accounting-compact-scope .verification-entry-grid,
-.accounting-compact-scope .verification-history-grid,
-.accounting-compact-scope .verification-stats,
-.accounting-compact-scope .entity-stat-grid,
-.accounting-compact-scope .report-kpis {
+.app-compact-scope .form-grid,
+.app-compact-scope .accounting-fields,
+.app-compact-scope .invoice-filters,
+.app-compact-scope .invoice-entry-options,
+.app-compact-scope .form-stack,
+.app-compact-scope .contact-columns,
+.app-compact-scope .report-columns,
+.app-compact-scope .report-filter,
+.app-compact-scope .expense-grid,
+.app-compact-scope .verification-entry-grid,
+.app-compact-scope .verification-history-grid,
+.app-compact-scope .verification-stats,
+.app-compact-scope .entity-stat-grid,
+.app-compact-scope .report-kpis {
   gap: 9px;
 }
 
-.accounting-compact-scope label {
+.app-compact-scope label {
   gap: 4px;
   font-size: 0.74rem;
 }
 
-.accounting-compact-scope input,
-.accounting-compact-scope select,
-.accounting-compact-scope .button {
+.app-compact-scope input,
+.app-compact-scope select,
+.app-compact-scope .button {
   min-height: 36px;
 }
 
-.accounting-compact-scope input,
-.accounting-compact-scope select {
+.app-compact-scope input,
+.app-compact-scope select {
   padding: 0 9px;
   border-radius: 8px;
 }
 
-.accounting-compact-scope .button {
+.app-compact-scope textarea {
+  padding: 9px;
+  border-radius: 8px;
+}
+
+.app-compact-scope .button {
   padding: 0 12px;
 }
 
-.accounting-compact-scope .form-actions {
+.app-compact-scope .form-actions {
   margin-top: 4px;
 }
 
-.accounting-compact-scope .section-tabs {
+.app-compact-scope .section-tabs {
   gap: 5px;
   padding: 4px;
   border-radius: 10px;
 }
 
-.accounting-compact-scope .section-tabs button {
+.app-compact-scope .section-tabs button {
   padding: 7px 11px;
   border-radius: 8px;
   font-size: 0.78rem;
 }
 
-.accounting-compact-scope .stats-strip {
+.app-compact-scope .stats-strip {
   gap: 7px;
 }
 
-.accounting-compact-scope .stats-strip > div {
+.app-compact-scope .stats-strip > div {
   gap: 3px;
   padding: 10px 12px;
   border-radius: 10px;
 }
 
-.accounting-compact-scope .table-toolbar {
+.app-compact-scope .table-toolbar {
   gap: 9px;
   margin-bottom: 9px;
 }
 
-.accounting-compact-scope .data-table th,
-.accounting-compact-scope .data-table td {
+.app-compact-scope .data-table th,
+.app-compact-scope .data-table td {
   padding: 8px;
   font-size: 0.76rem;
 }
 
-.accounting-compact-scope .record-card {
+.app-compact-scope .record-card {
   gap: 9px;
   padding: 9px 10px;
   border-radius: 9px;
 }
 
-.accounting-compact-scope .entity-stat-card,
-.accounting-compact-scope .report-kpis > div,
-.accounting-compact-scope .verification-stats > div {
+.app-compact-scope .empty-state {
+  min-height: 150px;
+}
+
+.app-compact-scope .large-empty {
+  min-height: 280px;
+}
+
+.app-compact-scope .store-card-top {
+  margin-bottom: 12px;
+}
+
+.app-compact-scope .seller-block {
+  margin: 12px 0 10px;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.app-compact-scope .review-document-card,
+.app-compact-scope .review-document-body {
+  gap: 10px;
+}
+
+.app-compact-scope .mode-options,
+.app-compact-scope .company-list,
+.app-compact-scope .company-create-form {
+  gap: 8px;
+}
+
+.app-compact-scope .mode-card {
+  min-height: 120px;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 11px;
+}
+
+.app-compact-scope .mode-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.app-compact-scope .company-list button {
+  padding: 9px 11px;
+  border-radius: 9px;
+}
+
+.app-compact-scope .setting-row {
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.app-compact-scope .report-card {
+  min-height: 82px;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.app-compact-scope .entity-stat-card,
+.app-compact-scope .report-kpis > div,
+.app-compact-scope .verification-stats > div {
   padding: 10px 12px;
   border-radius: 10px;
 }
 
-.accounting-compact-scope .inline-create-form {
+.app-compact-scope .inline-create-form {
   margin-bottom: 10px;
 }
 
-.accounting-compact-scope .production-wage-filter {
+.app-compact-scope .production-wage-filter {
   gap: 8px;
 }
 
-.accounting-compact-scope .production-wage-filter > div {
+.app-compact-scope .production-wage-filter > div {
   gap: 3px;
   min-height: 54px;
   padding: 8px 10px;
   border-radius: 9px;
 }
 
-.accounting-compact-scope .production-wage-form {
+.app-compact-scope .production-wage-form {
   gap: 8px;
 }
 
-.accounting-compact-scope .production-worker-rates,
-.accounting-compact-scope .production-worker-totals {
+.app-compact-scope .production-worker-rates,
+.app-compact-scope .production-worker-totals {
   gap: 7px;
   margin-top: 8px;
 }
 
-.accounting-compact-scope .production-worker-rate,
-.accounting-compact-scope .production-worker-totals > div {
+.app-compact-scope .production-worker-rate,
+.app-compact-scope .production-worker-totals > div {
   gap: 3px;
   padding: 9px 10px;
   border-radius: 9px;
 }
 
-.accounting-compact-scope .production-wage-history {
+.app-compact-scope .production-wage-history {
   gap: 6px;
 }
 

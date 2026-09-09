@@ -14,6 +14,10 @@ function statePath(companyId) {
   return path.join(app.getPath('userData'), `state-${companyId}.json`)
 }
 
+function backupDirectoryPath() {
+  return path.join(path.dirname(app.getPath('exe')), 'Backup json')
+}
+
 function safeBackupName(value) {
   return (
     value
@@ -44,10 +48,7 @@ function backupLabel(filename, content) {
 
 async function backupLocalStates() {
   const sourceDirectory = app.getPath('userData')
-  const backupDirectory = path.join(
-    path.dirname(app.getPath('exe')),
-    'Backup json',
-  )
+  const backupDirectory = backupDirectoryPath()
   await fs.mkdir(backupDirectory, { recursive: true })
   const sourceFiles = (await fs.readdir(sourceDirectory))
     .filter((filename) => /^state-.+\.json$/.test(filename))
@@ -111,8 +112,21 @@ ipcMain.handle(
   (_event, accountId, activeCompanyId) => ({
     workspace: statePath(`${accountId}-workspace`),
     company: statePath(`company-${activeCompanyId}`),
+    backup: backupDirectoryPath(),
   }),
 )
+
+ipcMain.handle('local-state:open-backup-directory', async () => {
+  const backupDirectory = backupDirectoryPath()
+  try {
+    await fs.mkdir(backupDirectory, { recursive: true })
+    return (await shell.openPath(backupDirectory)) || null
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : 'Impossibile aprire la cartella Backup json'
+  }
+})
 
 ipcMain.handle('drive-backup:select-folder', async () => {
   const result = await dialog.showOpenDialog({

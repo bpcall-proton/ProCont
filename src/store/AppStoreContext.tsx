@@ -25,6 +25,7 @@ export type AccountingCompanyInput = Omit<AccountingCompany, 'id'>
 export interface LocalStoragePaths {
   workspace: string
   company: string
+  backup: string
 }
 
 export interface AppStoreContextValue {

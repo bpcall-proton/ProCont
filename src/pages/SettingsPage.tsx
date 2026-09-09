@@ -1028,6 +1028,21 @@ export function SettingsPage() {
                 <em>Archivio generale: {localStoragePaths.workspace}</em>
               )}
             </div>
+            {window.desktopApp && localStoragePaths?.backup && (
+              <button
+                className="backup-path-card"
+                onClick={() =>
+                  void window.desktopApp?.openBackupDirectory()
+                }
+                type="button"
+              >
+                <span>
+                  <small>CARTELLA BACKUP JSON</small>
+                  <strong>Clicca per aprire la cartella</strong>
+                </span>
+                <code>{localStoragePaths.backup}</code>
+              </button>
+            )}
             <div
               aria-label={`Sincronizzazione Cloud: ${cloudStatusLabel}`}
               className={`cloud-status-compact ${cloudStatusClass}`}
