@@ -185,6 +185,8 @@ export function SettingsPage() {
   const [googleMessage, setGoogleMessage] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
   const [localCloudBusy, setLocalCloudBusy] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupMessage, setBackupMessage] = useState<string | null>(null)
   const [cloudRevisionBusy, setCloudRevisionBusy] = useState(false)
   const [cloudRevisionMessage, setCloudRevisionMessage] = useState<
     string | null
@@ -257,6 +259,28 @@ export function SettingsPage() {
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
           : 'Sincronizzato'
+
+  async function runLocalBackup() {
+    if (!window.desktopApp) return
+    setBackupBusy(true)
+    setBackupMessage(null)
+    try {
+      const result = await window.desktopApp.backupLocalStates()
+      setBackupMessage(
+        result.files > 0
+          ? `Backup completato: ${result.files} file salvati.`
+          : 'Cartella creata. Non sono ancora presenti archivi JSON da copiare.',
+      )
+    } catch (error) {
+      setBackupMessage(
+        error instanceof Error
+          ? error.message
+          : 'Backup JSON non riuscito.',
+      )
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   function setVerificationEnabled(enabled: boolean) {
     if (!companyId) return
@@ -1029,19 +1053,34 @@ export function SettingsPage() {
               )}
             </div>
             {window.desktopApp && localStoragePaths?.backup && (
-              <button
-                className="backup-path-card"
-                onClick={() =>
-                  void window.desktopApp?.openBackupDirectory()
-                }
-                type="button"
-              >
-                <span>
-                  <small>CARTELLA BACKUP JSON</small>
-                  <strong>Clicca per aprire la cartella</strong>
-                </span>
-                <code>{localStoragePaths.backup}</code>
-              </button>
+              <div className="backup-path-card">
+                <button
+                  className="backup-path-open"
+                  onClick={() =>
+                    void window.desktopApp?.openBackupDirectory()
+                  }
+                  type="button"
+                >
+                  <span>
+                    <small>CARTELLA BACKUP JSON</small>
+                    <strong>Clicca per aprire la cartella</strong>
+                  </span>
+                  <code>{localStoragePaths.backup}</code>
+                </button>
+                <button
+                  className="button backup-now-button"
+                  disabled={backupBusy}
+                  onClick={() => void runLocalBackup()}
+                  type="button"
+                >
+                  {backupBusy
+                    ? 'Backup in corso...'
+                    : 'Crea cartella / Esegui backup ora'}
+                </button>
+                {backupMessage && (
+                  <em className="backup-result">{backupMessage}</em>
+                )}
+              </div>
             )}
             <div
               aria-label={`Sincronizzazione Cloud: ${cloudStatusLabel}`}

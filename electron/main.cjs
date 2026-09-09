@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { constants } = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
@@ -14,8 +15,25 @@ function statePath(companyId) {
   return path.join(app.getPath('userData'), `state-${companyId}.json`)
 }
 
-function backupDirectoryPath() {
+function preferredBackupDirectoryPath() {
   return path.join(path.dirname(app.getPath('exe')), 'Backup json')
+}
+
+function fallbackBackupDirectoryPath() {
+  return path.join(app.getPath('userData'), 'Backup json')
+}
+
+async function backupDirectoryPath() {
+  const preferred = preferredBackupDirectoryPath()
+  try {
+    await fs.mkdir(preferred, { recursive: true })
+    await fs.access(preferred, constants.W_OK)
+    return preferred
+  } catch {
+    const fallback = fallbackBackupDirectoryPath()
+    await fs.mkdir(fallback, { recursive: true })
+    return fallback
+  }
 }
 
 function safeBackupName(value) {
@@ -48,8 +66,7 @@ function backupLabel(filename, content) {
 
 async function backupLocalStates() {
   const sourceDirectory = app.getPath('userData')
-  const backupDirectory = backupDirectoryPath()
-  await fs.mkdir(backupDirectory, { recursive: true })
+  const backupDirectory = await backupDirectoryPath()
   const sourceFiles = (await fs.readdir(sourceDirectory))
     .filter((filename) => /^state-.+\.json$/.test(filename))
     .sort()
@@ -75,6 +92,10 @@ async function backupLocalStates() {
         )
       }
     }
+  }
+  return {
+    directory: backupDirectory,
+    files: sourceFiles.length,
   }
 }
 
@@ -109,17 +130,16 @@ ipcMain.handle('local-state:delete', async (_event, companyId) => {
 
 ipcMain.handle(
   'local-state:paths',
-  (_event, accountId, activeCompanyId) => ({
+  async (_event, accountId, activeCompanyId) => ({
     workspace: statePath(`${accountId}-workspace`),
     company: statePath(`company-${activeCompanyId}`),
-    backup: backupDirectoryPath(),
+    backup: await backupDirectoryPath(),
   }),
 )
 
 ipcMain.handle('local-state:open-backup-directory', async () => {
-  const backupDirectory = backupDirectoryPath()
+  const backupDirectory = await backupDirectoryPath()
   try {
-    await fs.mkdir(backupDirectory, { recursive: true })
     return (await shell.openPath(backupDirectory)) || null
   } catch (error) {
     return error instanceof Error
@@ -127,6 +147,8 @@ ipcMain.handle('local-state:open-backup-directory', async () => {
       : 'Impossibile aprire la cartella Backup json'
   }
 })
+
+ipcMain.handle('local-state:backup-now', () => backupLocalStates())
 
 ipcMain.handle('drive-backup:select-folder', async () => {
   const result = await dialog.showOpenDialog({
