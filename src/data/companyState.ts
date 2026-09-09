@@ -1,5 +1,11 @@
 import type { AppState } from '../domain/types'
 
+function uniqueByKey<Item>(items: Item[], key: (item: Item) => string) {
+  const unique = new Map<string, Item>()
+  items.forEach((item) => unique.set(key(item), item))
+  return [...unique.values()]
+}
+
 function emptyFinancial() {
   return {
     invoiceValue: 0,
@@ -27,6 +33,10 @@ export function createWorkspaceState(state: AppState): AppState {
     financial: emptyFinancial(),
     accounting: {
       ...state.accounting,
+      companies: uniqueByKey(
+        state.accounting.companies,
+        (company) => company.id,
+      ),
       invoices: [],
       takings: [],
       sellers: [],
@@ -135,48 +145,76 @@ export function mergeCompanyStates(
   workspace: AppState,
   companies: AppState[],
 ): AppState {
+  const workspaceCompanies = uniqueByKey(
+    workspace.accounting.companies,
+    (company) => company.id,
+  )
+  const workspaceCompanyIds = new Set(
+    workspaceCompanies.map((company) => company.id),
+  )
+  const isolatedCompanies = companies.flatMap((state) => {
+    const companyId = state.accounting.activeCompanyId
+    if (!companyId || !workspaceCompanyIds.has(companyId)) return []
+    return [createCompanyState(state, companyId)]
+  })
+  const companyItems = <Item extends { id: string; companyId: string }>(
+    select: (state: AppState) => Item[],
+  ) =>
+    uniqueByKey(
+      isolatedCompanies.flatMap(select),
+      (item) => `${item.companyId}:${item.id}`,
+    )
+  const companySettings = <Item extends { companyId: string }>(
+    select: (state: AppState) => Item[],
+  ) =>
+    uniqueByKey(
+      isolatedCompanies.flatMap(select),
+      (item) => item.companyId,
+    )
+
   return {
     ...workspace,
-    stores: companies.flatMap((state) => state.stores),
-    sellers: companies.flatMap((state) => state.sellers),
-    reviewDocuments: companies.flatMap((state) => state.reviewDocuments),
+    stores: companyItems((state) => state.stores),
+    sellers: companyItems((state) => state.sellers),
+    reviewDocuments: companyItems((state) => state.reviewDocuments),
     accounting: {
       ...workspace.accounting,
-      invoices: companies.flatMap((state) => state.accounting.invoices),
-      takings: companies.flatMap((state) => state.accounting.takings),
-      sellers: companies.flatMap((state) => state.accounting.sellers),
-      suppliers: companies.flatMap((state) => state.accounting.suppliers),
-      products: companies.flatMap((state) => state.accounting.products),
-      rentals: companies.flatMap((state) => state.accounting.rentals),
-      accountantInvoices: companies.flatMap(
+      companies: workspaceCompanies,
+      invoices: companyItems((state) => state.accounting.invoices),
+      takings: companyItems((state) => state.accounting.takings),
+      sellers: companyItems((state) => state.accounting.sellers),
+      suppliers: companyItems((state) => state.accounting.suppliers),
+      products: companyItems((state) => state.accounting.products),
+      rentals: companyItems((state) => state.accounting.rentals),
+      accountantInvoices: companyItems(
         (state) => state.accounting.accountantInvoices,
       ),
-      expenses: companies.flatMap((state) => state.accounting.expenses),
-      productionSettings: companies.flatMap(
+      expenses: companyItems((state) => state.accounting.expenses),
+      productionSettings: companyItems(
         (state) => state.accounting.productionSettings,
       ),
-      productionEntries: companies.flatMap(
+      productionEntries: companyItems(
         (state) => state.accounting.productionEntries,
       ),
-      productionViewSettings: companies.flatMap(
+      productionViewSettings: companySettings(
         (state) => state.accounting.productionViewSettings,
       ),
-      productionWorkerRates: companies.flatMap(
+      productionWorkerRates: companyItems(
         (state) => state.accounting.productionWorkerRates,
       ),
-      productionWorkEntries: companies.flatMap(
+      productionWorkEntries: companyItems(
         (state) => state.accounting.productionWorkEntries,
       ),
-      verificationSettings: companies.flatMap(
+      verificationSettings: companySettings(
         (state) => state.accounting.verificationSettings,
       ),
-      verificationStockLoads: companies.flatMap(
+      verificationStockLoads: companyItems(
         (state) => state.accounting.verificationStockLoads,
       ),
-      verificationProductionEntries: companies.flatMap(
+      verificationProductionEntries: companyItems(
         (state) => state.accounting.verificationProductionEntries,
       ),
-      verificationTransfers: companies.flatMap(
+      verificationTransfers: companyItems(
         (state) => state.accounting.verificationTransfers,
       ),
     },

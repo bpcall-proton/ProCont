@@ -458,14 +458,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ? 'cloud'
           : readModePreference(companyId) ?? initial.dataSettings.mode
       const repository: AppRepository =
-        requestedMode === 'cloud' &&
-        driveServiceConfigured &&
-        loadDriveSession()
-          ? cloudRepository
-          : localRepository
+        requestedMode === 'cloud' ? cloudRepository : localRepository
       activeRepository.current = repository
       try {
         const remote = await repository.load()
+        if (repository.mode === 'cloud' && !remote) {
+          throw new Error(
+            'Archivio Cloud non trovato. I dati locali non sono stati caricati al suo posto.',
+          )
+        }
         const source = remote ?? initial
         let mirrorError: unknown = null
         const hydrated: AppState = {
@@ -498,18 +499,32 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             )
           }
         }
-      } catch {
-        activeRepository.current = localRepository
+      } catch (error) {
         syncRecovery.current =
           repository.mode === 'cloud' ? 'reload-cloud' : 'retry-save'
         writeCloudRecovery(companyId, repository.mode === 'cloud')
-        writeModePreference(companyId, 'local')
         if (!cancelled) {
-          applyState({
-            ...initial,
-            dataSettings: { ...initial.dataSettings, mode: 'local' },
-          })
-          setSyncMessage('Cloud non disponibile: modalità locale ripristinata')
+          if (repository.mode === 'cloud') {
+            const unavailable = createInitialState(companyId)
+            activeRepository.current = cloudRepository
+            writeModePreference(companyId, 'cloud')
+            applyState({
+              ...unavailable,
+              dataSettings: { ...initial.dataSettings, mode: 'cloud' },
+            })
+          } else {
+            activeRepository.current = localRepository
+            writeModePreference(companyId, 'local')
+            applyState({
+              ...initial,
+              dataSettings: { ...initial.dataSettings, mode: 'local' },
+            })
+          }
+          setSyncMessage(
+            error instanceof Error
+              ? error.message
+              : 'Archivio dati non disponibile',
+          )
           setSyncState('error')
         }
       } finally {
@@ -549,6 +564,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const updateState = useCallback(
     (updater: (current: AppState) => AppState) => {
+      if (
+        activeRepository.current.mode === 'cloud' &&
+        syncRecovery.current === 'reload-cloud'
+      ) {
+        setSyncState('error')
+        setSyncMessage(
+          'Archivio Cloud non caricato: ricaricalo prima di modificare i dati.',
+        )
+        return
+      }
       const next = withTimestamp(updater(stateRef.current))
       applyState(next)
       enqueueSave(next)
@@ -897,10 +922,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setSyncMessage('Apertura archivio in corso')
         const destination: AppRepository =
           mode === 'cloud' ? cloudRepository : localRepository
-        let migrated = withTimestamp({
-          ...state,
-          dataSettings: { ...state.dataSettings, mode },
-        })
+        let migrated: AppState
         try {
           await saveQueue.current
           const stored = await destination.load()
@@ -914,10 +936,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             }
           } else {
             if (mode === 'cloud') {
-              await cloudRepository.saveAll(migrated)
-              await mirrorCloudStateLocally(migrated, true)
+              throw new Error(
+                'Archivio Cloud non trovato. Usa "Copia i dati locali nel Cloud" per crearlo senza mescolare le sorgenti.',
+              )
             } else {
-              await destination.save(migrated)
+              const emptyLocal = createInitialState(companyId)
+              migrated = withTimestamp({
+                ...emptyLocal,
+                dataSettings: { ...state.dataSettings, mode: 'local' },
+              })
+              await localRepository.saveAll(migrated)
             }
           }
           unsubscribe.current()
@@ -930,9 +958,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setSyncState('saved')
           setSyncMessage('Modalità dati aggiornata')
         } catch (error) {
-          syncRecovery.current =
-            mode === 'cloud' ? 'reload-cloud' : 'retry-save'
-          writeCloudRecovery(companyId, mode === 'cloud')
+          syncRecovery.current = 'retry-save'
+          writeCloudRecovery(companyId, false)
           setSyncState('error')
           setSyncMessage(
             error instanceof Error ? error.message : 'Migrazione non riuscita',

@@ -52,8 +52,11 @@ export class CloudRepository implements AppRepository {
   }
 
   private async saveAllCompanyStates(state: AppState) {
+    const companies = new Map(
+      state.accounting.companies.map((company) => [company.id, company]),
+    )
     await Promise.all(
-      state.accounting.companies.map((company) =>
+      [...companies.values()].map((company) =>
         setDoc(
           this.companyReference(company.id),
           createCompanyState(state, company.id),
@@ -70,15 +73,19 @@ export class CloudRepository implements AppRepository {
         this.companyId,
       )
       if (!workspace) return null
-      const snapshots = await Promise.all(
-        workspace.accounting.companies.map((company) =>
-          getDoc(this.companyReference(company.id)),
-        ),
+      const workspaceCompanies = new Map(
+        workspace.accounting.companies.map((company) => [company.id, company]),
       )
-      const companies = snapshots.flatMap((snapshot) => {
+      const snapshots = await Promise.all(
+        [...workspaceCompanies.values()].map(async (company) => ({
+          company,
+          snapshot: await getDoc(this.companyReference(company.id)),
+        })),
+      )
+      const companies = snapshots.flatMap(({ company, snapshot }) => {
         if (!snapshot.exists()) return []
-        const state = normalizeStoredState(snapshot.data(), this.companyId)
-        return state ? [state] : []
+        const state = normalizeStoredState(snapshot.data(), company.id)
+        return state ? [createCompanyState(state, company.id)] : []
       })
       const legacySnapshot = await getDoc(this.legacyReference())
       if (legacySnapshot.exists()) {
@@ -126,25 +133,31 @@ export class CloudRepository implements AppRepository {
         companySubscriptions.forEach((unsubscribe) => unsubscribe())
         companySubscriptions = []
         const states = new Map<string, AppState>()
-        const pending = new Set(
-          workspace.accounting.companies.map((company) => company.id),
+        const workspaceCompanies = new Map(
+          workspace.accounting.companies.map((company) => [company.id, company]),
         )
+        const pending = new Set(workspaceCompanies.keys())
         const emit = () => {
           if (pending.size === 0) {
             listener(mergeCompanyStates(workspace, [...states.values()]))
           }
         }
 
-        workspace.accounting.companies.forEach((company) => {
+        workspaceCompanies.forEach((company) => {
           companySubscriptions.push(
             onSnapshot(this.companyReference(company.id), (companySnapshot) => {
               pending.delete(company.id)
               if (companySnapshot.exists()) {
                 const state = normalizeStoredState(
                   companySnapshot.data(),
-                  this.companyId,
+                  company.id,
                 )
-                if (state) states.set(company.id, state)
+                if (state) {
+                  states.set(
+                    company.id,
+                    createCompanyState(state, company.id),
+                  )
+                }
               } else {
                 states.delete(company.id)
               }
