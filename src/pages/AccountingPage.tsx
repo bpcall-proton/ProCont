@@ -1374,6 +1374,11 @@ export function InvoicesPanel({
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
           <div className="invoice-selection-summary" aria-live="polite">
+            <div className="invoice-selection-total invoice-count-total">
+              <small>Fatture registrate</small>
+              <strong>{invoices.length}</strong>
+              <span>Nel filtro corrente</span>
+            </div>
             <div className="invoice-selection-total">
               <small>Totale fatture selezionate</small>
               <strong>{money(selectedInvoiceTotal)}</strong>

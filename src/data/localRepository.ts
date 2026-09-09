@@ -117,8 +117,11 @@ export class LocalRepository implements AppRepository {
   }
 
   private async saveAllCompanyStates(state: AppState) {
+    const companies = new Map(
+      state.accounting.companies.map((company) => [company.id, company]),
+    )
     await Promise.all(
-      state.accounting.companies.map((company) =>
+      [...companies.values()].map((company) =>
         this.saveState(
           companyStorageId(company.id),
           createCompanyState(state, company.id),
@@ -130,10 +133,14 @@ export class LocalRepository implements AppRepository {
   async load() {
     const workspace = await this.loadState(workspaceStorageId(this.companyId))
     if (workspace) {
+      const companies = new Map(
+        workspace.accounting.companies.map((company) => [company.id, company]),
+      )
       const companyStates = await Promise.all(
-        workspace.accounting.companies.map((company) =>
-          this.loadState(companyStorageId(company.id)),
-        ),
+        [...companies.values()].map(async (company) => {
+          const state = await this.loadState(companyStorageId(company.id))
+          return state ? createCompanyState(state, company.id) : null
+        }),
       )
       const state = mergeCompanyStates(
         workspace,

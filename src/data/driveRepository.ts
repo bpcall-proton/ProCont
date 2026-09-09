@@ -166,7 +166,7 @@ export class DriveRepository implements AppRepository {
     }
   }
 
-  private async loadKey(key: string) {
+  private async loadKey(key: string, companyId = this.accountId) {
     const response = await this.request(key)
     if (response.status === 404) return null
     if (!response.ok) {
@@ -175,7 +175,7 @@ export class DriveRepository implements AppRepository {
     }
     const stored = (await response.json()) as StoredState
     this.revisions.set(key, stored.revision)
-    return normalizeStoredState(stored.content, this.accountId)
+    return normalizeStoredState(stored.content, companyId)
   }
 
   private async saveKey(key: string, state: AppState) {
@@ -203,10 +203,14 @@ export class DriveRepository implements AppRepository {
   private async loadState(attempt = 0): Promise<AppState | null> {
     const workspace = await this.loadKey('workspace')
     if (!workspace) return null
+    const companies = new Map(
+      workspace.accounting.companies.map((company) => [company.id, company]),
+    )
     const companyStates = await Promise.all(
-      workspace.accounting.companies.map((company) =>
-        this.loadKey(`company-${company.id}`),
-      ),
+      [...companies.values()].map(async (company) => {
+        const state = await this.loadKey(`company-${company.id}`, company.id)
+        return state ? createCompanyState(state, company.id) : null
+      }),
     )
     const cloudWriteInProgress = companyStates.some(
       (state) =>
@@ -249,8 +253,11 @@ export class DriveRepository implements AppRepository {
 
   async saveAll(state: AppState) {
     await this.runExclusive(async () => {
+      const companies = new Map(
+        state.accounting.companies.map((company) => [company.id, company]),
+      )
       await Promise.all(
-        state.accounting.companies.map((company) =>
+        [...companies.values()].map((company) =>
           this.saveKey(
             `company-${company.id}`,
             createCompanyState(state, company.id),
