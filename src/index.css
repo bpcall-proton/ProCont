@@ -2151,6 +2151,12 @@ select {
   justify-self: end;
 }
 
+.accounting-archive-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

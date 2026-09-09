@@ -182,10 +182,12 @@ function mutateCompany(
 
 interface AccountingPageProps {
   onOpenInvoiceArchive: () => void
+  onOpenTakingsArchive: () => void
 }
 
 export function AccountingPage({
   onOpenInvoiceArchive,
+  onOpenTakingsArchive,
 }: AccountingPageProps) {
   const {
     state,
@@ -245,13 +247,22 @@ export function AccountingPage({
             </p>
           </div>
           <div className="accounting-heading-actions">
-            <button
-              className="button button-primary"
-              onClick={onOpenInvoiceArchive}
-              type="button"
-            >
-              Archivio fatture
-            </button>
+            <div className="accounting-archive-actions">
+              <button
+                className="button button-primary"
+                onClick={onOpenInvoiceArchive}
+                type="button"
+              >
+                Archivio fatture
+              </button>
+              <button
+                className="button button-primary"
+                onClick={onOpenTakingsArchive}
+                type="button"
+              >
+                Incassi
+              </button>
+            </div>
             <div className="company-switcher">
               <select
                 aria-label="Azienda contabile attiva"
@@ -1014,7 +1025,6 @@ export function InvoicesPanel({
         </section>
       )}
 
-      {(!archiveOnly || editingId) && (
       <form
         className="panel accounting-form"
         onInvalidCapture={() => {
@@ -1312,7 +1322,6 @@ export function InvoicesPanel({
           </div>
         )}
       </form>
-      )}
 
       {!archiveOnly && (
       <form className="panel compact-form" onSubmit={distributeAdvance}>
@@ -1481,7 +1490,7 @@ const emptyTaking = {
   unregisteredGoods: '',
 }
 
-function TakingsPanel() {
+export function TakingsPanel() {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const defaultSellerId =
