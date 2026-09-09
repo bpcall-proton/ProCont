@@ -234,11 +234,7 @@ async function deviceAccount(request, env) {
   if (!account) {
     throw new HttpError(401, 'Collegamento dispositivo non valido')
   }
-  await writeKvJson(env, deviceKey(hash), {
-    ...device,
-    lastSeenAt: Math.floor(Date.now() / 1000),
-  })
-  return { account, deviceToken, hash }
+  return { account }
 }
 
 async function googleTokenRequest(parameters) {
