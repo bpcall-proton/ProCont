@@ -334,6 +334,39 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState(summarized)
   }, [])
 
+  const mirrorCloudStateLocally = useCallback(
+    async (next: AppState, createBackup = false) => {
+      if (!window.desktopApp) return
+      await localRepository.saveAll(next)
+      if (createBackup) {
+        await window.desktopApp.backupLocalStates()
+      }
+    },
+    [localRepository],
+  )
+
+  const subscribeToRepository = useCallback(
+    (repository: AppRepository) =>
+      repository.subscribe?.((next) => {
+        if (repository.mode !== 'cloud') {
+          applyState(next)
+          return
+        }
+        void mirrorCloudStateLocally(next)
+          .then(() => applyState(next))
+          .catch((error: unknown) => {
+            applyState(next)
+            setSyncState('error')
+            setSyncMessage(
+              error instanceof Error
+                ? `Cloud aggiornato, copia locale non riuscita: ${error.message}`
+                : 'Cloud aggiornato, copia locale non riuscita',
+            )
+          })
+      }) ?? (() => undefined),
+    [applyState, mirrorCloudStateLocally],
+  )
+
   const saveDriveBackup = useCallback(async (next: AppState) => {
     const driveFolder = next.dataSettings.driveFolder.trim()
     if (
@@ -379,7 +412,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setSyncState('saving')
     setSyncMessage(null)
     saveQueue.current = saveQueue.current
-      .then(() => activeRepository.current.save(next))
+      .then(async () => {
+        const repository = activeRepository.current
+        await repository.save(next)
+        if (repository.mode === 'cloud') {
+          await mirrorCloudStateLocally(next)
+        }
+      })
       .then(async () => {
         setSyncState('saved')
         await saveDriveBackup(next)
@@ -390,7 +429,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           error instanceof Error ? error.message : 'Salvataggio non riuscito',
         )
       })
-  }, [saveDriveBackup])
+  }, [mirrorCloudStateLocally, saveDriveBackup])
 
   useEffect(() => {
     let cancelled = false
@@ -411,6 +450,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       try {
         const remote = await repository.load()
         const source = remote ?? initial
+        let mirrorError: unknown = null
         const hydrated: AppState = {
           ...source,
           dataSettings: {
@@ -418,15 +458,28 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             mode: repository.mode,
           },
         }
+        if (repository.mode === 'cloud') {
+          try {
+            await mirrorCloudStateLocally(hydrated, true)
+          } catch (error) {
+            mirrorError = error
+          }
+        }
         if (!cancelled) {
           if (repository.mode === 'cloud') {
             writeCloudRecovery(companyId, false)
           }
           applyState(hydrated)
           unsubscribe.current()
-          unsubscribe.current =
-            repository.subscribe?.((next) => applyState(next)) ??
-            (() => undefined)
+          unsubscribe.current = subscribeToRepository(repository)
+          if (mirrorError) {
+            setSyncState('error')
+            setSyncMessage(
+              mirrorError instanceof Error
+                ? `Dati Cloud caricati, copia locale non riuscita: ${mirrorError.message}`
+                : 'Dati Cloud caricati, copia locale non riuscita',
+            )
+          }
         }
       } catch {
         activeRepository.current = localRepository
@@ -451,7 +504,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       cancelled = true
       unsubscribe.current()
     }
-  }, [applyState, cloudRepository, companyId, localRepository])
+  }, [
+    applyState,
+    cloudRepository,
+    companyId,
+    localRepository,
+    mirrorCloudStateLocally,
+    subscribeToRepository,
+  ])
 
   useEffect(() => {
     const activeCompanyId = state.accounting.activeCompanyId
@@ -510,11 +570,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ...remote,
               dataSettings: { ...remote.dataSettings, mode: 'cloud' },
             }
+            await mirrorCloudStateLocally(hydrated, true)
             unsubscribe.current()
             activeRepository.current = cloudRepository
-            unsubscribe.current =
-              cloudRepository.subscribe?.((next) => applyState(next)) ??
-              (() => undefined)
+            unsubscribe.current = subscribeToRepository(cloudRepository)
             writeModePreference(companyId, 'cloud')
             writeCloudRecovery(companyId, false)
             applyState(hydrated)
@@ -535,7 +594,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setSyncState('saving')
         setSyncMessage('Sincronizzazione forzata in corso')
         saveQueue.current = saveQueue.current
-          .then(() => activeRepository.current.save(next))
+          .then(async () => {
+            const repository = activeRepository.current
+            await repository.save(next)
+            if (repository.mode === 'cloud') {
+              await mirrorCloudStateLocally(next)
+            }
+          })
           .then(async () => {
             setSyncState('saved')
             setSyncMessage('Salvataggio completato')
@@ -827,15 +892,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ...stored,
               dataSettings: { ...stored.dataSettings, mode },
             })
+            if (mode === 'cloud') {
+              await mirrorCloudStateLocally(migrated, true)
+            }
           } else {
-            await destination.save(migrated)
+            if (mode === 'cloud') {
+              await cloudRepository.saveAll(migrated)
+              await mirrorCloudStateLocally(migrated, true)
+            } else {
+              await destination.save(migrated)
+            }
           }
           unsubscribe.current()
           activeRepository.current = destination
           syncRecovery.current = 'retry-save'
-          unsubscribe.current =
-            destination.subscribe?.((next) => applyState(next)) ??
-            (() => undefined)
+          unsubscribe.current = subscribeToRepository(destination)
           writeModePreference(companyId, mode)
           writeCloudRecovery(companyId, false)
           applyState(migrated)
@@ -877,13 +948,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             ...local,
             dataSettings: { ...local.dataSettings, mode: 'cloud' },
           })
-          await cloudRepository.save(migrated)
+          await cloudRepository.saveAll(migrated)
+          await mirrorCloudStateLocally(migrated, true)
           unsubscribe.current()
           activeRepository.current = cloudRepository
           syncRecovery.current = 'retry-save'
-          unsubscribe.current =
-            cloudRepository.subscribe?.((next) => applyState(next)) ??
-            (() => undefined)
+          unsubscribe.current = subscribeToRepository(cloudRepository)
           writeModePreference(companyId, 'cloud')
           writeCloudRecovery(companyId, false)
           applyState(migrated)
@@ -1017,9 +1087,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           )
           setSyncState('saving')
           setSyncMessage('Reset del nuovo esercizio in corso')
-          const persistence = saveQueue.current.then(() =>
-            activeRepository.current.save(resetState),
-          )
+          const persistence = saveQueue.current.then(async () => {
+            const repository = activeRepository.current
+            await repository.save(resetState)
+            if (repository.mode === 'cloud') {
+              await mirrorCloudStateLocally(resetState)
+            }
+          })
           saveQueue.current = persistence.catch(() => undefined)
           await persistence
           applyState(resetState)
@@ -1056,9 +1130,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           )
           setSyncState('saving')
           setSyncMessage('Ripristino stagione in corso')
-          const persistence = saveQueue.current.then(() =>
-            activeRepository.current.save(restored),
-          )
+          const persistence = saveQueue.current.then(async () => {
+            const repository = activeRepository.current
+            await repository.save(restored)
+            if (repository.mode === 'cloud') {
+              await mirrorCloudStateLocally(restored)
+            }
+          })
           saveQueue.current = persistence.catch(() => undefined)
           await persistence
           applyState(restored)
@@ -1176,8 +1254,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       enqueueSave,
       loading,
       localRepository,
+      mirrorCloudStateLocally,
       saveDriveBackup,
       state,
+      subscribeToRepository,
       syncMessage,
       syncState,
       localStoragePaths,
