@@ -1358,7 +1358,15 @@ export function InvoicesPanel({
       </form>
       )}
 
-      <section className={`panel${archiveOnly ? ' invoice-archive-panel' : ' accounting-records-panel'}`}>
+      <section
+        className={`panel${
+          archiveOnly
+            ? ' invoice-archive-panel'
+            : ` accounting-records-panel${
+                editingId ? ' accounting-records-panel-editing' : ''
+              }`
+        }`}
+      >
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Archivio fatture</h2>
           <div className="invoice-selection-summary" aria-live="polite">
