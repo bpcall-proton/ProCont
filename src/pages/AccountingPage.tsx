@@ -1026,7 +1026,7 @@ export function InvoicesPanel({
       )}
 
       <form
-        className="panel accounting-form"
+        className={`panel accounting-form${archiveOnly ? ' archive-invoice-entry-compact' : ''}`}
         onInvalidCapture={() => {
           submitAfterValidationRef.current = true
         }}
@@ -1104,7 +1104,8 @@ export function InvoicesPanel({
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
           <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm({ ...form, settled: event.target.checked })} /> Già pagata</label>
         </div>
-        <section className="invoice-verification-box">
+        {!archiveOnly && (
+          <section className="invoice-verification-box">
           <div className="panel-heading">
             <div>
               <strong>Foto e verifica contabile</strong>
@@ -1194,8 +1195,10 @@ export function InvoicesPanel({
           {verificationMessage && (
             <p className="import-message">{verificationMessage}</p>
           )}
-        </section>
-        <section className="invoice-lines-editor">
+          </section>
+        )}
+        {!archiveOnly && (
+          <section className="invoice-lines-editor">
           <div className="panel-heading">
             <div>
               <strong>Righe prodotto</strong>
@@ -1315,7 +1318,8 @@ export function InvoicesPanel({
               </table>
             </div>
           )}
-        </section>
+          </section>
+        )}
         {editingId && (
           <div className="form-actions">
             <button className="button button-secondary" type="button" onClick={resetInvoiceForm}>Annulla</button>
@@ -1490,7 +1494,11 @@ const emptyTaking = {
   unregisteredGoods: '',
 }
 
-export function TakingsPanel() {
+interface TakingsPanelProps {
+  compact?: boolean
+}
+
+export function TakingsPanel({ compact = false }: TakingsPanelProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const defaultSellerId =
@@ -1742,7 +1750,7 @@ export function TakingsPanel() {
         <div><span>Merce senza fattura</span><strong>{money(data.takings.reduce((sum, item) => sum + item.unregisteredGoods, 0))}</strong></div>
       </section>
       <form
-        className="panel accounting-form"
+        className={`panel accounting-form${compact ? ' takings-entry-compact' : ''}`}
         onKeyDown={handleTakingEnter}
         onSubmit={submit}
         ref={takingFormRef}

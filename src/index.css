@@ -2290,6 +2290,58 @@ select {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.takings-entry-compact,
+.archive-invoice-entry-compact {
+  gap: 8px;
+  padding: 14px;
+}
+
+.takings-entry-compact .panel-heading,
+.archive-invoice-entry-compact .panel-heading {
+  margin-bottom: 4px;
+}
+
+.takings-entry-compact .panel-heading h2,
+.archive-invoice-entry-compact .panel-heading h2 {
+  font-size: 1.2rem;
+}
+
+.takings-entry-compact .accounting-fields {
+  grid-template-columns: repeat(8, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.archive-invoice-entry-compact .accounting-fields {
+  grid-template-columns: repeat(7, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.takings-entry-compact label,
+.archive-invoice-entry-compact label {
+  gap: 3px;
+  font-size: 0.7rem;
+}
+
+.takings-entry-compact input,
+.takings-entry-compact select,
+.archive-invoice-entry-compact input,
+.archive-invoice-entry-compact select {
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+}
+
+.takings-entry-compact .form-actions,
+.archive-invoice-entry-compact .form-actions {
+  margin-top: 2px;
+}
+
+.takings-entry-compact .button,
+.archive-invoice-entry-compact .button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .accounting-paid-field {
   align-self: end;
   min-height: 46px;
@@ -3303,6 +3355,11 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .takings-entry-compact .accounting-fields,
+  .archive-invoice-entry-compact .accounting-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .product-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3343,6 +3400,11 @@ select {
   .report-columns,
   .entity-stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .takings-entry-compact .accounting-fields,
+  .archive-invoice-entry-compact .accounting-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .invoice-form-heading,

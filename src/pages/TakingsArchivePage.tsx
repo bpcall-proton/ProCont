@@ -44,6 +44,7 @@ export function TakingsArchivePage({ onBack }: TakingsArchivePageProps) {
       </header>
 
       <TakingsPanel
+        compact
         key={state.accounting.activeCompanyId ?? 'no-company'}
       />
     </div>
