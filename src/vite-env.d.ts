@@ -9,7 +9,8 @@ interface Window {
     getLocalStatePaths: (
       accountId: string,
       activeCompanyId: string,
-    ) => Promise<{ workspace: string; company: string }>
+    ) => Promise<{ workspace: string; company: string; backup: string }>
+    openBackupDirectory: () => Promise<string | null>
     selectDriveBackupFolder: () => Promise<string | null>
     saveDriveBackup: (
       folderPath: string,
