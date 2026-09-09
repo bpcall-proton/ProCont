@@ -14,8 +14,11 @@ import type {
   InvoicePayment,
   PaymentMethod,
   ProductionEntry,
+  ProductionPayMode,
   ProductionSettings,
   ProductionViewSettings,
+  ProductionWorkerRate,
+  ProductionWorkEntry,
   Rental,
 } from '../domain/types'
 
@@ -425,6 +428,41 @@ function mapProductionViewSettings(
   }
 }
 
+function productionPayMode(value: unknown): ProductionPayMode {
+  return value === 'per-piece' ? 'per-piece' : 'hourly'
+}
+
+function mapProductionWorkerRate(
+  value: JsonRecord,
+  fallbackCompanyId: string,
+): ProductionWorkerRate {
+  return {
+    id: text(value.id, crypto.randomUUID()),
+    companyId: text(value.companyId, fallbackCompanyId),
+    sellerId: text(value.sellerId),
+    mode: productionPayMode(value.mode),
+    rate: Math.max(0, amount(value.rate)),
+  }
+}
+
+function mapProductionWorkEntry(
+  value: JsonRecord,
+  fallbackCompanyId: string,
+): ProductionWorkEntry {
+  return {
+    id: text(value.id, crypto.randomUUID()),
+    companyId: text(value.companyId, fallbackCompanyId),
+    sellerId: text(value.sellerId),
+    productId: nullableText(value.productId),
+    date: text(value.date),
+    startTime: text(value.startTime),
+    endTime: text(value.endTime),
+    quantity: Math.max(0, amount(value.quantity)),
+    payMode: productionPayMode(value.payMode),
+    rate: Math.max(0, amount(value.rate)),
+  }
+}
+
 export function parseLegacyAccountingJson(json: string): AccountingState {
   const parsed: unknown = JSON.parse(json)
   if (!isRecord(parsed)) throw new Error('File JSON non valido')
@@ -448,6 +486,8 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     productionSettings: [],
     productionEntries: [],
     productionViewSettings: [],
+    productionWorkerRates: [],
+    productionWorkEntries: [],
     verificationSettings: [],
     verificationStockLoads: [],
     verificationProductionEntries: [],
@@ -588,6 +628,16 @@ export function normalizeStoredState(
             )
           : [],
       ),
+      ...records(accounting.productionWorkerRates)
+        .map((settings) => settings.sellerId)
+        .filter(
+          (sellerId): sellerId is string => typeof sellerId === 'string',
+        ),
+      ...records(accounting.productionWorkEntries)
+        .map((entry) => entry.sellerId)
+        .filter(
+          (sellerId): sellerId is string => typeof sellerId === 'string',
+        ),
     ])
     const retainedAccountingSellers = accountingSellers.filter(
       (seller) =>
@@ -688,6 +738,16 @@ export function normalizeStoredState(
           accounting.productionViewSettings,
         ).map((settings) =>
           mapProductionViewSettings(settings, fallbackCompanyId),
+        ),
+        productionWorkerRates: records(
+          accounting.productionWorkerRates,
+        ).map((settings) =>
+          mapProductionWorkerRate(settings, fallbackCompanyId),
+        ),
+        productionWorkEntries: records(
+          accounting.productionWorkEntries,
+        ).map((entry) =>
+          mapProductionWorkEntry(entry, fallbackCompanyId),
         ),
         verificationSettings: records(accounting.verificationSettings).map(
           (settings) => ({
@@ -830,6 +890,14 @@ export function importLegacyIntoState(
       ),
       ...accounting.productionViewSettings,
     ],
+    productionWorkerRates: mergeById(
+      current.accounting.productionWorkerRates,
+      accounting.productionWorkerRates,
+    ),
+    productionWorkEntries: mergeById(
+      current.accounting.productionWorkEntries,
+      accounting.productionWorkEntries,
+    ),
     verificationSettings: [
       ...current.accounting.verificationSettings.filter(
         (settings) =>
@@ -917,6 +985,18 @@ export function importLegacyIntoActiveCompany(
   const productionViewSettings = companyRecords(
     imported.accounting.productionViewSettings,
   )
+  const productionWorkerRates = companyRecords(
+    imported.accounting.productionWorkerRates,
+  )
+  const productionWorkEntries = imported.accounting.productionWorkEntries
+    .filter((entry) => entry.companyId === sourceCompanyId)
+    .map((entry) => ({
+      ...entry,
+      companyId: targetCompanyId,
+      productId: entry.productId
+        ? productionProductId(entry.productId)
+        : null,
+    }))
   const verificationSettings = companyRecords(
     imported.accounting.verificationSettings,
   )
@@ -996,6 +1076,22 @@ export function importLegacyIntoActiveCompany(
             ...productionViewSettings,
           ]
         : current.accounting.productionViewSettings,
+      productionWorkerRates: productionWorkerRates.length
+        ? [
+            ...current.accounting.productionWorkerRates.filter(
+              (settings) => settings.companyId !== targetCompanyId,
+            ),
+            ...productionWorkerRates,
+          ]
+        : current.accounting.productionWorkerRates,
+      productionWorkEntries: productionWorkEntries.length
+        ? [
+            ...current.accounting.productionWorkEntries.filter(
+              (entry) => entry.companyId !== targetCompanyId,
+            ),
+            ...productionWorkEntries,
+          ]
+        : current.accounting.productionWorkEntries,
       verificationSettings: verificationSettings.length
         ? [
             ...current.accounting.verificationSettings.filter(

@@ -17,6 +17,7 @@ export type ExpenseRecurrence = 'once' | 'monthly'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
 export type ProductionEntryPeriod = 'day' | 'week'
 export type ProductionReportPeriod = 'day' | 'week' | 'month'
+export type ProductionPayMode = 'hourly' | 'per-piece'
 export type ReviewDocumentStatus =
   | 'pending'
   | 'unrecognized'
@@ -272,6 +273,27 @@ export interface ProductionViewSettings {
   reportPeriod: ProductionReportPeriod
 }
 
+export interface ProductionWorkerRate {
+  id: string
+  companyId: string
+  sellerId: string
+  mode: ProductionPayMode
+  rate: number
+}
+
+export interface ProductionWorkEntry {
+  id: string
+  companyId: string
+  sellerId: string
+  productId: string | null
+  date: string
+  startTime: string
+  endTime: string
+  quantity: number
+  payMode: ProductionPayMode
+  rate: number
+}
+
 export interface AccountingVerificationSettings {
   companyId: string
   enabled: boolean
@@ -322,6 +344,8 @@ export interface AccountingState {
   productionSettings: ProductionSettings[]
   productionEntries: ProductionEntry[]
   productionViewSettings: ProductionViewSettings[]
+  productionWorkerRates: ProductionWorkerRate[]
+  productionWorkEntries: ProductionWorkEntry[]
   verificationSettings: AccountingVerificationSettings[]
   verificationStockLoads: VerificationStockLoad[]
   verificationProductionEntries: VerificationProductionEntry[]

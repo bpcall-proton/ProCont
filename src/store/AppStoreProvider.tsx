@@ -228,6 +228,9 @@ function resetActiveCompanySeason(state: AppState, companyId: string) {
       productionEntries: state.accounting.productionEntries.filter(
         (entry) => entry.companyId !== companyId,
       ),
+      productionWorkEntries: state.accounting.productionWorkEntries.filter(
+        (entry) => entry.companyId !== companyId,
+      ),
       verificationProductionEntries:
         state.accounting.verificationProductionEntries.filter(
           (entry) => entry.companyId !== companyId,
@@ -268,6 +271,12 @@ function clearActiveCompanyData(state: AppState, companyId: string) {
       productionEntries: outsideCompany(state.accounting.productionEntries),
       productionViewSettings: outsideCompany(
         state.accounting.productionViewSettings,
+      ),
+      productionWorkerRates: outsideCompany(
+        state.accounting.productionWorkerRates,
+      ),
+      productionWorkEntries: outsideCompany(
+        state.accounting.productionWorkEntries,
       ),
       verificationSettings: outsideCompany(
         state.accounting.verificationSettings,
@@ -765,6 +774,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ) ||
               current.accounting.productionSettings.some((item) =>
                 item.sellerIds.includes(accountingSellerId),
+              ) ||
+              current.accounting.productionWorkerRates.some(
+                (item) => item.sellerId === accountingSellerId,
+              ) ||
+              current.accounting.productionWorkEntries.some(
+                (item) => item.sellerId === accountingSellerId,
               ))
           return {
             ...current,

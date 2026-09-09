@@ -105,7 +105,11 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T12:00:00Z`))
 }
 
-export function ProductionPage() {
+interface ProductionPageProps {
+  onOpenWages: () => void
+}
+
+export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const companyId = state.accounting.activeCompanyId
@@ -674,13 +678,22 @@ export function ProductionPage() {
             e quantità prodotte.
           </p>
         </div>
-        <button
-          className="button button-primary"
-          onClick={startAddingProduct}
-          type="button"
-        >
-          + Aggiungi
-        </button>
+        <div className="production-heading-actions">
+          <button
+            className="button button-secondary"
+            onClick={onOpenWages}
+            type="button"
+          >
+            Stipendi produzione
+          </button>
+          <button
+            className="button button-primary"
+            onClick={startAddingProduct}
+            type="button"
+          >
+            + Aggiungi
+          </button>
+        </div>
       </header>
 
       {data.productionSettings.length > 0 && (

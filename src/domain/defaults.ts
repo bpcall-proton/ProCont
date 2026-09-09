@@ -73,6 +73,8 @@ export function createEmptyAccountingState(companyId: string): AccountingState {
     productionSettings: [],
     productionEntries: [],
     productionViewSettings: [],
+    productionWorkerRates: [],
+    productionWorkEntries: [],
     verificationSettings: [],
     verificationStockLoads: [],
     verificationProductionEntries: [],

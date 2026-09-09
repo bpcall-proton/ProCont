@@ -38,6 +38,8 @@ export function createWorkspaceState(state: AppState): AppState {
       productionSettings: [],
       productionEntries: [],
       productionViewSettings: [],
+      productionWorkerRates: [],
+      productionWorkEntries: [],
       verificationSettings: [],
       verificationStockLoads: [],
       verificationProductionEntries: [],
@@ -106,6 +108,12 @@ export function createCompanyState(
       productionViewSettings: state.accounting.productionViewSettings.filter(
         (settings) => settings.companyId === companyId,
       ),
+      productionWorkerRates: state.accounting.productionWorkerRates.filter(
+        (settings) => settings.companyId === companyId,
+      ),
+      productionWorkEntries: state.accounting.productionWorkEntries.filter(
+        (entry) => entry.companyId === companyId,
+      ),
       verificationSettings: state.accounting.verificationSettings.filter(
         (settings) => settings.companyId === companyId,
       ),
@@ -152,6 +160,12 @@ export function mergeCompanyStates(
       ),
       productionViewSettings: companies.flatMap(
         (state) => state.accounting.productionViewSettings,
+      ),
+      productionWorkerRates: companies.flatMap(
+        (state) => state.accounting.productionWorkerRates,
+      ),
+      productionWorkEntries: companies.flatMap(
+        (state) => state.accounting.productionWorkEntries,
       ),
       verificationSettings: companies.flatMap(
         (state) => state.accounting.verificationSettings,
