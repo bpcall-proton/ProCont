@@ -12,6 +12,7 @@ import type {
   AccountingSeller,
   VerificationStockLoad,
 } from '../domain/types'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 const emptyMovement = {
@@ -51,8 +52,13 @@ function productName(products: AccountingProduct[], productId: string) {
 export function AccountingVerificationPage() {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
-  const [sellerFilter, setSellerFilter] = useState('')
-  const [untilDate, setUntilDate] = useState(today())
+  const filterDefaults = { sellerId: '', untilDate: today() }
+  const [filters, setFilters] = useStoredFilters(
+    `verification-filters:${data.company?.id ?? 'none'}`,
+    filterDefaults,
+  )
+  const sellerFilter = filters.sellerId
+  const untilDate = filters.untilDate
   const [loadForm, setLoadForm] = useState(emptyMovement)
   const [productionForm, setProductionForm] = useState(emptyMovement)
   const [transferForm, setTransferForm] = useState(emptyTransfer)
@@ -346,7 +352,12 @@ export function AccountingVerificationPage() {
         <div className="verification-filter">
           <select
             aria-label="Filtra venditore"
-            onChange={(event) => setSellerFilter(event.target.value)}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                sellerId: event.target.value,
+              }))
+            }
             value={sellerFilter}
           >
             <option value="">Tutti i venditori verificati</option>
@@ -359,11 +370,23 @@ export function AccountingVerificationPage() {
           <label>
             Situazione al
             <input
-              onChange={(event) => setUntilDate(event.target.value)}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  untilDate: event.target.value,
+                }))
+              }
               type="date"
               value={untilDate}
             />
           </label>
+          <button
+            className="button button-secondary"
+            onClick={() => setFilters(filterDefaults)}
+            type="button"
+          >
+            Azzera filtri
+          </button>
         </div>
       </header>
 

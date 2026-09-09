@@ -39,6 +39,7 @@ import type {
   PaymentMethod,
   Rental,
 } from '../domain/types'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 type Section = 'invoices' | 'takings' | 'contacts' | 'expenses'
@@ -370,6 +371,16 @@ export function InvoicesPanel({
 }: InvoicesPanelProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
+  const invoiceFilterDefaults = {
+    status: 'all' as 'all' | 'open' | 'paid',
+    supplierId: '',
+    sellerId: '',
+    month: '',
+  }
+  const [invoiceFilters, setInvoiceFilters] = useStoredFilters(
+    `accounting-invoice-filters:${data.company?.id ?? 'none'}`,
+    invoiceFilterDefaults,
+  )
   const [form, setForm] = useState(() => ({
     ...emptyInvoice,
     sellerId:
@@ -402,10 +413,10 @@ export function InvoicesPanel({
   const sellerInputRef = useRef<HTMLSelectElement>(null)
   const taxableAmountInputRef = useRef<HTMLInputElement>(null)
   const theoreticalRevenueInputRef = useRef<HTMLInputElement>(null)
-  const [filter, setFilter] = useState<'all' | 'open' | 'paid'>('all')
-  const [supplierFilter, setSupplierFilter] = useState('')
-  const [sellerFilter, setSellerFilter] = useState('')
-  const [monthFilter, setMonthFilter] = useState('')
+  const filter = invoiceFilters.status
+  const supplierFilter = invoiceFilters.supplierId
+  const sellerFilter = invoiceFilters.sellerId
+  const monthFilter = invoiceFilters.month
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
   const [paymentTarget, setPaymentTarget] =
     useState<AccountingInvoice | null>(null)
@@ -708,7 +719,6 @@ export function InvoicesPanel({
   function submit(event: FormEvent) {
     event.preventDefault()
     submitAfterValidationRef.current = false
-    const wasEditing = editingId !== null
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const supplier = current.suppliers.find(
@@ -782,12 +792,6 @@ export function InvoicesPanel({
         }
       }),
     )
-    if (!wasEditing) {
-      setFilter('all')
-      setSupplierFilter('')
-      setSellerFilter('')
-      setMonthFilter('')
-    }
     const nextForm = editingId
       ? { ...emptyInvoice, sellerId: defaultSellerId, date: today() }
       : {
@@ -1389,7 +1393,10 @@ export function InvoicesPanel({
               aria-label="Filtra per stato"
               value={filter}
               onChange={(event) => {
-                setFilter(event.target.value as typeof filter)
+                setInvoiceFilters((current) => ({
+                  ...current,
+                  status: event.target.value as typeof filter,
+                }))
                 resetInvoiceSelection()
               }}
             >
@@ -1401,7 +1408,10 @@ export function InvoicesPanel({
               aria-label="Filtra per fornitore"
               value={activeSupplierFilter}
               onChange={(event) => {
-                setSupplierFilter(event.target.value)
+                setInvoiceFilters((current) => ({
+                  ...current,
+                  supplierId: event.target.value,
+                }))
                 resetInvoiceSelection()
               }}
             >
@@ -1412,7 +1422,10 @@ export function InvoicesPanel({
               aria-label="Filtra per venditore"
               value={activeSellerFilter}
               onChange={(event) => {
-                setSellerFilter(event.target.value)
+                setInvoiceFilters((current) => ({
+                  ...current,
+                  sellerId: event.target.value,
+                }))
                 resetInvoiceSelection()
               }}
             >
@@ -1424,10 +1437,23 @@ export function InvoicesPanel({
               type="month"
               value={monthFilter}
               onChange={(event) => {
-                setMonthFilter(event.target.value)
+                setInvoiceFilters((current) => ({
+                  ...current,
+                  month: event.target.value,
+                }))
                 resetInvoiceSelection()
               }}
             />
+            <button
+              className="button button-secondary"
+              onClick={() => {
+                setInvoiceFilters(invoiceFilterDefaults)
+                resetInvoiceSelection()
+              }}
+              type="button"
+            >
+              Azzera filtri
+            </button>
             <button className="button button-secondary" disabled={invoices.length === 0} onClick={() => void exportInvoicesExcel()} type="button">Esporta Excel</button>
           </div>
         </div>
@@ -1531,6 +1557,11 @@ interface TakingsPanelProps {
 export function TakingsPanel({ compact = false }: TakingsPanelProps) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
+  const takingFilterDefaults = { sellerId: '', month: '' }
+  const [takingFilters, setTakingFilters] = useStoredFilters(
+    `accounting-taking-filters:${data.company?.id ?? 'none'}`,
+    takingFilterDefaults,
+  )
   const defaultSellerId =
     data.sellers.find((seller) => seller.autoSelect)?.id ?? ''
   const [form, setForm] = useState({
@@ -1541,8 +1572,8 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
   const [repeatDate, setRepeatDate] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [sellerFilter, setSellerFilter] = useState('')
-  const [monthFilter, setMonthFilter] = useState('')
+  const sellerFilter = takingFilters.sellerId
+  const monthFilter = takingFilters.month
   const takingFormRef = useRef<HTMLFormElement>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
   const sellerInputRef = useRef<HTMLSelectElement>(null)
@@ -1831,11 +1862,12 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Storico incassi</h2>
           <div className="invoice-filters">
-            <select aria-label="Filtra incassi per venditore" value={activeSellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+            <select aria-label="Filtra incassi per venditore" value={activeSellerFilter} onChange={(event) => setTakingFilters((current) => ({ ...current, sellerId: event.target.value }))}>
               <option value="">Tutti i venditori</option>
               {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
-            <input aria-label="Filtra incassi per mese" type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} />
+            <input aria-label="Filtra incassi per mese" type="month" value={monthFilter} onChange={(event) => setTakingFilters((current) => ({ ...current, month: event.target.value }))} />
+            <button className="button button-secondary" onClick={() => setTakingFilters(takingFilterDefaults)} type="button">Azzera filtri</button>
             <button className="button button-secondary" disabled={takings.length === 0} onClick={() => void exportTakingsExcel()} type="button">Esporta Excel</button>
           </div>
         </div>

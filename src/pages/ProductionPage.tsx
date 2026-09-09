@@ -11,6 +11,7 @@ import type {
   ProductionEntryPeriod,
   ProductionReportPeriod,
 } from '../domain/types'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 type SelectedProductId = string | 'all' | null
@@ -138,7 +139,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const [reportPeriod, setReportPeriod] = useState<ProductionReportPeriod>(
     data.productionViewSettings?.reportPeriod ?? 'month',
   )
-  const [selectedDate, setSelectedDate] = useState(today())
+  const productionFilterDefaults = { selectedDate: today() }
+  const [productionFilters, setProductionFilters] = useStoredFilters(
+    `production-filters:${companyId ?? 'none'}`,
+    productionFilterDefaults,
+  )
+  const selectedDate = productionFilters.selectedDate
   const [formError, setFormError] = useState('')
   const [detailCard, setDetailCard] = useState<DetailCard>('costs')
   const range = rangeFor(reportPeriod, selectedDate)
@@ -744,11 +750,23 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         <label>
           Data di riferimento
           <input
-            onChange={(event) => setSelectedDate(event.target.value)}
+            onChange={(event) =>
+              setProductionFilters({ selectedDate: event.target.value })
+            }
             type="date"
             value={selectedDate}
           />
         </label>
+        <button
+          className="button button-secondary"
+          onClick={() => {
+            changeReportPeriod('month')
+            setProductionFilters(productionFilterDefaults)
+          }}
+          type="button"
+        >
+          Azzera filtri
+        </button>
       </section>
 
       <section className="stats-grid production-stats">

@@ -9,6 +9,7 @@ import {
   realTaking,
   roundMoney,
 } from '../domain/accounting'
+import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
 
 type DashboardMetricKey =
@@ -84,11 +85,20 @@ export function DashboardPage() {
     useState<SellerMetricDetail | null>(null)
   const [storeDetailId, setStoreDetailId] = useState<string | null>(null)
   const [sellerAsOfDate, setSellerAsOfDate] = useState('')
-  const [withdrawalSellerFilter, setWithdrawalSellerFilter] = useState('')
-  const [withdrawalMonthFilter, setWithdrawalMonthFilter] = useState('')
-  const [withdrawalYearFilter, setWithdrawalYearFilter] = useState('')
   const { review } = state
   const companyId = state.accounting.activeCompanyId
+  const withdrawalFilterDefaults = {
+    sellerId: '',
+    month: '',
+    year: '',
+  }
+  const [withdrawalFilters, setWithdrawalFilters] = useStoredFilters(
+    `withdrawal-filters:${companyId ?? 'none'}`,
+    withdrawalFilterDefaults,
+  )
+  const withdrawalSellerFilter = withdrawalFilters.sellerId
+  const withdrawalMonthFilter = withdrawalFilters.month
+  const withdrawalYearFilter = withdrawalFilters.year
   const activeCompany = state.accounting.companies.find(
     (company) => company.id === companyId,
   )
@@ -1116,7 +1126,10 @@ export function DashboardPage() {
               <select
                 aria-label="Filtra Cash ritirato per venditore"
                 onChange={(event) =>
-                  setWithdrawalSellerFilter(event.target.value)
+                  setWithdrawalFilters((current) => ({
+                    ...current,
+                    sellerId: event.target.value,
+                  }))
                 }
                 value={withdrawalSellerFilter}
               >
@@ -1133,7 +1146,10 @@ export function DashboardPage() {
               <select
                 aria-label="Filtra Cash ritirato per mese"
                 onChange={(event) =>
-                  setWithdrawalMonthFilter(event.target.value)
+                  setWithdrawalFilters((current) => ({
+                    ...current,
+                    month: event.target.value,
+                  }))
                 }
                 value={withdrawalMonthFilter}
               >
@@ -1163,7 +1179,10 @@ export function DashboardPage() {
               <select
                 aria-label="Filtra Cash ritirato per anno"
                 onChange={(event) =>
-                  setWithdrawalYearFilter(event.target.value)
+                  setWithdrawalFilters((current) => ({
+                    ...current,
+                    year: event.target.value,
+                  }))
                 }
                 value={withdrawalYearFilter}
               >
@@ -1176,11 +1195,9 @@ export function DashboardPage() {
               </select>
               <button
                 className="button"
-                onClick={() => {
-                  setWithdrawalSellerFilter('')
-                  setWithdrawalMonthFilter('')
-                  setWithdrawalYearFilter('')
-                }}
+                onClick={() =>
+                  setWithdrawalFilters(withdrawalFilterDefaults)
+                }
                 type="button"
               >
                 Azzera filtri
