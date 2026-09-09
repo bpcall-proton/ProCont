@@ -3,11 +3,13 @@ import {
   activeAccounting,
   addDays,
   allocatedExpense,
+  bestContactNameMatch,
   invoiceDueState,
   invoiceRemaining,
   money,
   officialTaking,
   realTaking,
+  roundMoney,
   sellerColorClass,
   today,
 } from '../domain/accounting'
@@ -204,11 +206,54 @@ export function ReportsPage() {
     (sum, item) => sum + item.theoreticalRevenue,
     0,
   )
+  const knownSellerIds = new Set(source.sellers.map((seller) => seller.id))
+  const supplierSellerRevenueTransfers = data.invoices.flatMap((invoice) => {
+    if (
+      !invoice.sellerId ||
+      invoice.taxableAmount !== 0 ||
+      invoice.theoreticalRevenue <= 0
+    ) {
+      return []
+    }
+    const supplier = source.suppliers.find(
+      (item) => item.id === invoice.supplierId,
+    )
+    if (!supplier) return []
+    const linkedSellerId =
+      bestContactNameMatch(
+        invoice.supplierName || supplier.name,
+        source.sellers,
+      )?.id ?? supplier.linkedSellerId
+    if (
+      !linkedSellerId ||
+      linkedSellerId === invoice.sellerId ||
+      !knownSellerIds.has(linkedSellerId) ||
+      !knownSellerIds.has(invoice.sellerId)
+    ) {
+      return []
+    }
+    return [
+      {
+        fromSellerId: linkedSellerId,
+        amount: roundMoney(invoice.theoreticalRevenue),
+      },
+    ]
+  })
 
   const sellerStats = source.sellers.map((seller) => {
     const takings = data.takings.filter((item) => item.sellerId === seller.id)
     const invoices = data.invoices.filter(
       (item) => item.sellerId === seller.id,
+    )
+    const real = takings.reduce((sum, item) => sum + realTaking(item), 0)
+    const totalVenit = roundMoney(
+      invoices.reduce(
+        (sum, item) => sum + item.theoreticalRevenue,
+        0,
+      ) -
+        supplierSellerRevenueTransfers
+          .filter((transfer) => transfer.fromSellerId === seller.id)
+          .reduce((sum, transfer) => sum + transfer.amount, 0),
     )
     return {
       id: seller.id,
@@ -217,11 +262,14 @@ export function ReportsPage() {
         (sum, item) => sum + officialTaking(item),
         0,
       ),
-      real: takings.reduce((sum, item) => sum + realTaking(item), 0),
-      theoretical: invoices.reduce(
-        (sum, item) => sum + item.theoreticalRevenue,
+      invoiceTotal: invoices.reduce((sum, item) => sum + item.total, 0),
+      invoiceRemaining: invoices.reduce(
+        (sum, item) => sum + invoiceRemaining(item),
         0,
       ),
+      real,
+      theoretical: totalVenit,
+      stockResidual: totalVenit - real,
     }
   })
 
@@ -655,7 +703,8 @@ export function ReportsPage() {
           Numero: invoice.number,
           Fornitore: invoice.supplierName,
           Totale: invoice.total,
-          'Venit previsto': invoice.theoreticalRevenue,
+          'Residuo da pagare': invoiceRemaining(invoice),
+          'Totale Venit': invoice.theoreticalRevenue,
           'Merce senza fattura': invoice.unregisteredGoods,
           'Ricarico %': invoice.markupPercent,
         })),
@@ -777,21 +826,26 @@ export function ReportsPage() {
   }
 
   if (selectedSeller) {
-    const sellerOfficial = sellerTakings.reduce(
-      (sum, item) => sum + officialTaking(item),
-      0,
-    )
     const sellerReal = sellerTakings.reduce(
       (sum, item) => sum + realTaking(item),
       0,
     )
-    const sellerTheoretical = sellerInvoices.reduce(
-      (sum, item) => sum + item.theoreticalRevenue,
+    const sellerInvoiceTotal = sellerInvoices.reduce(
+      (sum, item) => sum + item.total,
       0,
     )
-    const sellerUnregisteredGoods = sellerInvoices.reduce(
-      (sum, item) => sum + item.unregisteredGoods,
+    const sellerInvoiceRemaining = sellerInvoices.reduce(
+      (sum, item) => sum + invoiceRemaining(item),
       0,
+    )
+    const sellerTheoretical = roundMoney(
+      sellerInvoices.reduce(
+        (sum, item) => sum + item.theoreticalRevenue,
+        0,
+      ) -
+        supplierSellerRevenueTransfers
+          .filter((transfer) => transfer.fromSellerId === selectedSeller.id)
+          .reduce((sum, transfer) => sum + transfer.amount, 0),
     )
     return (
       <div className="page-stack">
@@ -811,22 +865,30 @@ export function ReportsPage() {
           setSelected={setSelected}
         />
         <section className="report-kpis">
-          <ReportCard label="Incasso fiscale" value={sellerOfficial} tone="green" />
           <ReportCard
-            label="Incasso reale"
-            value={sellerReal}
+            label="Totale fatture"
+            value={sellerInvoiceTotal}
             tone="cyan"
           />
-          <ReportCard label="Venit previsto" value={sellerTheoretical} tone="violet" />
           <ReportCard
-            label="Merce senza fattura"
-            value={sellerUnregisteredGoods}
-            tone="red"
+            label="Totale Venit"
+            value={sellerTheoretical}
+            tone="violet"
           />
           <ReportCard
-            label="Venit stock"
+            label="Totale incassato reale"
+            value={sellerReal}
+            tone="green"
+          />
+          <ReportCard
+            label="Stock residuo reale"
             value={sellerTheoretical - sellerReal}
             tone="amber"
+          />
+          <ReportCard
+            label="Residuo fatture da pagare"
+            value={sellerInvoiceRemaining}
+            tone="red"
           />
         </section>
         <section className="report-columns">
@@ -844,7 +906,8 @@ export function ReportsPage() {
                     <th>Data / N.</th>
                     <th>Fornitore</th>
                     <th>Costo</th>
-                    <th>Venit previsto</th>
+                    <th>Residuo da pagare</th>
+                    <th>Venit</th>
                     <th>Merce senza fattura</th>
                     <th>Ricarico</th>
                   </tr>
@@ -857,6 +920,7 @@ export function ReportsPage() {
                         <td>{invoice.date}<small>{invoice.number || 'Senza numero'}</small></td>
                         <td>{invoice.supplierName || '—'}</td>
                         <td>{money(invoice.total)}</td>
+                        <td>{money(invoiceRemaining(invoice))}</td>
                         <td>{money(invoice.theoreticalRevenue)}</td>
                         <td>{money(invoice.unregisteredGoods)}</td>
                         <td>{invoice.markupPercent.toFixed(2)}%</td>
@@ -1162,8 +1226,13 @@ export function ReportsPage() {
               >
                 <span className="eyebrow">VENDITORE</span>
                 <strong>{seller.name}</strong>
-                <span>Incasso reale {money(seller.real)}</span>
-                <span>Venit previsto {money(seller.theoretical)}</span>
+                <span>Totale fatture {money(seller.invoiceTotal)}</span>
+                <span>Totale Venit {money(seller.theoretical)}</span>
+                <span>Incassato reale {money(seller.real)}</span>
+                <span>Stock residuo reale {money(seller.stockResidual)}</span>
+                <span>
+                  Residuo fatture da pagare {money(seller.invoiceRemaining)}
+                </span>
                 <em>Apri valutazione dettagliata</em>
               </button>
             ))}
