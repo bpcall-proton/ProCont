@@ -19,11 +19,9 @@ interface RateForm {
 
 interface WorkForm {
   sellerId: string
-  productId: string
   date: string
   startTime: string
   endTime: string
-  quantity: string
 }
 
 function durationHours(startTime: string, endTime: string) {
@@ -67,7 +65,6 @@ export function ProductionWagesPage({
     ? data.sellers.filter((seller) => productionWorkerIds.has(seller.id))
     : data.sellers
   const firstSellerId = workers[0]?.id ?? ''
-  const firstProductId = data.productionSettings[0]?.id ?? ''
   const [month, setMonth] = useState(today().slice(0, 7))
   const [rateForm, setRateForm] = useState<RateForm>({
     sellerId: firstSellerId,
@@ -76,11 +73,9 @@ export function ProductionWagesPage({
   })
   const [workForm, setWorkForm] = useState<WorkForm>({
     sellerId: firstSellerId,
-    productId: firstProductId,
     date: today(),
     startTime: '',
     endTime: '',
-    quantity: '',
   })
 
   const ratesBySeller = new Map(
@@ -90,57 +85,88 @@ export function ProductionWagesPage({
     ]),
   )
   const selectedRate = ratesBySeller.get(workForm.sellerId)
-  const monthlyEntries = data.productionWorkEntries
-    .filter((entry) => entry.date.startsWith(month))
+  const monthlyHourlyEntries = data.productionWorkEntries
+    .filter(
+      (entry) =>
+        entry.payMode === 'hourly' && entry.date.startsWith(month),
+    )
     .sort((left, right) =>
       `${right.date}-${right.startTime}`.localeCompare(
         `${left.date}-${left.startTime}`,
       ),
     )
-  const monthlySalary = monthlyEntries.reduce(
+  const automaticPieceRows = data.productionWorkerRates
+    .filter((settings) => settings.mode === 'per-piece')
+    .flatMap((settings) =>
+      data.productionSettings
+        .filter((product) => product.workerIds.includes(settings.sellerId))
+        .map((product) => {
+          const quantity = data.productionEntries
+            .filter(
+              (entry) =>
+                entry.productId === product.id &&
+                entry.date.startsWith(month),
+            )
+            .reduce((total, entry) => total + entry.quantity, 0)
+          return {
+            sellerId: settings.sellerId,
+            productId: product.id,
+            productName: product.productName,
+            quantity,
+            rate: settings.rate,
+            total: quantity * settings.rate,
+          }
+        }),
+    )
+  const selectedPieceRows = automaticPieceRows.filter(
+    (row) => row.sellerId === workForm.sellerId,
+  )
+  const monthlySalary =
+    monthlyHourlyEntries.reduce(
+      (total, entry) =>
+        total +
+        entrySalary(
+          entry.payMode,
+          entry.rate,
+          entry.startTime,
+          entry.endTime,
+          entry.quantity,
+        ),
+      0,
+    ) +
+    automaticPieceRows.reduce((total, row) => total + row.total, 0)
+  const monthlyHours = monthlyHourlyEntries.reduce(
     (total, entry) =>
-      total +
-      entrySalary(
-        entry.payMode,
-        entry.rate,
-        entry.startTime,
-        entry.endTime,
-        entry.quantity,
-      ),
+      total + durationHours(entry.startTime, entry.endTime),
     0,
   )
-  const monthlyHours = monthlyEntries.reduce(
-    (total, entry) =>
-      total +
-      (entry.payMode === 'hourly'
-        ? durationHours(entry.startTime, entry.endTime)
-        : 0),
-    0,
-  )
-  const monthlyPieces = monthlyEntries.reduce(
-    (total, entry) =>
-      total + (entry.payMode === 'per-piece' ? entry.quantity : 0),
+  const monthlyPieces = automaticPieceRows.reduce(
+    (total, row) => total + row.quantity,
     0,
   )
   const workerTotals = data.sellers
     .map((seller) => {
-      const entries = monthlyEntries.filter(
+      const entries = monthlyHourlyEntries.filter(
         (entry) => entry.sellerId === seller.id,
       )
+      const automaticTotal = automaticPieceRows
+        .filter((row) => row.sellerId === seller.id)
+        .reduce((sum, row) => sum + row.total, 0)
       return {
         seller,
-        total: entries.reduce(
-          (sum, entry) =>
-            sum +
-            entrySalary(
-              entry.payMode,
-              entry.rate,
-              entry.startTime,
-              entry.endTime,
-              entry.quantity,
-            ),
-          0,
-        ),
+        total:
+          entries.reduce(
+            (sum, entry) =>
+              sum +
+              entrySalary(
+                entry.payMode,
+                entry.rate,
+                entry.startTime,
+                entry.endTime,
+                entry.quantity,
+              ),
+            0,
+          ) + automaticTotal,
       }
     })
     .filter((item) => item.total > 0)
@@ -181,16 +207,19 @@ export function ProductionWagesPage({
 
   function saveWork(event: FormEvent) {
     event.preventDefault()
-    if (!data.company || !selectedRate) return
-    const quantity = Number(workForm.quantity || 0)
+    if (
+      !data.company ||
+      !selectedRate ||
+      selectedRate.mode !== 'hourly'
+    ) {
+      return
+    }
     const hours = durationHours(workForm.startTime, workForm.endTime)
     if (
       !workForm.date ||
       !workForm.startTime ||
       !workForm.endTime ||
-      (selectedRate.mode === 'hourly' && hours <= 0) ||
-      (selectedRate.mode === 'per-piece' &&
-        (!Number.isFinite(quantity) || quantity <= 0))
+      hours <= 0
     ) {
       return
     }
@@ -202,16 +231,12 @@ export function ProductionWagesPage({
           id: crypto.randomUUID(),
           companyId: data.company?.id ?? '',
           sellerId: workForm.sellerId,
-          productId:
-            selectedRate.mode === 'per-piece'
-              ? workForm.productId || null
-              : null,
+          productId: null,
           date: workForm.date,
           startTime: workForm.startTime,
           endTime: workForm.endTime,
-          quantity:
-            selectedRate.mode === 'per-piece' ? quantity : 0,
-          payMode: selectedRate.mode,
+          quantity: 0,
+          payMode: 'hourly',
           rate: selectedRate.rate,
         },
       ],
@@ -220,7 +245,6 @@ export function ProductionWagesPage({
       ...current,
       startTime: '',
       endTime: '',
-      quantity: '',
     }))
   }
 
@@ -243,14 +267,14 @@ export function ProductionWagesPage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack production-wages-page">
       <header className="page-heading">
         <div>
           <span className="eyebrow">CONTROLLO PRODUZIONE</span>
           <h1>Stipendi produzione</h1>
           <p>
-            Registra ore e quantità lavorate per {data.company.name} e
-            controlla lo stipendio progressivo del mese.
+            Registra le ore lavorate; i pezzi prodotti vengono rilevati
+            automaticamente per {data.company.name}.
           </p>
         </div>
         <button
@@ -384,7 +408,11 @@ export function ProductionWagesPage({
         <div className="panel-heading">
           <div>
             <span className="eyebrow">LAVORO SVOLTO</span>
-            <h2>Registra orario e produzione</h2>
+            <h2>
+              {selectedRate?.mode === 'per-piece'
+                ? 'Produzione rilevata automaticamente'
+                : 'Registra orario di lavoro'}
+            </h2>
           </div>
           <strong>
             {selectedRate
@@ -415,92 +443,87 @@ export function ProductionWagesPage({
               ))}
             </select>
           </label>
-          <label>
-            Data
-            <input
-              onChange={(event) =>
-                setWorkForm({ ...workForm, date: event.target.value })
-              }
-              required
-              type="date"
-              value={workForm.date}
-            />
-          </label>
-          <label>
-            Ora inizio
-            <input
-              onChange={(event) =>
-                setWorkForm({
-                  ...workForm,
-                  startTime: event.target.value,
-                })
-              }
-              required
-              type="time"
-              value={workForm.startTime}
-            />
-          </label>
-          <label>
-            Ora fine
-            <input
-              onChange={(event) =>
-                setWorkForm({
-                  ...workForm,
-                  endTime: event.target.value,
-                })
-              }
-              required
-              type="time"
-              value={workForm.endTime}
-            />
-          </label>
-          {selectedRate?.mode === 'per-piece' && (
+          {selectedRate?.mode === 'hourly' ? (
             <>
               <label>
-                Prodotto
-                <select
-                  onChange={(event) =>
-                    setWorkForm({
-                      ...workForm,
-                      productId: event.target.value,
-                    })
-                  }
-                  value={workForm.productId}
-                >
-                  <option value="">Produzione generica</option>
-                  {data.productionSettings.map((settings) => (
-                    <option key={settings.id} value={settings.id}>
-                      {settings.productName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Quantità panini / pezzi
+                Data
                 <input
-                  inputMode="decimal"
-                  min="1"
                   onChange={(event) =>
                     setWorkForm({
                       ...workForm,
-                      quantity: event.target.value,
+                      date: event.target.value,
                     })
                   }
                   required
-                  step="1"
-                  type="number"
-                  value={workForm.quantity}
+                  type="date"
+                  value={workForm.date}
                 />
               </label>
+              <label>
+                Ora inizio
+                <input
+                  onChange={(event) =>
+                    setWorkForm({
+                      ...workForm,
+                      startTime: event.target.value,
+                    })
+                  }
+                  required
+                  type="time"
+                  value={workForm.startTime}
+                />
+              </label>
+              <label>
+                Ora fine
+                <input
+                  onChange={(event) =>
+                    setWorkForm({
+                      ...workForm,
+                      endTime: event.target.value,
+                    })
+                  }
+                  required
+                  type="time"
+                  value={workForm.endTime}
+                />
+              </label>
+              <button
+                className="button button-primary"
+                type="submit"
+              >
+                Registra ore
+              </button>
             </>
+          ) : selectedRate?.mode === 'per-piece' ? (
+            <div className="production-piece-summary">
+              <span>Pezzi rilevati nel mese</span>
+              <strong>
+                {selectedPieceRows
+                  .reduce((total, row) => total + row.quantity, 0)
+                  .toLocaleString('it-IT')}
+              </strong>
+              <small>
+                {selectedPieceRows.length
+                  ? selectedPieceRows
+                      .map(
+                        (row) =>
+                          `${row.productName}: ${row.quantity.toLocaleString('it-IT')}`,
+                      )
+                      .join(' · ')
+                  : 'Assegna la lavoratrice a un prodotto nella pagina Costo prodotto.'}
+              </small>
+              <strong>
+                {money(
+                  selectedPieceRows.reduce(
+                    (total, row) => total + row.total,
+                    0,
+                  ),
+                )}
+              </strong>
+            </div>
+          ) : (
+            <small>Configura prima la tariffa della lavoratrice.</small>
           )}
-          <button
-            className="button button-primary"
-            disabled={!selectedRate}
-            type="submit"
-          >
-            Registra lavoro
-          </button>
         </div>
       </form>
 
@@ -533,62 +556,90 @@ export function ProductionWagesPage({
           </div>
         </div>
         <div className="production-wage-history">
-          {monthlyEntries.length ? (
-            monthlyEntries.map((entry) => {
-              const seller = data.sellers.find(
-                (item) => item.id === entry.sellerId,
-              )
-              const product = data.productionSettings.find(
-                (item) => item.id === entry.productId,
-              )
-              const hours = durationHours(
-                entry.startTime,
-                entry.endTime,
-              )
-              return (
-                <article className="record-card" key={entry.id}>
-                  <span>
-                    <strong>{seller?.name ?? 'Lavoratrice rimossa'}</strong>
-                    <small>
-                      {entry.date} · {entry.startTime}–{entry.endTime}
-                    </small>
-                    <small>
-                      {entry.payMode === 'hourly'
-                        ? `${hours.toLocaleString('it-IT')} ore × ${money(entry.rate)}`
-                        : `${entry.quantity.toLocaleString('it-IT')} pezzi × ${money(entry.rate)}${product ? ` · ${product.productName}` : ''}`}
-                    </small>
-                  </span>
-                  <span>
-                    <strong>
-                      {money(
-                        entrySalary(
-                          entry.payMode,
-                          entry.rate,
-                          entry.startTime,
-                          entry.endTime,
-                          entry.quantity,
-                        ),
-                      )}
-                    </strong>
-                    <button
-                      className="danger-text"
-                      onClick={() =>
-                        updateAccounting((current) => ({
-                          ...current,
-                          productionWorkEntries:
-                            current.productionWorkEntries.filter(
-                              (item) => item.id !== entry.id,
-                            ),
-                        }))
-                      }
-                      type="button"
+          {monthlyHourlyEntries.length ||
+          automaticPieceRows.some((row) => row.quantity > 0) ? (
+            <>
+              {monthlyHourlyEntries.map((entry) => {
+                const seller = data.sellers.find(
+                  (item) => item.id === entry.sellerId,
+                )
+                const hours = durationHours(
+                  entry.startTime,
+                  entry.endTime,
+                )
+                return (
+                  <article className="record-card" key={entry.id}>
+                    <span>
+                      <strong>
+                        {seller?.name ?? 'Lavoratrice rimossa'}
+                      </strong>
+                      <small>
+                        {entry.date} · {entry.startTime}–{entry.endTime}
+                      </small>
+                      <small>
+                        {hours.toLocaleString('it-IT')} ore ×{' '}
+                        {money(entry.rate)}
+                      </small>
+                    </span>
+                    <span>
+                      <strong>
+                        {money(
+                          entrySalary(
+                            entry.payMode,
+                            entry.rate,
+                            entry.startTime,
+                            entry.endTime,
+                            entry.quantity,
+                          ),
+                        )}
+                      </strong>
+                      <button
+                        className="danger-text"
+                        onClick={() =>
+                          updateAccounting((current) => ({
+                            ...current,
+                            productionWorkEntries:
+                              current.productionWorkEntries.filter(
+                                (item) => item.id !== entry.id,
+                              ),
+                          }))
+                        }
+                        type="button"
+                      >
+                        Elimina
+                      </button>
+                    </span>
+                  </article>
+                )
+              })}
+              {automaticPieceRows
+                .filter((row) => row.quantity > 0)
+                .map((row) => {
+                  const seller = data.sellers.find(
+                    (item) => item.id === row.sellerId,
+                  )
+                  return (
+                    <article
+                      className="record-card"
+                      key={`${row.sellerId}-${row.productId}`}
                     >
-                      Elimina
-                    </button>
-                  </span>
-                </article>
-              )
-            })
+                      <span>
+                        <strong>
+                          {seller?.name ?? 'Lavoratrice rimossa'}
+                        </strong>
+                        <small>{month} · calcolo automatico</small>
+                        <small>
+                          {row.quantity.toLocaleString('it-IT')} pezzi ×{' '}
+                          {money(row.rate)} · {row.productName}
+                        </small>
+                      </span>
+                      <span>
+                        <strong>{money(row.total)}</strong>
+                      </span>
+                    </article>
+                  )
+                })}
+            </>
           ) : (
             <p className="empty-state">Nessuna registrazione nel mese.</p>
           )}

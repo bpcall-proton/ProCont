@@ -225,6 +225,15 @@ function Workspace() {
     review: <ReviewPage />,
     settings: <SettingsPage />,
   }
+  const compactAccountingPage = [
+    'accounting',
+    'invoiceArchive',
+    'takingsArchive',
+    'paidInvoices',
+    'accountingVerification',
+    'reports',
+    'productionWages',
+  ].includes(page)
 
   return (
     <div
@@ -335,7 +344,11 @@ function Workspace() {
             <DataModeBadge mode={state.dataSettings.mode} />
           </div>
         </header>
-        <div className="page-container">{pages[page]}</div>
+        <div
+          className={`page-container${compactAccountingPage ? ' accounting-compact-scope' : ''}`}
+        >
+          {pages[page]}
+        </div>
       </main>
     </div>
   )
