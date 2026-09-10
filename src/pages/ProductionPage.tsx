@@ -47,6 +47,23 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
 }
 
+function durationHours(startTime: string, endTime: string) {
+  const [startHours, startMinutes] = startTime.split(':').map(Number)
+  const [endHours, endMinutes] = endTime.split(':').map(Number)
+  if (
+    !Number.isFinite(startHours) ||
+    !Number.isFinite(startMinutes) ||
+    !Number.isFinite(endHours) ||
+    !Number.isFinite(endMinutes)
+  ) {
+    return 0
+  }
+  const start = startHours * 60 + startMinutes
+  let end = endHours * 60 + endMinutes
+  if (end < start) end += 24 * 60
+  return (end - start) / 60
+}
+
 function startOfWeek(value: string) {
   const date = new Date(`${value}T00:00:00Z`)
   const day = date.getUTCDay()
@@ -71,7 +88,7 @@ function rangeFor(period: ProductionReportPeriod, selected: string) {
   const month = date.getUTCMonth()
   return {
     start: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
-    end: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10),
+    end: selected,
   }
 }
 
@@ -210,30 +227,72 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           ),
         }))
         .filter((item) => item.amount > 0)
-      const salaryExpenses = data.expenses
-        .filter(
-          (expense) =>
-            expense.type === 'stipendio' &&
-            expense.sellerId !== null &&
-            productWorkerIds.includes(expense.sellerId),
+      const productionSalaries = productWorkerIds.flatMap((workerId) => {
+        const seller = data.sellers.find((item) => item.id === workerId)
+        const assignedProducts = Math.max(
+          1,
+          data.productionSettings.filter((configuredProduct) =>
+            configuredIds(configuredProduct.workerIds).includes(workerId),
+          ).length,
         )
-        .map((expense) => ({
-          expense,
-          amount: roundMoney(
-            allocatedExpense(expense, range.start, range.end) /
-              Math.max(
-                1,
-                data.productionSettings.filter(
-                  (configuredProduct) =>
-                    expense.sellerId !== null &&
-                    configuredIds(configuredProduct.workerIds).includes(
-                      expense.sellerId,
-                    ),
-                ).length,
-              ),
-          ),
-        }))
-        .filter((item) => item.amount > 0)
+        const hourlyEntries = data.productionWorkEntries.filter(
+          (entry) =>
+            entry.sellerId === workerId &&
+            entry.payMode === 'hourly' &&
+            inRange(entry.date),
+        )
+        const hours = hourlyEntries.reduce(
+          (total, entry) =>
+            total + durationHours(entry.startTime, entry.endTime),
+          0,
+        )
+        const hourlyAmount = roundMoney(
+          hourlyEntries.reduce(
+            (total, entry) =>
+              total +
+              durationHours(entry.startTime, entry.endTime) * entry.rate,
+            0,
+          ) / assignedProducts,
+        )
+        const rate = data.productionWorkerRates.find(
+          (settings) => settings.sellerId === workerId,
+        )
+        const quantity =
+          rate?.mode === 'per-piece'
+            ? data.productionEntries
+                .filter(
+                  (entry) =>
+                    entry.productId === product.id && inRange(entry.date),
+                )
+                .reduce((total, entry) => total + entry.quantity, 0)
+            : 0
+        const pieceAmount =
+          rate?.mode === 'per-piece'
+            ? roundMoney(quantity * rate.rate)
+            : 0
+        return [
+          ...(hourlyAmount > 0
+            ? [
+                {
+                  id: `hourly-${workerId}`,
+                  sellerName: seller?.name ?? 'Lavoratrice rimossa',
+                  description: `${hours.toLocaleString('it-IT')} ore registrate`,
+                  amount: hourlyAmount,
+                },
+              ]
+            : []),
+          ...(pieceAmount > 0 && rate
+            ? [
+                {
+                  id: `piece-${workerId}`,
+                  sellerName: seller?.name ?? 'Lavoratrice rimossa',
+                  description: `${quantity.toLocaleString('it-IT')} pezzi × ${money(rate.rate)}`,
+                  amount: pieceAmount,
+                },
+              ]
+            : []),
+        ]
+      })
       const rentals = data.rentals
         .map((rental) => ({
           rental,
@@ -261,7 +320,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         (total, item) => total + item.amount,
         0,
       ) + rentals.reduce((total, item) => total + item.amount, 0)
-      const salaryCosts = salaryExpenses.reduce(
+      const salaryCosts = productionSalaries.reduce(
         (total, item) => total + item.amount,
         0,
       )
@@ -276,7 +335,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         invoices,
         fixedExpenses,
         rentals,
-        salaryExpenses,
+        productionSalaries,
         productionEntries,
         invoiceCosts: roundMoney(invoiceCosts),
         fixedCosts: roundMoney(fixedCosts),
@@ -302,14 +361,6 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         expense.recurrence === 'monthly' &&
         products.some((product) =>
           configuredIds(product.expenseIds).includes(expense.id),
-        ),
-    )
-    const uniqueSalaryExpenses = data.expenses.filter(
-      (expense) =>
-        expense.type === 'stipendio' &&
-        expense.sellerId !== null &&
-        products.some((product) =>
-          configuredIds(product.workerIds).includes(expense.sellerId ?? ''),
         ),
     )
     const uniqueRentals = data.rentals
@@ -343,16 +394,10 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           (total, product) => total + product.fixedCosts,
           0,
         )
-    const salaryCosts = showingAllProducts
-      ? uniqueSalaryExpenses.reduce(
-          (total, expense) =>
-            total + allocatedExpense(expense, range.start, range.end),
-          0,
-        )
-      : productsResults.reduce(
-          (total, product) => total + product.salaryCosts,
-          0,
-        )
+    const salaryCosts = productsResults.reduce(
+      (total, product) => total + product.salaryCosts,
+      0,
+    )
     const quantity = productsResults.reduce(
       (total, product) => total + product.quantity,
       0,
@@ -655,7 +700,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     })),
   )
   const salaryDetails = results.products.flatMap((product) =>
-    product.salaryExpenses.map((item) => ({
+    product.productionSalaries.map((item) => ({
       ...item,
       productId: product.product.id,
       productName: product.product.productName,
@@ -958,17 +1003,22 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               ) : (
                 <div className="record-list">
                   {salaryDetails.map(
-                    ({ expense, amount, productId, productName }) => (
+                    ({
+                      id,
+                      sellerName,
+                      description,
+                      amount,
+                      productId,
+                      productName,
+                    }) => (
                       <div
                         className="record-card"
-                        key={`${productId}-${expense.id}`}
+                        key={`${productId}-${id}`}
                       >
                         <span>
-                          <strong>
-                            {expense.sellerName || expense.description}
-                          </strong>
+                          <strong>{sellerName}</strong>
                           <small>
-                            {productName} · {expense.description}
+                            {productName} · {description}
                           </small>
                         </span>
                         <strong>{money(amount)}</strong>

@@ -491,6 +491,13 @@ export function InvoicesPanel({
     (sum, invoice) => sum + invoice.theoreticalRevenue,
     0,
   )
+  const filteredSupplierDebt = invoices.reduce(
+    (sum, invoice) => sum + invoiceRemaining(invoice),
+    0,
+  )
+  const filteredSupplier = data.suppliers.find(
+    (supplier) => supplier.id === activeSupplierFilter,
+  )
   const selectableInvoiceIds = invoices
     .filter((invoice) => !invoice.settled)
     .map((invoice) => invoice.id)
@@ -1391,6 +1398,15 @@ export function InvoicesPanel({
               <small>Venit fatture selezionate</small>
               <strong>{money(selectedInvoiceRevenue)}</strong>
               <span>Stessa selezione</span>
+            </div>
+            <div className="invoice-selection-total invoice-supplier-debt">
+              <small>
+                {filteredSupplier
+                  ? `Debito ${filteredSupplier.name}`
+                  : 'Debito fornitori'}
+              </small>
+              <strong>{money(filteredSupplierDebt)}</strong>
+              <span>Residuo nel filtro corrente</span>
             </div>
           </div>
           <div className="invoice-filters">
