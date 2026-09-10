@@ -196,6 +196,7 @@ export interface AccountingSupplier {
   city: string
   notes: string
   paymentTermsDays: number
+  sellerRevenueTransferEnabled: boolean
   cashUnregisteredByDefault: boolean
   paidOnDeliveryByDefault: boolean
 }

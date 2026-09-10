@@ -231,7 +231,7 @@ export function ReportsPage() {
     const supplier = source.suppliers.find(
       (item) => item.id === invoice.supplierId,
     )
-    if (!supplier) return []
+    if (!supplier?.sellerRevenueTransferEnabled) return []
     const linkedSellerId =
       bestContactNameMatch(
         invoice.supplierName || supplier.name,
