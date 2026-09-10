@@ -25,6 +25,7 @@ import { LoginPage } from './pages/LoginPage'
 import { PaidInvoicesPage } from './pages/PaidInvoicesPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ProductionPage } from './pages/ProductionPage'
+import { ProductionVerificationPage } from './pages/ProductionVerificationPage'
 import { ProductionWagesPage } from './pages/ProductionWagesPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReportsPage } from './pages/ReportsPage'
@@ -43,6 +44,7 @@ type Page =
   | 'paidInvoices'
   | 'products'
   | 'production'
+  | 'productionVerification'
   | 'productionWages'
   | 'accountingVerification'
   | 'reports'
@@ -82,6 +84,16 @@ const navigation: {
       en: 'Product cost',
     },
     icon: ProductionIcon,
+    permission: 'manageAccounting',
+  },
+  {
+    id: 'productionVerification',
+    label: {
+      it: 'Verifica produzione',
+      ro: 'Verificare producție',
+      en: 'Production check',
+    },
+    icon: ScanIcon,
     permission: 'manageAccounting',
   },
   {
@@ -215,6 +227,9 @@ function Workspace() {
         key={activeCompany?.id}
         onBack={() => setPage('production')}
       />
+    ),
+    productionVerification: (
+      <ProductionVerificationPage key={activeCompany?.id} />
     ),
     accountingVerification: (
       <AccountingVerificationPage key={activeCompany?.id} />

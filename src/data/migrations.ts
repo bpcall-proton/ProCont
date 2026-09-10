@@ -16,6 +16,7 @@ import type {
   ProductionEntry,
   ProductionPayMode,
   ProductionSettings,
+  ProductionVerificationUnit,
   ProductionViewSettings,
   ProductionWorkerRate,
   ProductionWorkEntry,
@@ -433,6 +434,12 @@ function productionPayMode(value: unknown): ProductionPayMode {
   return value === 'per-piece' ? 'per-piece' : 'hourly'
 }
 
+function productionVerificationUnit(
+  value: unknown,
+): ProductionVerificationUnit {
+  return value === 'kg' || value === 'g' ? value : 'pz'
+}
+
 function mapProductionWorkerRate(
   value: JsonRecord,
   fallbackCompanyId: string,
@@ -493,6 +500,8 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     verificationStockLoads: [],
     verificationProductionEntries: [],
     verificationTransfers: [],
+    productionVerificationSections: [],
+    productionVerificationEntries: [],
   }
 }
 
@@ -510,7 +519,8 @@ export function normalizeStoredState(
       value.schemaVersion === 7 ||
       value.schemaVersion === 8 ||
       value.schemaVersion === 9 ||
-      value.schemaVersion === 10) &&
+      value.schemaVersion === 10 ||
+      value.schemaVersion === 11) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -648,7 +658,7 @@ export function normalizeStoredState(
     )
     return {
       ...state,
-      schemaVersion: 10,
+      schemaVersion: 11,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -802,6 +812,41 @@ export function normalizeStoredState(
           quantity: Math.max(0, amount(transfer.quantity)),
           reassignRevenue: transfer.reassignRevenue !== false,
         })),
+        productionVerificationSections: records(
+          accounting.productionVerificationSections,
+        ).map((section) => ({
+          id: text(section.id, crypto.randomUUID()),
+          companyId: text(section.companyId, fallbackCompanyId),
+          name: text(section.name),
+          productName: text(section.productName),
+          ingredients: records(section.ingredients).map((ingredient) => ({
+            id: text(ingredient.id, crypto.randomUUID()),
+            name: text(ingredient.name),
+            unit: productionVerificationUnit(ingredient.unit),
+            amountPerPiece: Math.max(0, amount(ingredient.amountPerPiece)),
+          })),
+        })),
+        productionVerificationEntries: records(
+          accounting.productionVerificationEntries,
+        ).map((entry) => ({
+          id: text(entry.id, crypto.randomUUID()),
+          companyId: text(entry.companyId, fallbackCompanyId),
+          sectionId: text(entry.sectionId),
+          date: text(entry.date),
+          actualQuantity: Math.max(0, amount(entry.actualQuantity)),
+          note: text(entry.note),
+          ingredients: records(entry.ingredients).map((ingredient) => ({
+            ingredientId: text(ingredient.ingredientId),
+            purchasedQuantity: Math.max(
+              0,
+              amount(ingredient.purchasedQuantity),
+            ),
+            consumedQuantity: Math.max(
+              0,
+              amount(ingredient.consumedQuantity),
+            ),
+          })),
+        })),
         takings: (accounting.takings ?? []).map((taking) => ({
           ...taking,
           companyId: taking.companyId || fallbackCompanyId,
@@ -927,6 +972,14 @@ export function importLegacyIntoState(
       current.accounting.verificationTransfers,
       accounting.verificationTransfers,
     ),
+    productionVerificationSections: mergeById(
+      current.accounting.productionVerificationSections,
+      accounting.productionVerificationSections,
+    ),
+    productionVerificationEntries: mergeById(
+      current.accounting.productionVerificationEntries,
+      accounting.productionVerificationEntries,
+    ),
   }
   return {
     ...current,
@@ -1016,6 +1069,12 @@ export function importLegacyIntoActiveCompany(
   )
   const verificationTransfers = companyRecords(
     imported.accounting.verificationTransfers,
+  )
+  const productionVerificationSections = companyRecords(
+    imported.accounting.productionVerificationSections,
+  )
+  const productionVerificationEntries = companyRecords(
+    imported.accounting.productionVerificationEntries,
   )
 
   return {
@@ -1120,6 +1179,14 @@ export function importLegacyIntoActiveCompany(
         current.accounting.verificationTransfers,
         verificationTransfers,
       ),
+      productionVerificationSections: mergeById(
+        current.accounting.productionVerificationSections,
+        productionVerificationSections,
+      ),
+      productionVerificationEntries: mergeById(
+        current.accounting.productionVerificationEntries,
+        productionVerificationEntries,
+      ),
     },
   }
 }
@@ -1128,7 +1195,7 @@ export function exportUnifiedState(state: AppState) {
   return JSON.stringify(
     {
       app: 'fatture-incassi-pro',
-      version: 10,
+      version: 11,
       exportedAt: new Date().toISOString(),
       data: state,
     },

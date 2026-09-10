@@ -251,6 +251,10 @@ function resetActiveCompanySeason(state: AppState, companyId: string) {
       verificationTransfers: state.accounting.verificationTransfers.filter(
         (transfer) => transfer.companyId !== companyId,
       ),
+      productionVerificationEntries:
+        state.accounting.productionVerificationEntries.filter(
+          (entry) => entry.companyId !== companyId,
+        ),
     },
   }
 }
@@ -299,6 +303,12 @@ function clearActiveCompanyData(state: AppState, companyId: string) {
       ),
       verificationTransfers: outsideCompany(
         state.accounting.verificationTransfers,
+      ),
+      productionVerificationSections: outsideCompany(
+        state.accounting.productionVerificationSections,
+      ),
+      productionVerificationEntries: outsideCompany(
+        state.accounting.productionVerificationEntries,
       ),
     },
   }
@@ -1098,7 +1108,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const content = JSON.stringify(
           {
             app: 'fatture-incassi-pro',
-            version: 10,
+            version: 11,
             archive: {
               type: 'season',
               name: archiveName,

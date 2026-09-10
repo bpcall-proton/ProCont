@@ -229,5 +229,12 @@ export function activeAccounting(state: AccountingState) {
     verificationTransfers: state.verificationTransfers.filter(
       (item) => item.companyId === id,
     ),
+    productionVerificationSections:
+      state.productionVerificationSections.filter(
+        (item) => item.companyId === id,
+      ),
+    productionVerificationEntries: state.productionVerificationEntries.filter(
+      (item) => item.companyId === id,
+    ),
   }
 }

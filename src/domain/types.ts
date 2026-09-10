@@ -18,6 +18,7 @@ export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
 export type ProductionEntryPeriod = 'day' | 'week'
 export type ProductionReportPeriod = 'day' | 'week' | 'month'
 export type ProductionPayMode = 'hourly' | 'per-piece'
+export type ProductionVerificationUnit = 'kg' | 'g' | 'pz'
 export type ReviewDocumentStatus =
   | 'pending'
   | 'unrecognized'
@@ -331,6 +332,37 @@ export interface VerificationTransfer {
   reassignRevenue: boolean
 }
 
+export interface ProductionVerificationIngredient {
+  id: string
+  name: string
+  unit: ProductionVerificationUnit
+  amountPerPiece: number
+}
+
+export interface ProductionVerificationSection {
+  id: string
+  companyId: string
+  name: string
+  productName: string
+  ingredients: ProductionVerificationIngredient[]
+}
+
+export interface ProductionVerificationIngredientMovement {
+  ingredientId: string
+  purchasedQuantity: number
+  consumedQuantity: number
+}
+
+export interface ProductionVerificationEntry {
+  id: string
+  companyId: string
+  sectionId: string
+  date: string
+  actualQuantity: number
+  note: string
+  ingredients: ProductionVerificationIngredientMovement[]
+}
+
 export interface AccountingState {
   companies: AccountingCompany[]
   activeCompanyId: string | null
@@ -351,6 +383,8 @@ export interface AccountingState {
   verificationStockLoads: VerificationStockLoad[]
   verificationProductionEntries: VerificationProductionEntry[]
   verificationTransfers: VerificationTransfer[]
+  productionVerificationSections: ProductionVerificationSection[]
+  productionVerificationEntries: ProductionVerificationEntry[]
 }
 
 export interface ReviewInvoiceSuggestion {
@@ -376,7 +410,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 10
+  schemaVersion: 11
   company: Company
   stores: Store[]
   sellers: Seller[]
