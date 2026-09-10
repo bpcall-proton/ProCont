@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent,
 } from 'react'
 import {
   activeAccounting,
@@ -364,6 +365,43 @@ const emptyInvoiceLine = {
 
 interface InvoicesPanelProps {
   archiveOnly?: boolean
+}
+
+function RowDeleteButton({
+  label = 'Elimina',
+  onConfirm,
+}: {
+  label?: string
+  onConfirm: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  function confirm(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur()
+    if (!confirming) {
+      setConfirming(true)
+      return
+    }
+    onConfirm()
+    window.requestAnimationFrame(() => window.focus())
+  }
+
+  return (
+    <>
+      <button
+        className={`danger-text${confirming ? ' delete-confirming' : ''}`}
+        onClick={confirm}
+        type="button"
+      >
+        {confirming ? 'Conferma' : label}
+      </button>
+      {confirming && (
+        <button onClick={() => setConfirming(false)} type="button">
+          Annulla
+        </button>
+      )}
+    </>
+  )
 }
 
 export function InvoicesPanel({
@@ -870,7 +908,6 @@ export function InvoicesPanel({
   }
 
   function remove(id: string) {
-    if (!window.confirm('Eliminare questa fattura?')) return
     setSelectedInvoiceIds((current) =>
       current.filter((invoiceId) => invoiceId !== id),
     )
@@ -1323,17 +1360,14 @@ export function InvoicesPanel({
                       <td>{money(line.saleTotalInclVat)}</td>
                       <td>{line.markupPercent}%</td>
                       <td className="row-actions">
-                        <button
-                          className="danger-text"
-                          onClick={() =>
+                        <RowDeleteButton
+                          label="Rimuovi"
+                          onConfirm={() =>
                             setLines((current) =>
                               current.filter((item) => item.id !== line.id),
                             )
                           }
-                          type="button"
-                        >
-                          Rimuovi
-                        </button>
+                        />
                       </td>
                     </tr>
                   ))}
@@ -1525,7 +1559,7 @@ export function InvoicesPanel({
                   <td className="row-actions">
                     <button type="button" onClick={() => edit(invoice)}>Modifica</button>
                     {!invoice.settled && <button type="button" onClick={() => { setPaymentTarget(invoice); setPaymentAmount('') }}>Acconto / paga</button>}
-                    <button className="danger-text" type="button" onClick={() => remove(invoice.id)}>Elimina</button>
+                    <RowDeleteButton onConfirm={() => remove(invoice.id)} />
                   </td>
                 </tr>
                 )
@@ -1883,7 +1917,7 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
         <div className="data-table-wrap accounting-records-table-wrap">
           <table className="data-table"><thead><tr><th>Data</th><th>Venditore</th><th>Cash</th><th>POS</th><th>IVA inclusa</th><th>Reale</th><th>Cash ritirato</th><th>Merce aq. senza fattura</th><th>Cash in mano</th><th>Azioni</th></tr></thead>
             <tbody>{takings.map((taking) => (
-              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td>{money(taking.unregisteredGoods)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))}>Elimina</button></td></tr>
+              <tr key={taking.id}><td>{taking.date}</td><td>{taking.sellerName || '—'}</td><td>{money(taking.cash)}</td><td>{money(taking.pos)}</td><td>{money(taking.vat)}</td><td>{money(realTaking(taking))}</td><td>{money(taking.withdrawal)}</td><td>{money(taking.unregisteredGoods)}</td><td><strong>{money(cashBalances.get(taking.id) ?? 0)}</strong></td><td className="row-actions"><button type="button" onClick={() => editTaking(taking)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, takings: current.takings.filter((item) => item.id !== taking.id) }))} /></td></tr>
             ))}</tbody>
           </table>
           {takings.length === 0 && <div className="empty-state compact-empty"><strong>Nessun incasso</strong><span>Modifica i filtri oppure registra un nuovo incasso.</span></div>}
@@ -2144,7 +2178,7 @@ function ContactsPanel() {
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))}>Elimina</button></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
         })}</div>
       </article>
       <article className="panel">
@@ -2208,7 +2242,7 @@ function ContactsPanel() {
               ),
             0,
           )
-          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>{supplier.sellerRevenueTransferEnabled ? 'Calcola Venit acquisito/ceduto' : 'Escluso dal Venit acquisito/ceduto'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : supplier.paidOnDeliveryByDefault ? 'Già pagato alla consegna' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))}>Elimina</button></span></span></div>
+          return <div className="record-card supplier-card" key={supplier.id}><span><strong>{supplier.name}</strong><small>{supplier.taxId || 'P.IVA non indicata'} · {invoices.length} fatture</small></span><span><small>{linkedSeller ? `Fornitore interno: ${linkedSeller.name}` : 'Fornitore esterno'}</small><small>{supplier.sellerRevenueTransferEnabled ? 'Calcola Venit acquisito/ceduto' : 'Escluso dal Venit acquisito/ceduto'}</small><small>Pagamento entro {supplier.paymentTermsDays} giorni</small><small>{supplier.cashUnregisteredByDefault ? 'Cash senza fattura' : supplier.paidOnDeliveryByDefault ? 'Già pagato alla consegna' : 'Pagamento normale'}</small></span><span className="supplier-card-financials"><small className="supplier-turnover">Fatturato <strong>{money(turnover)}</strong></small><span className="supplier-outstanding"><small>Rimane da pagare</small><strong>{money(outstanding)}</strong></span><span className="supplier-card-actions"><button type="button" onClick={() => editSupplier(supplier)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, suppliers: current.suppliers.filter((item) => item.id !== supplier.id) }))} /></span></span></div>
         })}</div>
       </article>
     </section>
@@ -2422,7 +2456,7 @@ function ExpenseList({
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => onUpdate(items.filter((current) => current.id !== item.id))}>Elimina</button></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
 }
 
 function SettlementList({
@@ -2435,6 +2469,6 @@ function SettlementList({
   const { updateAccounting } = useAppStore()
   return <div className="record-list">{items.map((item) => {
     const label = 'property' in item ? item.property : item.description
-    return <div className="record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small></span><span><strong>{money(item.total)}</strong><button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><button className="danger-text" type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))}>Elimina</button></span></div>
+    return <div className="record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small></span><span><strong>{money(item.total)}</strong><button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))} /></span></div>
   })}</div>
 }

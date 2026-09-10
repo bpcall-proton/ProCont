@@ -222,6 +222,11 @@ h2 {
   color: #fb7185;
 }
 
+.delete-confirming {
+  border-color: rgba(251, 113, 133, 0.7);
+  background: rgba(190, 24, 93, 0.18);
+}
+
 .eyebrow {
   display: block;
   margin-bottom: 8px;
