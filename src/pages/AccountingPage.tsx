@@ -381,15 +381,7 @@ export function InvoicesPanel({
     `accounting-invoice-filters:${data.company?.id ?? 'none'}`,
     invoiceFilterDefaults,
   )
-  const [form, setForm] = useState(() => ({
-    ...emptyInvoice,
-    sellerId:
-      state.accounting.sellers.find(
-        (seller) =>
-          seller.companyId === state.accounting.activeCompanyId &&
-          seller.autoSelect,
-      )?.id ?? '',
-  }))
+  const [form, setForm] = useState(() => ({ ...emptyInvoice }))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [repeatSupplier, setRepeatSupplier] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
@@ -469,8 +461,6 @@ export function InvoicesPanel({
       monthFilter,
     ],
   )
-  const defaultSellerId =
-    data.sellers.find((seller) => seller.autoSelect)?.id ?? ''
   const total = invoices.reduce((sum, item) => sum + item.total, 0)
   const paid = invoices.reduce(
     (sum, item) => sum + (item.settled ? item.total : item.paidAmount),
@@ -713,7 +703,7 @@ export function InvoicesPanel({
   function resetInvoiceForm() {
     submitAfterValidationRef.current = false
     setEditingId(null)
-    setForm({ ...emptyInvoice, sellerId: defaultSellerId, date: today() })
+    setForm({ ...emptyInvoice, date: today() })
     setLines([])
     setLineForm(emptyInvoiceLine)
     setVerificationIncluded(false)
@@ -800,11 +790,11 @@ export function InvoicesPanel({
       }),
     )
     const nextForm = editingId
-      ? { ...emptyInvoice, sellerId: defaultSellerId, date: today() }
+      ? { ...emptyInvoice, date: today() }
       : {
           ...emptyInvoice,
           supplierId: repeatSupplier ? form.supplierId : '',
-          sellerId: repeatSeller ? form.sellerId : defaultSellerId,
+          sellerId: repeatSeller ? form.sellerId : '',
           date: repeatDate ? form.date : today(),
           settled:
             repeatSupplier &&
@@ -1085,7 +1075,7 @@ export function InvoicesPanel({
                     checked={repeatDate}
                     onChange={(event) => {
                       setRepeatDate(event.target.checked)
-                      if (event.target.checked) setRepeatSupplier(true)
+                      if (event.target.checked) setRepeatSeller(true)
                     }}
                     type="checkbox"
                   />
@@ -1583,12 +1573,7 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
     `accounting-taking-filters:${data.company?.id ?? 'none'}`,
     takingFilterDefaults,
   )
-  const defaultSellerId =
-    data.sellers.find((seller) => seller.autoSelect)?.id ?? ''
-  const [form, setForm] = useState({
-    ...emptyTaking,
-    sellerId: defaultSellerId,
-  })
+  const [form, setForm] = useState({ ...emptyTaking })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [repeatDate, setRepeatDate] = useState(false)
   const [repeatSeller, setRepeatSeller] = useState(false)
@@ -1721,11 +1706,11 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
     setEditingId(null)
     setForm(
       wasEditing
-        ? { ...emptyTaking, sellerId: defaultSellerId, date: today() }
+        ? { ...emptyTaking, date: today() }
         : {
             ...emptyTaking,
             date: repeatDate ? form.date : today(),
-            sellerId: repeatSeller ? form.sellerId : defaultSellerId,
+            sellerId: repeatSeller ? form.sellerId : '',
           },
     )
     setFormError(null)
@@ -1847,7 +1832,10 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
               <label className="checkbox-row">
                 <input
                   checked={repeatDate}
-                  onChange={(event) => setRepeatDate(event.target.checked)}
+                  onChange={(event) => {
+                    setRepeatDate(event.target.checked)
+                    if (event.target.checked) setRepeatSeller(true)
+                  }}
                   type="checkbox"
                 />
                 Mantieni ultima data
@@ -1875,7 +1863,7 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
         </div>
         {formError && <p className="import-message">{formError}</p>}
         <div className="form-actions">
-          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm({ ...emptyTaking, sellerId: defaultSellerId }); setFormError(null) }}>Annulla</button>}
+          {editingId && <button className="button button-secondary" type="button" onClick={() => { setEditingId(null); setForm({ ...emptyTaking }); setFormError(null) }}>Annulla</button>}
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra incasso'}</button>
         </div>
       </form>
