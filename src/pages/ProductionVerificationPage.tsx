@@ -112,6 +112,8 @@ export function ProductionVerificationPage() {
   const [ingredientForm, setIngredientForm] = useState(emptyIngredientForm)
   const [editingIngredientId, setEditingIngredientId] = useState('')
   const [confirmingIngredientId, setConfirmingIngredientId] = useState('')
+  const [confirmingSection, setConfirmingSection] = useState(false)
+  const [confirmingEntryId, setConfirmingEntryId] = useState('')
   const [entryDate, setEntryDate] = useState(today())
   const [actualQuantity, setActualQuantity] = useState('')
   const [entryNote, setEntryNote] = useState('')
@@ -214,6 +216,8 @@ export function ProductionVerificationPage() {
     setIngredientForm(emptyIngredientForm)
     setEditingIngredientId('')
     setConfirmingIngredientId('')
+    setConfirmingSection(false)
+    setConfirmingEntryId('')
     setQuantities({})
     setMessage('')
   }
@@ -243,12 +247,9 @@ export function ProductionVerificationPage() {
   }
 
   function removeSection() {
-    if (
-      !selectedSection ||
-      !window.confirm(
-        `Eliminare la sezione ${selectedSection.name} e tutte le sue verifiche?`,
-      )
-    ) {
+    if (!selectedSection) return
+    if (!confirmingSection) {
+      setConfirmingSection(true)
       return
     }
     const remainingSections = data.productionVerificationSections.filter(
@@ -267,6 +268,7 @@ export function ProductionVerificationPage() {
     }))
     setSelectedSectionId(remainingSections[0]?.id ?? '')
     setQuantities({})
+    setConfirmingSection(false)
     setMessage('')
   }
 
@@ -414,7 +416,10 @@ export function ProductionVerificationPage() {
   }
 
   function removeEntry(entryId: string) {
-    if (!window.confirm('Eliminare questa verifica registrata?')) return
+    if (confirmingEntryId !== entryId) {
+      setConfirmingEntryId(entryId)
+      return
+    }
     updateAccounting((current) => ({
       ...current,
       productionVerificationEntries:
@@ -422,6 +427,8 @@ export function ProductionVerificationPage() {
           (entry) => entry.id !== entryId,
         ),
     }))
+    setConfirmingEntryId('')
+    setMessage('Verifica eliminata.')
   }
 
   return (
@@ -555,13 +562,23 @@ export function ProductionVerificationPage() {
                     {selectedSection.name} · {selectedSection.productName}
                   </h2>
                 </div>
-                <button
-                  className="danger-text"
-                  onClick={removeSection}
-                  type="button"
-                >
-                  Elimina sezione
-                </button>
+                <div className="production-verification-actions">
+                  <button
+                    className="danger-text"
+                    onClick={removeSection}
+                    type="button"
+                  >
+                    {confirmingSection ? 'Conferma elimina' : 'Elimina sezione'}
+                  </button>
+                  {confirmingSection && (
+                    <button
+                      onClick={() => setConfirmingSection(false)}
+                      type="button"
+                    >
+                      Annulla
+                    </button>
+                  )}
+                </div>
               </div>
               <input
                 onChange={(event) =>
@@ -907,13 +924,23 @@ export function ProductionVerificationPage() {
                       {entry.note ? ` · ${entry.note}` : ''}
                     </small>
                   </span>
-                  <button
-                    className="danger-text"
-                    onClick={() => removeEntry(entry.id)}
-                    type="button"
-                  >
-                    Elimina
-                  </button>
+                  <div className="production-verification-actions">
+                    <button
+                      className="danger-text"
+                      onClick={() => removeEntry(entry.id)}
+                      type="button"
+                    >
+                      {confirmingEntryId === entry.id ? 'Conferma' : 'Elimina'}
+                    </button>
+                    {confirmingEntryId === entry.id && (
+                      <button
+                        onClick={() => setConfirmingEntryId('')}
+                        type="button"
+                      >
+                        Annulla
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {entries.length === 0 && (
