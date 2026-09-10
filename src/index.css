@@ -945,8 +945,12 @@ select {
 
 .dashboard-seller-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.dashboard-seller-metrics .seller-final-cash {
+  grid-column: span 2;
 }
 
 .dashboard-seller-metrics button {
@@ -2125,6 +2129,10 @@ select {
 
   .dashboard-seller-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-seller-metrics .seller-final-cash {
+    grid-column: auto;
   }
 
   .panel-heading:has(.dashboard-seller-heading-controls) {

@@ -1635,20 +1635,6 @@ export function DashboardPage() {
                     <em>Apri dettaglio</em>
                   </button>
                   <button
-                    className="seller-cash-metric seller-cash-withdrawn"
-                    onClick={() =>
-                      setSellerDetail({
-                        sellerId: seller.id,
-                        metric: 'withdrawals',
-                      })
-                    }
-                    type="button"
-                  >
-                    <span>Cash ritirato</span>
-                    <strong>{money(seller.withdrawals)}</strong>
-                    <em>Apri dettaglio</em>
-                  </button>
-                  <button
                     className="seller-cash-metric"
                     onClick={() =>
                       setSellerDetail({
@@ -1705,7 +1691,21 @@ export function DashboardPage() {
                     <em>Tolto dallo Stock residuo</em>
                   </button>
                   <button
-                    className="seller-cash-metric seller-cash-residual"
+                    className="seller-cash-metric seller-cash-withdrawn seller-final-cash"
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'withdrawals',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Cash ritirato</span>
+                    <strong>{money(seller.withdrawals)}</strong>
+                    <em>Apri dettaglio</em>
+                  </button>
+                  <button
+                    className="seller-cash-metric seller-cash-residual seller-final-cash"
                     onClick={() =>
                       setSellerDetail({
                         sellerId: seller.id,
