@@ -25,9 +25,37 @@ const emptyIngredientForm = {
   amountPerPiece: '',
 }
 
+function sumValue(value: string) {
+  const terms = value
+    .trim()
+    .replace(/^=/, '')
+    .replace(/\s+/g, '')
+    .split('+')
+  if (
+    terms.length === 0 ||
+    terms.some(
+      (term) =>
+        !term ||
+        !/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(term),
+    )
+  ) {
+    return null
+  }
+  const total = terms.reduce(
+    (sum, term) => sum + Number(term.replace(',', '.')),
+    0,
+  )
+  return Number.isFinite(total) ? Math.max(0, roundMoney(total)) : null
+}
+
 function numberValue(value: string) {
-  const parsed = Number(value.replace(',', '.'))
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+  return sumValue(value) ?? 0
+}
+
+function calculatedValue(value: string) {
+  if (!value.trim()) return ''
+  const total = sumValue(value)
+  return total === null ? value : String(total)
 }
 
 function monthRange(month: string) {
@@ -80,6 +108,8 @@ export function ProductionVerificationPage() {
   )
   const [sectionForm, setSectionForm] = useState(emptySectionForm)
   const [ingredientForm, setIngredientForm] = useState(emptyIngredientForm)
+  const [editingIngredientId, setEditingIngredientId] = useState('')
+  const [confirmingIngredientId, setConfirmingIngredientId] = useState('')
   const [entryDate, setEntryDate] = useState(today())
   const [actualQuantity, setActualQuantity] = useState('')
   const [entryNote, setEntryNote] = useState('')
@@ -179,6 +209,9 @@ export function ProductionVerificationPage() {
 
   function selectSection(sectionId: string) {
     setSelectedSectionId(sectionId)
+    setIngredientForm(emptyIngredientForm)
+    setEditingIngredientId('')
+    setConfirmingIngredientId('')
     setQuantities({})
     setMessage('')
   }
@@ -242,7 +275,9 @@ export function ProductionVerificationPage() {
     const amountPerPiece = numberValue(ingredientForm.amountPerPiece)
     if (!name || amountPerPiece <= 0) return
     const ingredient: ProductionVerificationIngredient = {
-      id: createId('production-verification-ingredient'),
+      id:
+        editingIngredientId ||
+        createId('production-verification-ingredient'),
       name,
       unit: ingredientForm.unit,
       amountPerPiece,
@@ -254,17 +289,50 @@ export function ProductionVerificationPage() {
           section.id === selectedSection.id
             ? {
                 ...section,
-                ingredients: [...section.ingredients, ingredient],
+                ingredients: editingIngredientId
+                  ? section.ingredients.map((item) =>
+                      item.id === editingIngredientId ? ingredient : item,
+                    )
+                  : [...section.ingredients, ingredient],
               }
             : section,
         ),
     }))
     setIngredientForm(emptyIngredientForm)
-    setMessage('Ingrediente aggiunto.')
+    setEditingIngredientId('')
+    setMessage(
+      editingIngredientId ? 'Ingrediente modificato.' : 'Ingrediente aggiunto.',
+    )
+  }
+
+  function editIngredient(ingredient: ProductionVerificationIngredient) {
+    setEditingIngredientId(ingredient.id)
+    setConfirmingIngredientId('')
+    setIngredientForm({
+      name: ingredient.name,
+      unit: ingredient.unit,
+      amountPerPiece: String(ingredient.amountPerPiece),
+    })
+    setMessage('Modifica i dati e premi Salva modifica.')
+    requestAnimationFrame(() =>
+      document
+        .getElementById('production-verification-ingredient-form')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    )
+  }
+
+  function cancelIngredientEdit() {
+    setEditingIngredientId('')
+    setIngredientForm(emptyIngredientForm)
+    setMessage('')
   }
 
   function removeIngredient(ingredientId: string) {
-    if (!selectedSection || !window.confirm('Eliminare questo ingrediente?')) {
+    if (!selectedSection) {
+      return
+    }
+    if (confirmingIngredientId !== ingredientId) {
+      setConfirmingIngredientId(ingredientId)
       return
     }
     updateAccounting((current) => ({
@@ -286,6 +354,11 @@ export function ProductionVerificationPage() {
       delete next[ingredientId]
       return next
     })
+    if (editingIngredientId === ingredientId) {
+      cancelIngredientEdit()
+    }
+    setConfirmingIngredientId('')
+    setMessage('Ingrediente eliminato.')
   }
 
   function saveEntry(event: FormEvent) {
@@ -469,6 +542,7 @@ export function ProductionVerificationPage() {
           <section className="production-verification-grid">
             <form
               className="panel form-stack production-verification-config"
+              id="production-verification-ingredient-form"
               onSubmit={addIngredient}
             >
               <div className="panel-heading">
@@ -530,8 +604,19 @@ export function ProductionVerificationPage() {
                 />
               </div>
               <button className="button button-primary" type="submit">
-                Aggiungi ingrediente
+                {editingIngredientId
+                  ? 'Salva modifica'
+                  : 'Aggiungi ingrediente'}
               </button>
+              {editingIngredientId && (
+                <button
+                  className="button"
+                  onClick={cancelIngredientEdit}
+                  type="button"
+                >
+                  Annulla modifica
+                </button>
+              )}
               <div className="movement-list">
                 {selectedSection.ingredients.map((ingredient) => (
                   <div className="record-card" key={ingredient.id}>
@@ -542,13 +627,31 @@ export function ProductionVerificationPage() {
                         {requirementLabel(ingredient)}
                       </small>
                     </span>
-                    <button
-                      className="danger-text"
-                      onClick={() => removeIngredient(ingredient.id)}
-                      type="button"
-                    >
-                      Elimina
-                    </button>
+                    <div className="production-verification-actions">
+                      <button
+                        onClick={() => editIngredient(ingredient)}
+                        type="button"
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        className="danger-text"
+                        onClick={() => removeIngredient(ingredient.id)}
+                        type="button"
+                      >
+                        {confirmingIngredientId === ingredient.id
+                          ? 'Conferma'
+                          : 'Elimina'}
+                      </button>
+                      {confirmingIngredientId === ingredient.id && (
+                        <button
+                          onClick={() => setConfirmingIngredientId('')}
+                          type="button"
+                        >
+                          Annulla
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -584,8 +687,16 @@ export function ProductionVerificationPage() {
                       {ingredient.name} <small>({ingredient.unit})</small>
                     </strong>
                     <input
-                      inputMode="decimal"
-                      min="0"
+                      inputMode="text"
+                      onBlur={(event) =>
+                        setQuantities({
+                          ...quantities,
+                          [ingredient.id]: {
+                            ...draft,
+                            purchased: calculatedValue(event.target.value),
+                          },
+                        })
+                      }
                       onChange={(event) =>
                         setQuantities({
                           ...quantities,
@@ -595,12 +706,20 @@ export function ProductionVerificationPage() {
                           },
                         })
                       }
-                      placeholder={`Acquistato (${ingredient.unit})`}
+                      placeholder={`Acquistato (${ingredient.unit}), es. 12+10`}
                       value={draft.purchased}
                     />
                     <input
-                      inputMode="decimal"
-                      min="0"
+                      inputMode="text"
+                      onBlur={(event) =>
+                        setQuantities({
+                          ...quantities,
+                          [ingredient.id]: {
+                            ...draft,
+                            consumed: calculatedValue(event.target.value),
+                          },
+                        })
+                      }
                       onChange={(event) =>
                         setQuantities({
                           ...quantities,
@@ -610,17 +729,19 @@ export function ProductionVerificationPage() {
                           },
                         })
                       }
-                      placeholder={`Consumato (${ingredient.unit})`}
+                      placeholder={`Consumato (${ingredient.unit}), es. 12+10`}
                       value={draft.consumed}
                     />
                   </div>
                 )
               })}
               <input
-                inputMode="numeric"
-                min="0"
+                inputMode="text"
+                onBlur={(event) =>
+                  setActualQuantity(calculatedValue(event.target.value))
+                }
                 onChange={(event) => setActualQuantity(event.target.value)}
-                placeholder={`${selectedSection.productName} prodotti realmente`}
+                placeholder={`${selectedSection.productName} prodotti, es. 12+10`}
                 value={actualQuantity}
               />
               <input
@@ -657,6 +778,7 @@ export function ProductionVerificationPage() {
                     <th>Resa dal consumo</th>
                     <th>Disponibile</th>
                     <th>Produzione residua possibile</th>
+                    <th>Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -693,6 +815,35 @@ export function ProductionVerificationPage() {
                       </td>
                       <td>
                         {row.residualPotential.toLocaleString('it-IT')} pz
+                      </td>
+                      <td>
+                        <div className="production-verification-actions">
+                          <button
+                            onClick={() => editIngredient(row.ingredient)}
+                            type="button"
+                          >
+                            Modifica
+                          </button>
+                          <button
+                            className="danger-text"
+                            onClick={() =>
+                              removeIngredient(row.ingredient.id)
+                            }
+                            type="button"
+                          >
+                            {confirmingIngredientId === row.ingredient.id
+                              ? 'Conferma'
+                              : 'Elimina'}
+                          </button>
+                          {confirmingIngredientId === row.ingredient.id && (
+                            <button
+                              onClick={() => setConfirmingIngredientId('')}
+                              type="button"
+                            >
+                              Annulla
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
