@@ -22,6 +22,12 @@ function companyStorageId(companyId: string) {
   return `company-${companyId}`
 }
 
+export const DRIVE_WORKSPACE_FILENAME = `${workspaceStorageId()}.json`
+
+export function driveCompanyFilename(companyId: string) {
+  return `${companyStorageId(companyId)}.json`
+}
+
 function validStorageId(storageId: string) {
   if (!/^[a-zA-Z0-9_-]{1,160}$/.test(storageId)) {
     throw new Error('Identificativo archivio Google Drive non valido')
