@@ -26,13 +26,15 @@ const emptyIngredientForm = {
 }
 
 function sumValue(value: string) {
-  const terms = value
+  const expression = value
     .trim()
-    .replace(/^=/, '')
+    .replace(/^=\s*/, '')
+    .replace(/[＋﹢]/g, '+')
     .replace(/\s+/g, '')
-    .split('+')
+    .replace(/\+$/, '')
+  if (!expression) return null
+  const terms = expression.split('+')
   if (
-    terms.length === 0 ||
     terms.some(
       (term) =>
         !term ||
@@ -366,18 +368,19 @@ export function ProductionVerificationPage() {
     if (!companyId || !selectedSection || selectedSection.ingredients.length === 0) {
       return
     }
+    const formData = new FormData(event.currentTarget as HTMLFormElement)
     const ingredientMovements = selectedSection.ingredients.map(
       (ingredient) => ({
         ingredientId: ingredient.id,
         purchasedQuantity: numberValue(
-          quantities[ingredient.id]?.purchased ?? '',
+          String(formData.get(`purchased-${ingredient.id}`) ?? ''),
         ),
         consumedQuantity: numberValue(
-          quantities[ingredient.id]?.consumed ?? '',
+          String(formData.get(`consumed-${ingredient.id}`) ?? ''),
         ),
       }),
     )
-    const actual = numberValue(actualQuantity)
+    const actual = numberValue(String(formData.get('actualQuantity') ?? ''))
     if (
       actual === 0 &&
       ingredientMovements.every(
@@ -688,46 +691,52 @@ export function ProductionVerificationPage() {
                     </strong>
                     <input
                       inputMode="text"
+                      name={`purchased-${ingredient.id}`}
                       onBlur={(event) =>
-                        setQuantities({
-                          ...quantities,
+                        setQuantities((current) => ({
+                          ...current,
                           [ingredient.id]: {
-                            ...draft,
-                            purchased: calculatedValue(event.target.value),
+                            ...(current[ingredient.id] ?? draft),
+                            purchased: calculatedValue(
+                              event.currentTarget.value,
+                            ),
                           },
-                        })
+                        }))
                       }
                       onChange={(event) =>
-                        setQuantities({
-                          ...quantities,
+                        setQuantities((current) => ({
+                          ...current,
                           [ingredient.id]: {
-                            ...draft,
-                            purchased: event.target.value,
+                            ...(current[ingredient.id] ?? draft),
+                            purchased: event.currentTarget.value,
                           },
-                        })
+                        }))
                       }
                       placeholder={`Acquistato (${ingredient.unit}), es. 12+10`}
                       value={draft.purchased}
                     />
                     <input
                       inputMode="text"
+                      name={`consumed-${ingredient.id}`}
                       onBlur={(event) =>
-                        setQuantities({
-                          ...quantities,
+                        setQuantities((current) => ({
+                          ...current,
                           [ingredient.id]: {
-                            ...draft,
-                            consumed: calculatedValue(event.target.value),
+                            ...(current[ingredient.id] ?? draft),
+                            consumed: calculatedValue(
+                              event.currentTarget.value,
+                            ),
                           },
-                        })
+                        }))
                       }
                       onChange={(event) =>
-                        setQuantities({
-                          ...quantities,
+                        setQuantities((current) => ({
+                          ...current,
                           [ingredient.id]: {
-                            ...draft,
-                            consumed: event.target.value,
+                            ...(current[ingredient.id] ?? draft),
+                            consumed: event.currentTarget.value,
                           },
-                        })
+                        }))
                       }
                       placeholder={`Consumato (${ingredient.unit}), es. 12+10`}
                       value={draft.consumed}
@@ -737,10 +746,11 @@ export function ProductionVerificationPage() {
               })}
               <input
                 inputMode="text"
+                name="actualQuantity"
                 onBlur={(event) =>
-                  setActualQuantity(calculatedValue(event.target.value))
+                  setActualQuantity(calculatedValue(event.currentTarget.value))
                 }
-                onChange={(event) => setActualQuantity(event.target.value)}
+                onChange={(event) => setActualQuantity(event.currentTarget.value)}
                 placeholder={`${selectedSection.productName} prodotti, es. 12+10`}
                 value={actualQuantity}
               />
