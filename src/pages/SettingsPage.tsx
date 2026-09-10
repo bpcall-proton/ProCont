@@ -12,6 +12,10 @@ import type {
 } from '../domain/types'
 import { CloudIcon, DeviceIcon } from '../components/Icons'
 import {
+  DRIVE_WORKSPACE_FILENAME,
+  driveCompanyFilename,
+} from '../data/driveFolderRepository'
+import {
   useAppStore,
   type AccountingCompanyInput,
 } from '../store/AppStoreContext'
@@ -996,6 +1000,31 @@ export function SettingsPage() {
                 Apri cartella
               </button>
             )}
+          </div>
+          <div className="drive-file-list">
+            <div className="drive-file-row">
+              <span>
+                <strong>Archivio generale</strong>
+                <small>Elenco aziende e impostazioni condivise</small>
+              </span>
+              <code>{DRIVE_WORKSPACE_FILENAME}</code>
+            </div>
+            {state.accounting.companies.map((company) => (
+              <div className="drive-file-row" key={company.id}>
+                <span>
+                  <strong>{company.name}</strong>
+                  <small>
+                    {company.id === state.accounting.activeCompanyId
+                      ? 'Azienda attiva'
+                      : 'Archivio azienda'}
+                  </small>
+                </span>
+                <code>{driveCompanyFilename(company.id)}</code>
+              </div>
+            ))}
+            <small className="drive-file-warning">
+              Questi sono i file letti e scritti dal programma. Non rinominarli.
+            </small>
           </div>
           {googleMessage && (
             <p aria-live="polite" className="import-message">

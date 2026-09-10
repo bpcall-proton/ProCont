@@ -1699,6 +1699,45 @@ select {
   justify-self: start;
 }
 
+.drive-file-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(8, 12, 22, 0.44);
+}
+
+.drive-file-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.65fr) minmax(240px, 1.35fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.drive-file-row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.drive-file-row small,
+.drive-file-warning {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.drive-file-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--cyan);
+  font-size: 0.72rem;
+}
+
+.drive-file-warning {
+  line-height: 1.45;
+}
+
 .cloud-revision-row {
   display: flex;
   align-items: center;
@@ -3940,6 +3979,11 @@ select {
 @media (max-width: 620px) {
   .drive-folder-confirmation {
     padding: 22px 18px;
+  }
+
+  .drive-file-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .drive-folder-confirmation-actions {
