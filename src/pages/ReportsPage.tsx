@@ -210,6 +210,45 @@ export function ReportsPage() {
         0,
       ),
   }
+  const pointOfSaleSellerCount = source.sellers.filter(
+    (seller) => seller.pointOfSaleSeller,
+  ).length
+  const sharedSellerCost = (
+    value: number,
+    seller: { pointOfSaleSeller: boolean },
+  ) =>
+    seller.pointOfSaleSeller && pointOfSaleSellerCount > 0
+      ? roundMoney(value / pointOfSaleSellerCount)
+      : 0
+  const sellerCostBreakdown = (seller: {
+    id: string
+    pointOfSaleSeller: boolean
+  }) => {
+    const rent = sharedSellerCost(rents, seller)
+    const taxes = sharedSellerCost(expenseByType.tasse, seller)
+    const accounting = sharedSellerCost(
+      accountant + expenseByType.contabile,
+      seller,
+    )
+    const other = sharedSellerCost(expenseByType.altre, seller)
+    const salaryPaid = data.expenses
+      .filter(
+        (item) =>
+          item.type === 'stipendio' &&
+          item.sellerId === seller.id &&
+          item.settled &&
+          inRange(item.date, range.start, range.end),
+      )
+      .reduce((sum, item) => sum + item.amount, 0)
+    return {
+      rent,
+      taxes,
+      accounting,
+      other,
+      salaryPaid,
+      total: roundMoney(rent + taxes + accounting + other + salaryPaid),
+    }
+  }
   const inputVat =
     data.invoices.reduce((sum, item) => sum + item.vat, 0) +
     data.rentals.reduce((sum, item) => sum + item.vat, 0) +
@@ -268,14 +307,21 @@ export function ReportsPage() {
           .filter((transfer) => transfer.fromSellerId === seller.id)
           .reduce((sum, transfer) => sum + transfer.amount, 0),
     )
+    const invoiceTotal = invoices.reduce((sum, item) => sum + item.total, 0)
+    const unregisteredGoods = invoices.reduce(
+      (sum, item) => sum + item.unregisteredGoods,
+      0,
+    )
+    const costs = sellerCostBreakdown(seller)
     return {
       id: seller.id,
       name: seller.name,
+      pointOfSaleSeller: seller.pointOfSaleSeller,
       official: takings.reduce(
         (sum, item) => sum + officialTaking(item),
         0,
       ),
-      invoiceTotal: invoices.reduce((sum, item) => sum + item.total, 0),
+      invoiceTotal,
       invoiceRemaining: invoices.reduce(
         (sum, item) => sum + invoiceRemaining(item),
         0,
@@ -283,6 +329,11 @@ export function ReportsPage() {
       real,
       theoretical: totalVenit,
       stockResidual: totalVenit - real,
+      salaryPaid: costs.salaryPaid,
+      allocatedCosts: costs.total,
+      realProfit: roundMoney(
+        real - invoiceTotal - unregisteredGoods - costs.total,
+      ),
     }
   })
 
@@ -708,6 +759,49 @@ export function ReportsPage() {
     if (!selectedSeller) return
     const XLSX = await import('xlsx')
     const workbook = XLSX.utils.book_new()
+    const costs = sellerCostBreakdown(selectedSeller)
+    const invoiceTotal = sellerInvoices.reduce(
+      (sum, invoice) => sum + invoice.total,
+      0,
+    )
+    const unregisteredGoods = sellerInvoices.reduce(
+      (sum, invoice) => sum + invoice.unregisteredGoods,
+      0,
+    )
+    const officialTotal = sellerTakings.reduce(
+      (sum, taking) => sum + officialTaking(taking),
+      0,
+    )
+    const realTotal = sellerTakings.reduce(
+      (sum, taking) => sum + realTaking(taking),
+      0,
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([
+        { Voce: 'Venditrice punto vendita', Importo: selectedSeller.pointOfSaleSeller ? 'Sì' : 'No' },
+        { Voce: 'Incasso fiscale', Importo: officialTotal },
+        { Voce: 'Incasso reale', Importo: realTotal },
+        { Voce: 'Costi fatture fornitori', Importo: invoiceTotal },
+        { Voce: 'Merce senza fattura', Importo: unregisteredGoods },
+        { Voce: 'Quota affitto', Importo: costs.rent },
+        { Voce: 'Quota tasse', Importo: costs.taxes },
+        { Voce: 'Quota contabile', Importo: costs.accounting },
+        { Voce: 'Quota altre spese', Importo: costs.other },
+        { Voce: 'Stipendio corrisposto', Importo: costs.salaryPaid },
+        {
+          Voce: 'Utile fiscale personale',
+          Importo: roundMoney(officialTotal - invoiceTotal - costs.total),
+        },
+        {
+          Voce: 'Utile reale personale',
+          Importo: roundMoney(
+            realTotal - invoiceTotal - unregisteredGoods - costs.total,
+          ),
+        },
+      ]),
+      'Riepilogo',
+    )
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(
@@ -839,6 +933,10 @@ export function ReportsPage() {
   }
 
   if (selectedSeller) {
+    const sellerOfficial = sellerTakings.reduce(
+      (sum, item) => sum + officialTaking(item),
+      0,
+    )
     const sellerReal = sellerTakings.reduce(
       (sum, item) => sum + realTaking(item),
       0,
@@ -849,6 +947,28 @@ export function ReportsPage() {
     )
     const sellerInvoiceRemaining = sellerInvoices.reduce(
       (sum, item) => sum + invoiceRemaining(item),
+      0,
+    )
+    const sellerUnregisteredGoods = sellerInvoices.reduce(
+      (sum, item) => sum + item.unregisteredGoods,
+      0,
+    )
+    const sellerCosts = sellerCostBreakdown(selectedSeller)
+    const sellerOperatingCosts = sellerInvoiceTotal + sellerCosts.total
+    const sellerRealOperatingCosts =
+      sellerOperatingCosts + sellerUnregisteredGoods
+    const sellerInputVat =
+      sellerInvoices.reduce((sum, item) => sum + item.vat, 0) +
+      sharedSellerCost(
+        data.rentals.reduce((sum, item) => sum + item.vat, 0),
+        selectedSeller,
+      ) +
+      sharedSellerCost(
+        data.accountantInvoices.reduce((sum, item) => sum + item.vat, 0),
+        selectedSeller,
+      )
+    const sellerOutputVat = sellerTakings.reduce(
+      (sum, item) => sum + item.vat,
       0,
     )
     const sellerTheoretical = roundMoney(
@@ -866,7 +986,13 @@ export function ReportsPage() {
           eyebrow="STATISTICHE VENDITORE"
           name={selectedSeller.name}
           note={
-            [selectedSeller.phone, selectedSeller.email]
+            [
+              selectedSeller.pointOfSaleSeller
+                ? 'Venditrice reale del punto vendita'
+                : 'Personale produzione / altro',
+              selectedSeller.phone,
+              selectedSeller.email,
+            ]
               .filter(Boolean)
               .join(' · ') || 'Nessun contatto indicato'
           }
@@ -879,9 +1005,58 @@ export function ReportsPage() {
         />
         <section className="report-kpis">
           <ReportCard
-            label="Totale fatture"
+            label="Incasso fiscale"
+            value={sellerOfficial}
+            tone="green"
+          />
+          <ReportCard
+            label="Incasso reale"
+            value={sellerReal}
+            tone="violet"
+          />
+          <ReportCard
+            label="Costi fatture fornitori"
             value={sellerInvoiceTotal}
+            tone="amber"
+          />
+          <ReportCard
+            label="Merce senza fattura"
+            value={sellerUnregisteredGoods}
+            tone="red"
+          />
+          <ReportCard
+            label="Spese personali e ripartite"
+            value={sellerCosts.total}
+            tone="amber"
+          />
+          <ReportCard
+            label="Utile fiscale personale"
+            value={sellerOfficial - sellerOperatingCosts}
+            tone={
+              sellerOfficial - sellerOperatingCosts >= 0 ? 'green' : 'red'
+            }
+          />
+          <ReportCard
+            label="Utile reale personale"
+            value={sellerReal - sellerRealOperatingCosts}
+            tone={
+              sellerReal - sellerRealOperatingCosts >= 0 ? 'cyan' : 'red'
+            }
+          />
+          <ReportCard
+            label="IVA a credito"
+            value={sellerInputVat}
             tone="cyan"
+          />
+          <ReportCard
+            label="IVA a debito"
+            value={sellerOutputVat}
+            tone="amber"
+          />
+          <ReportCard
+            label="Saldo IVA"
+            value={sellerOutputVat - sellerInputVat}
+            tone={sellerOutputVat - sellerInputVat > 0 ? 'red' : 'green'}
           />
           <ReportCard
             label="Totale Venit"
@@ -889,20 +1064,39 @@ export function ReportsPage() {
             tone="violet"
           />
           <ReportCard
-            label="Totale incassato reale"
-            value={sellerReal}
-            tone="green"
-          />
-          <ReportCard
-            label="Stock residuo reale"
+            label="Venit stock"
             value={sellerTheoretical - sellerReal}
-            tone="amber"
+            tone="violet"
           />
           <ReportCard
             label="Residuo fatture da pagare"
             value={sellerInvoiceRemaining}
             tone="red"
           />
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">RIPARTIZIONE USCITE PERSONALI</span>
+              <h2>
+                {selectedSeller.pointOfSaleSeller
+                  ? `Quota uguale tra ${pointOfSaleSellerCount} venditrici dei punti vendita`
+                  : 'Nessuna spesa generale dei punti vendita attribuita'}
+              </h2>
+            </div>
+          </div>
+          <div className="stats-strip expense-breakdown">
+            <div><span>Quota affitto</span><strong>{money(sellerCosts.rent)}</strong></div>
+            <div><span>Quota tasse</span><strong>{money(sellerCosts.taxes)}</strong></div>
+            <div><span>Quota contabile</span><strong>{money(sellerCosts.accounting)}</strong></div>
+            <div><span>Quota altre spese</span><strong>{money(sellerCosts.other)}</strong></div>
+            <div><span>Stipendio corrisposto nel periodo</span><strong>{money(sellerCosts.salaryPaid)}</strong></div>
+            <div><span>Totale attribuito</span><strong>{money(sellerCosts.total)}</strong></div>
+          </div>
+          <p className="production-help">
+            Lo stipendio usa la data della spesa pagata e può riferirsi anche
+            al mese di lavoro precedente.
+          </p>
         </section>
         <section className="report-columns">
           <article className="panel">
@@ -1244,12 +1438,23 @@ export function ReportsPage() {
                 onClick={() => setDetail({ type: 'seller', id: seller.id })}
                 type="button"
               >
-                <span className="eyebrow">VENDITORE</span>
+                <span className="eyebrow">
+                  {seller.pointOfSaleSeller
+                    ? 'VENDITRICE PUNTO VENDITA'
+                    : 'PRODUZIONE / ALTRO'}
+                </span>
                 <strong>{seller.name}</strong>
                 <span>Totale fatture {money(seller.invoiceTotal)}</span>
                 <span>Totale Venit {money(seller.theoretical)}</span>
                 <span>Incassato reale {money(seller.real)}</span>
                 <span>Stock residuo reale {money(seller.stockResidual)}</span>
+                <span>
+                  Spese attribuite {money(seller.allocatedCosts)}
+                </span>
+                <span>
+                  Stipendio corrisposto {money(seller.salaryPaid)}
+                </span>
+                <span>Risultato reale {money(seller.realProfit)}</span>
                 <span>
                   Residuo fatture da pagare {money(seller.invoiceRemaining)}
                 </span>

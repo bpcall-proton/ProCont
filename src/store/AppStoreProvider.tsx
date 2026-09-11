@@ -816,6 +816,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           sellers: linkedSeller
             ? current.sellers
             : [...current.sellers, created.seller],
+          accounting: {
+            ...current.accounting,
+            sellers: current.accounting.sellers.map((seller) =>
+              seller.id === accountingSeller.id
+                ? { ...seller, pointOfSaleSeller: true }
+                : seller,
+            ),
+          },
         }))
         return { ok: true }
       },

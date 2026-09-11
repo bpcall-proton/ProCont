@@ -231,6 +231,7 @@ function mapSeller(value: JsonRecord): AccountingSeller {
     phone: text(value.telefono),
     city: text(value.citta),
     notes: text(value.note),
+    pointOfSaleSeller: flag(value.venditricePuntoVendita),
     autoSelect: flag(value.selezioneAutomatica),
     overviewPriority: positiveInteger(value.prioritaPanoramica, 0),
   }
@@ -558,6 +559,7 @@ export function normalizeStoredState(
           phone: seller.phone,
           city: '',
           notes: 'Venditrice collegata a un punto vendita',
+          pointOfSaleSeller: true,
           autoSelect: false,
           overviewPriority: 0,
         })
@@ -713,6 +715,9 @@ export function normalizeStoredState(
         sellers: retainedAccountingSellers.map((seller) => ({
           ...seller,
           companyId: seller.companyId || fallbackCompanyId,
+          pointOfSaleSeller:
+            seller.pointOfSaleSeller ??
+            activeAccountingSellerIds.has(seller.id),
           autoSelect: seller.autoSelect ?? false,
           overviewPriority: positiveInteger(seller.overviewPriority, 0),
         })),
@@ -1287,6 +1292,7 @@ export function exportLegacyAccounting(state: AccountingState) {
           telefono: seller.phone,
           citta: seller.city,
           note: seller.notes,
+          venditricePuntoVendita: seller.pointOfSaleSeller,
           selezioneAutomatica: seller.autoSelect,
           prioritaPanoramica: seller.overviewPriority,
         })),
