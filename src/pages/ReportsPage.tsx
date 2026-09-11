@@ -268,7 +268,7 @@ function expenseForWorkedDates(
     [...workedDates].reduce((sum, date) => {
       if (
         !inRange(date, start, end) ||
-        date < expense.date ||
+        date.slice(0, 7) < expense.date.slice(0, 7) ||
         (expense.recurrenceEndDate && date > expense.recurrenceEndDate)
       ) {
         return sum
@@ -1979,11 +1979,6 @@ export function ReportsPage() {
         fixedCosts: sellerCosts.total,
         theoreticalRevenue: sellerTheoretical,
       })
-    const sellerWorkedDates = workedDatesForTakings(
-      sellerTakings,
-      range.start,
-      range.end,
-    )
     const sellerOfficialRows: MetricDetailRow[] = sellerTakings.map((item) => ({
       date: item.date,
       category: 'Incasso fiscale',
@@ -2233,7 +2228,7 @@ export function ReportsPage() {
             label: 'Quota affitto',
             value: sellerCosts.rent,
             kind: 'money',
-            reference: `${sellerWorkedDates.size} giorni lavorati dal venditore.`,
+            reference: `${companyWorkedDates.size} giorni lavorati aziendali.`,
             operation: 'Somma',
           },
           {
