@@ -44,6 +44,16 @@ interface MetricDetailRow {
   amount: number
 }
 
+type HealthTone = 'green' | 'violet' | 'amber' | 'red'
+
+interface BusinessHealth {
+  score: number | null
+  coherence: number | null
+  markup: number | null
+  netMargin: number | null
+  cashCoverage: number | null
+}
+
 function rangeFor(period: Period, selected: string) {
   const date = new Date(`${selected}T00:00:00Z`)
   if (period === 'all' || Number.isNaN(date.valueOf())) {
@@ -107,6 +117,124 @@ function filenamePart(value: string) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'azienda'
   )
+}
+
+function percentage(numerator: number, denominator: number) {
+  return denominator > 0 ? roundMoney((numerator / denominator) * 100) : null
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function weightedHealthScore(
+  values: Array<{ score: number | null; weight: number }>,
+) {
+  const available = values.filter(
+    (item): item is { score: number; weight: number } => item.score !== null,
+  )
+  const totalWeight = available.reduce((sum, item) => sum + item.weight, 0)
+  if (totalWeight === 0) return null
+  return Math.round(
+    available.reduce((sum, item) => sum + item.score * item.weight, 0) /
+      totalWeight,
+  )
+}
+
+function calculateBusinessHealth({
+  official,
+  real,
+  goodsCost,
+  fixedCosts,
+  theoretical,
+}: {
+  official: number
+  real: number
+  goodsCost: number
+  fixedCosts: number
+  theoretical: number
+}): BusinessHealth {
+  const coherence = percentage(real, theoretical)
+  const markup =
+    goodsCost > 0
+      ? roundMoney(((theoretical - goodsCost) / goodsCost) * 100)
+      : null
+  const netMargin = percentage(real - goodsCost - fixedCosts, real)
+  const cashCoverage = percentage(official, real)
+  const coherenceScore =
+    coherence === null
+      ? null
+      : clampScore(100 - Math.abs(coherence - 100) * 2)
+  const markupScore =
+    markup === null
+      ? null
+      : markup < 85
+        ? clampScore(100 - (85 - markup) * 3)
+        : markup > 110
+          ? clampScore(100 - (markup - 110) * 1.5)
+          : 100
+  const marginScore =
+    netMargin === null
+      ? null
+      : clampScore(((netMargin + 15) / 30) * 100)
+  const cashScore =
+    cashCoverage === null
+      ? null
+      : clampScore(100 - Math.abs(cashCoverage - 100) * 2)
+  return {
+    score: weightedHealthScore([
+      { score: coherenceScore, weight: 0.35 },
+      { score: markupScore, weight: 0.25 },
+      { score: marginScore, weight: 0.25 },
+      { score: cashScore, weight: 0.15 },
+    ]),
+    coherence,
+    markup,
+    netMargin,
+    cashCoverage,
+  }
+}
+
+function overallHealthTone(score: number | null): HealthTone {
+  if (score === null) return 'violet'
+  if (score >= 80) return 'green'
+  if (score >= 60) return 'amber'
+  return 'red'
+}
+
+function overallHealthLabel(score: number | null) {
+  if (score === null) return 'Dati insufficienti'
+  if (score >= 80) return 'Parametri coerenti'
+  if (score >= 60) return 'Controllare alcuni valori'
+  return 'Possibile anomalia'
+}
+
+function rangeHealthTone(
+  value: number | null,
+  greenMin: number,
+  greenMax: number,
+  warningMin: number,
+  warningMax: number,
+): HealthTone {
+  if (value === null) return 'violet'
+  if (value >= greenMin && value <= greenMax) return 'green'
+  if (value >= warningMin && value <= warningMax) return 'amber'
+  return 'red'
+}
+
+function minimumHealthTone(
+  value: number | null,
+  greenMin: number,
+  warningMin: number,
+): HealthTone {
+  if (value === null) return 'violet'
+  if (value >= greenMin) return 'green'
+  if (value >= warningMin) return 'amber'
+  return 'red'
+}
+
+function percentageLabel(value: number | null) {
+  return value === null ? '—' : `${value.toLocaleString('it-IT')}%`
 }
 
 export function ReportsPage() {
@@ -314,9 +442,25 @@ export function ReportsPage() {
     return [
       {
         fromSellerId: linkedSellerId,
+        toSellerId: invoice.sellerId,
         amount: roundMoney(invoice.theoreticalRevenue),
+        date: invoice.date,
+        supplierName: invoice.supplierName || supplier.name,
+        invoiceNumber: invoice.number,
       },
     ]
+  })
+  const transferredVenit = supplierSellerRevenueTransfers.reduce(
+    (sum, transfer) => sum + transfer.amount,
+    0,
+  )
+  const companyTheoretical = roundMoney(theoretical - transferredVenit)
+  const companyHealth = calculateBusinessHealth({
+    official,
+    real,
+    goodsCost: purchases + unregisteredGoods,
+    fixedCosts,
+    theoretical: companyTheoretical,
   })
 
   const sellerStats = source.sellers.map((seller) => {
@@ -340,14 +484,22 @@ export function ReportsPage() {
       0,
     )
     const costs = sellerCostBreakdown(seller)
+    const official = takings.reduce(
+      (sum, item) => sum + officialTaking(item),
+      0,
+    )
+    const health = calculateBusinessHealth({
+      official,
+      real,
+      goodsCost: invoiceTotal + unregisteredGoods,
+      fixedCosts: costs.total,
+      theoretical: totalVenit,
+    })
     return {
       id: seller.id,
       name: seller.name,
       pointOfSaleSeller: seller.pointOfSaleSeller,
-      official: takings.reduce(
-        (sum, item) => sum + officialTaking(item),
-        0,
-      ),
+      official,
       invoiceTotal,
       invoiceRemaining: invoices.reduce(
         (sum, item) => sum + invoiceRemaining(item),
@@ -361,6 +513,7 @@ export function ReportsPage() {
       realProfit: roundMoney(
         real - invoiceTotal - unregisteredGoods - costs.total,
       ),
+      health,
     }
   })
 
@@ -383,6 +536,9 @@ export function ReportsPage() {
     detail?.type === 'seller'
       ? source.sellers.find((seller) => seller.id === detail.id)
       : undefined
+  const selectedSellerStats = selectedSeller
+    ? sellerStats.find((seller) => seller.id === selectedSeller.id)
+    : undefined
   const selectedSupplier =
     detail?.type === 'supplier'
       ? source.suppliers.find((supplier) => supplier.id === detail.id)
@@ -705,8 +861,8 @@ export function ReportsPage() {
     },
     stock: {
       title: 'Venit stock',
-      note: 'Venit teorico delle fatture meno l’incasso reale.',
-      value: theoretical - real,
+      note: 'Venit teorico netto dei trasferimenti interni meno l’incasso reale.',
+      value: companyTheoretical - real,
       rows: [
         ...data.invoices.map((item) => ({
           date: item.date,
@@ -714,6 +870,13 @@ export function ReportsPage() {
           description: item.supplierName || 'Fornitore non indicato',
           reference: item.number || 'Senza numero',
           amount: item.theoreticalRevenue,
+        })),
+        ...supplierSellerRevenueTransfers.map((transfer) => ({
+          date: transfer.date,
+          category: 'Venit ceduto interno',
+          description: transfer.supplierName,
+          reference: transfer.invoiceNumber || 'Senza numero',
+          amount: -transfer.amount,
         })),
         ...realRows.map((row) => ({ ...row, amount: -row.amount })),
       ],
@@ -1009,6 +1172,15 @@ export function ReportsPage() {
           .filter((transfer) => transfer.fromSellerId === selectedSeller.id)
           .reduce((sum, transfer) => sum + transfer.amount, 0),
     )
+    const sellerHealth =
+      selectedSellerStats?.health ??
+      calculateBusinessHealth({
+        official: sellerOfficial,
+        real: sellerReal,
+        goodsCost: sellerInvoiceTotal + sellerUnregisteredGoods,
+        fixedCosts: sellerCosts.total,
+        theoretical: sellerTheoretical,
+      })
     return (
       <div className="page-stack">
         <DetailHeader
@@ -1032,6 +1204,13 @@ export function ReportsPage() {
           setPeriod={setPeriod}
           setSelected={setSelected}
         />
+        {selectedSeller.pointOfSaleSeller && (
+          <HealthOverview
+            health={sellerHealth}
+            title={`Controllo del punto ${selectedSeller.name}`}
+            note="Il Venit ceduto viene sottratto; quello acquisito è già incluso nella fattura della venditrice destinataria."
+          />
+        )}
         <section className="report-kpis">
           <ReportCard
             label="Incasso fiscale"
@@ -1348,6 +1527,12 @@ export function ReportsPage() {
         </div>
       </header>
 
+      <HealthOverview
+        health={companyHealth}
+        title="Indice salute aziendale"
+        note="Confronta acquisti, Venit teorico, incasso reale, cash/POS e tutte le spese del periodo. Usa un periodo ampio quando una parte dello stock è stata acquistata in mesi precedenti."
+      />
+
       <section className="report-kpis">
         <ReportCard
           label="Incasso fiscale"
@@ -1417,7 +1602,7 @@ export function ReportsPage() {
         />
         <ReportCard
           label="Venit stock"
-          value={theoretical - real}
+          value={companyTheoretical - real}
           tone="violet"
           onClick={() => setDetail({ type: 'metric', metric: 'stock' })}
         />
@@ -1481,6 +1666,17 @@ export function ReportsPage() {
                   Stipendio corrisposto {money(seller.salaryPaid)}
                 </span>
                 <span>Risultato reale {money(seller.realProfit)}</span>
+                <span
+                  className={`health-inline health-${overallHealthTone(
+                    seller.pointOfSaleSeller ? seller.health.score : null,
+                  )}`}
+                >
+                  {seller.pointOfSaleSeller
+                    ? `Indice salute ${seller.health.score ?? '—'}/100 · ${overallHealthLabel(
+                        seller.health.score,
+                      )}`
+                    : 'Indice salute non applicabile'}
+                </span>
                 <span>
                   Residuo fatture da pagare {money(seller.invoiceRemaining)}
                 </span>
@@ -1627,6 +1823,80 @@ function ReportCard({
     <article className={`report-card report-${tone}`}>
       <span>{label}</span>
       <strong>{money(value)}</strong>
+    </article>
+  )
+}
+
+function HealthOverview({
+  health,
+  title,
+  note,
+}: {
+  health: BusinessHealth
+  title: string
+  note: string
+}) {
+  return (
+    <section className="panel health-overview">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">CONTROLLO AUTOMATICO</span>
+          <h2>{title}</h2>
+          <p>{note}</p>
+        </div>
+      </div>
+      <div className="report-kpis health-kpis">
+        <HealthCard
+          label="Indice salute"
+          value={health.score === null ? '—' : `${health.score}/100`}
+          status={overallHealthLabel(health.score)}
+          tone={overallHealthTone(health.score)}
+        />
+        <HealthCard
+          label="Coerenza vendite"
+          value={percentageLabel(health.coherence)}
+          status="Verde tra 90% e 110%"
+          tone={rangeHealthTone(health.coherence, 90, 110, 80, 120)}
+        />
+        <HealthCard
+          label="Ricarico medio"
+          value={percentageLabel(health.markup)}
+          status="Riferimento aziendale 85–110%"
+          tone={rangeHealthTone(health.markup, 85, 110, 70, 150)}
+        />
+        <HealthCard
+          label="Margine netto"
+          value={percentageLabel(health.netMargin)}
+          status="Verde da 10%, giallo da 0%"
+          tone={minimumHealthTone(health.netMargin, 10, 0)}
+        />
+        <HealthCard
+          label="Copertura cash/POS"
+          value={percentageLabel(health.cashCoverage)}
+          status="Verde tra 95% e 105%"
+          tone={rangeHealthTone(health.cashCoverage, 95, 105, 85, 115)}
+        />
+      </div>
+    </section>
+  )
+}
+
+function HealthCard({
+  label,
+  value,
+  status,
+  tone,
+}: {
+  label: string
+  value: string
+  status: string
+  tone: HealthTone
+}) {
+  return (
+    <article className={`report-card health-card report-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <em>{status}</em>
     </article>
   )
 }
