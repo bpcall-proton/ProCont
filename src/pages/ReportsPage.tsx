@@ -1329,7 +1329,11 @@ export function ReportsPage() {
       salaryPaid: costs.salaryPaid,
       allocatedCosts: costs.total,
       realProfit: roundMoney(
-        real - invoiceTotal - unregisteredGoods - costs.total,
+        real -
+          invoiceTotal -
+          unregisteredGoods -
+          statisticalTransferCost -
+          costs.total,
       ),
       health,
     }
@@ -2100,6 +2104,7 @@ export function ReportsPage() {
             realTotal -
               effectiveInvoiceTotal -
               unregisteredGoods -
+              statisticalTransferCost -
               costs.total,
           ),
         },
@@ -2280,8 +2285,11 @@ export function ReportsPage() {
     )
     const sellerCosts = sellerCostBreakdown(selectedSeller)
     const sellerOperatingCosts = sellerInvoiceTotal + sellerCosts.total
-    const sellerRealOperatingCosts =
-      sellerOperatingCosts + sellerUnregisteredGoods
+    const sellerRealOperatingCosts = roundMoney(
+      sellerOperatingCosts +
+        sellerUnregisteredGoods +
+        sellerStatisticalTransferCost,
+    )
     const sellerInputVat =
       sellerInvoices.reduce((sum, item) => sum + item.vat, 0) +
       allocatedProductionVat(selectedSeller.id) -
@@ -2753,13 +2761,13 @@ export function ReportsPage() {
       },
       'real-profit': {
         title: 'Utile reale personale',
-        note: 'Risultato economico basato sull’incasso reale e tutte le uscite attribuite.',
+        note: 'Risultato economico personale basato sull’incasso reale, includendo la riallocazione statistica del costo della merce trasferita.',
         value: sellerReal - sellerRealOperatingCosts,
         kind: 'money',
         tone:
           sellerReal - sellerRealOperatingCosts >= 0 ? 'cyan' : 'red',
         formula:
-          'Incasso reale − costi fatture e quota produzione − merce senza fattura − spese attribuite',
+          'Incasso reale − costi fatture e quota produzione − merce senza fattura − quota costo Venit trasferito − spese attribuite',
         steps: [
           {
             label: 'Incasso reale',
@@ -2784,6 +2792,14 @@ export function ReportsPage() {
             operation: 'Sottratta',
           },
           {
+            label: 'Quota costo Venit trasferito',
+            value: sellerStatisticalTransferCost,
+            kind: 'money',
+            reference:
+              'Positiva se ricevuta e negativa se ceduta; una quota ceduta riduce il costo personale senza modificare le fatture reali.',
+            operation: 'Sottratta',
+          },
+          {
             label: 'Spese attribuite',
             value: sellerCosts.total,
             kind: 'money',
@@ -2795,6 +2811,10 @@ export function ReportsPage() {
           ...sellerRealRows,
           ...sellerPurchaseRows.map((row) => ({ ...row, amount: -row.amount })),
           ...sellerUnregisteredRows.map((row) => ({
+            ...row,
+            amount: -row.amount,
+          })),
+          ...sellerStatisticalTransferRows.map((row) => ({
             ...row,
             amount: -row.amount,
           })),
