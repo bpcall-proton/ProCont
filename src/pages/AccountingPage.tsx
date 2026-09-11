@@ -2563,7 +2563,7 @@ function SellerAllocationFields({
           {seller.name}
         </label>
       ))}
-      <small>Nessun nome selezionato: ripartizione su tutti.</small>
+      <small>Nessuna selezione = tutti.</small>
     </fieldset>
   )
 }
