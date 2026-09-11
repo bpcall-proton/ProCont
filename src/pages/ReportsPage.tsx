@@ -122,6 +122,9 @@ interface BusinessHealth {
   inventorySaleValue: number
   estimatedInventoryCost: number
   economicGoodsCost: number
+  fiscalSoldPercentage: number | null
+  estimatedFiscalInventoryCost: number
+  estimatedFiscalGoodsCost: number
   expectedRevenue: number
   coherenceScore: number | null
   markupScore: number | null
@@ -299,6 +302,27 @@ function calculateBusinessHealth({
     Math.max(goodsCost - estimatedInventoryCost, 0),
   )
   const expectedRevenue = roundMoney(economicGoodsCost * 1.975)
+  const fiscalSoldPercentage =
+    theoreticalRevenue > 0
+      ? roundMoney(
+          Math.min(
+            Math.max(
+              ((theoreticalRevenue - inventorySaleValue) /
+                theoreticalRevenue) *
+                100,
+              0,
+            ),
+            100,
+          ),
+        )
+      : null
+  const estimatedFiscalGoodsCost =
+    fiscalSoldPercentage === null
+      ? 0
+      : roundMoney(goodsCost * (fiscalSoldPercentage / 100))
+  const estimatedFiscalInventoryCost = roundMoney(
+    Math.max(goodsCost - estimatedFiscalGoodsCost, 0),
+  )
   const coherence = percentage(real, expectedRevenue)
   const markup =
     economicGoodsCost > 0
@@ -307,8 +331,12 @@ function calculateBusinessHealth({
   const netMargin = percentage(real - economicGoodsCost - fixedCosts, real)
   const cashCoverage = percentage(official, real)
   const fiscalMarkup =
-    goodsCost > 0
-      ? roundMoney(((official - goodsCost) / goodsCost) * 100)
+    estimatedFiscalGoodsCost > 0
+      ? roundMoney(
+          ((official - estimatedFiscalGoodsCost) /
+            estimatedFiscalGoodsCost) *
+            100,
+        )
       : null
   const coherenceScore =
     coherence === null
@@ -341,6 +369,9 @@ function calculateBusinessHealth({
     inventorySaleValue,
     estimatedInventoryCost,
     economicGoodsCost,
+    fiscalSoldPercentage,
+    estimatedFiscalInventoryCost,
+    estimatedFiscalGoodsCost,
     expectedRevenue,
     coherenceScore,
     markupScore,
@@ -452,6 +483,19 @@ function healthMetricDetails({
   const goodsRows = [...purchaseRows, ...unregisteredGoodsRows]
   const economicRows = [...realRows, ...goodsRows, ...fixedCostRows]
   const fiscalRows = [...officialRows, ...goodsRows]
+  const fiscalStockRows: MetricDetailRow[] =
+    health.estimatedFiscalInventoryCost > 0
+      ? [
+          {
+            date: '',
+            category: 'Stock residuo',
+            description: 'Costo stimato della merce ancora in magazzino',
+            reference:
+              'Quota percentuale dello stock residuo applicata agli acquisti lordi',
+            amount: -health.estimatedFiscalInventoryCost,
+          },
+        ]
+      : []
   return {
     'health-score': {
       title: 'Indice salute economica',
@@ -630,13 +674,13 @@ function healthMetricDetails({
       rows: [...officialRows, ...realRows],
     },
     'health-fiscal-markup': {
-      title: 'Ricarico fiscale su acquisti',
-      note: 'Alert fiscale calcolato sul battuto e sugli acquisti, senza usare il ricarico configurato nei prodotti.',
+      title: 'Ricarico fiscale sulla merce venduta stimata',
+      note: 'Alert stimato calcolato sul battuto e sulla quota di acquisti attribuita alla merce venduta. Il Venit stock serve solo a ricavare la percentuale venduto/residuo e non viene convertito in costo con il ricarico medio.',
       value: health.fiscalMarkup,
       kind: 'percentage',
       tone: metricTone(minimumHealthTone(health.fiscalMarkup, 10, 0)),
       formula:
-        '((Cash + POS) − costo merce acquistata) ÷ costo merce acquistata × 100',
+        '((Cash + POS) − (acquisti × % merce venduta)) ÷ (acquisti × % merce venduta) × 100',
       steps: [
         {
           label: 'Incasso fiscale battuto',
@@ -646,14 +690,38 @@ function healthMetricDetails({
           operation: 'Meno',
         },
         {
-          label: 'Costo merce acquistata',
+          label: 'Costo merce acquistata lordo',
           value: health.grossGoodsCost,
           kind: 'money',
           reference: 'Fatture fornitori più merce acquistata senza fattura.',
-          operation: 'Poi diviso per questo valore',
+          operation: 'Partenza costo',
+        },
+        {
+          label: 'Merce venduta stimata',
+          value: health.fiscalSoldPercentage ?? 0,
+          kind: 'percentage',
+          reference:
+            'Percentuale del Venit già venduto rispetto a Venit venduto più stock residuo.',
+          operation: 'Applicata agli acquisti lordi',
+        },
+        {
+          label: 'Costo stock residuo stimato',
+          value: health.estimatedFiscalInventoryCost,
+          kind: 'money',
+          reference:
+            'Quota degli acquisti attribuita alla percentuale di merce rimasta.',
+          operation: 'Sottratto dagli acquisti',
+        },
+        {
+          label: 'Costo merce venduta stimato',
+          value: health.estimatedFiscalGoodsCost,
+          kind: 'money',
+          reference:
+            'Acquisti lordi moltiplicati per la percentuale di merce venduta.',
+          operation: 'Sottratto dal battuto e usato come divisore',
         },
       ],
-      rows: fiscalRows,
+      rows: [...fiscalRows, ...fiscalStockRows],
     },
   }
 }
@@ -3708,8 +3776,8 @@ function HealthOverview({
           <strong>Alert separati dall’indice economico</strong>
         </div>
         <p>
-          Confrontano quanto battuto in cassa con l’incasso reale e gli acquisti,
-          senza usare il ricarico impostato sui prodotti.
+          Confrontano quanto battuto in cassa con l’incasso reale e il costo
+          stimato della merce venduta, escludendo lo stock residuo.
         </p>
       </div>
       <div className="report-kpis health-kpis">
@@ -3721,9 +3789,9 @@ function HealthOverview({
           onClick={() => onSelect('health-coverage')}
         />
         <HealthCard
-          label="Ricarico fiscale su acquisti"
+          label="Ricarico fiscale su venduto stimato"
           value={percentageLabel(health.fiscalMarkup)}
-          status="Battuto meno acquisti · verde da 10%, giallo da 0%"
+          status="Battuto rispetto al costo venduto stimato · verde da 10%"
           tone={minimumHealthTone(health.fiscalMarkup, 10, 0)}
           onClick={() => onSelect('health-fiscal-markup')}
         />
