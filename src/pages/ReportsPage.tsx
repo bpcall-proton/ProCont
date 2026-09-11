@@ -448,7 +448,7 @@ function minimumHealthTone(
 function fiscalMarkupTone(value: number | null): HealthTone {
   if (value === null) return 'violet'
   if (value < 0) return 'red'
-  if (value >= 15 && value <= 20) return 'green'
+  if (value >= 15) return 'green'
   return 'amber'
 }
 
@@ -702,8 +702,8 @@ function healthMetricDetails({
       rows: [...officialRows, ...realRows],
     },
     'health-fiscal-markup': {
-      title: 'Ricarico fiscale sulla merce venduta stimata',
-      note: 'Alert stimato calcolato sul battuto e sulla quota di acquisti attribuita alla merce venduta. Il Venit stock serve solo a ricavare la percentuale venduto/residuo e non viene convertito in costo con il ricarico medio.',
+      title: 'Ricarico fiscale stimato sulla merce venduta',
+      note: 'Alert stimato calcolato sul battuto e sulla quota di acquisti attribuita alla merce venduta. È coerente dal 15% in su: valori superiori non generano un problema. Il Venit stock serve solo a ricavare la percentuale venduto/residuo e non viene convertito in costo con il ricarico medio.',
       value: health.fiscalMarkup,
       kind: 'percentage',
       tone: metricTone(fiscalMarkupTone(health.fiscalMarkup)),
@@ -4003,9 +4003,9 @@ function HealthOverview({
           onClick={() => onSelect('health-coverage')}
         />
         <HealthCard
-          label="Ricarico fiscale su venduto stimato"
+          label="Ricarico fiscale stimato"
           value={percentageLabel(health.fiscalMarkup)}
-          status="Verde 15–20% · giallo fuori fascia · rosso sotto 0%"
+          status="Verde da 15% · giallo 0–14,99% · rosso sotto 0%"
           tone={fiscalMarkupTone(health.fiscalMarkup)}
           onClick={() => onSelect('health-fiscal-markup')}
         />
