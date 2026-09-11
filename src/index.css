@@ -805,10 +805,21 @@ select {
 }
 
 .traffic-light-dot {
-  width: 10px;
-  height: 10px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   opacity: 0.2;
+}
+
+.traffic-light-large {
+  position: static;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.traffic-light-large .traffic-light-dot {
+  width: 25px;
+  height: 25px;
 }
 
 .traffic-light-red {
@@ -825,7 +836,7 @@ select {
 
 .traffic-light-dot.is-active {
   opacity: 1;
-  box-shadow: 0 0 9px currentColor;
+  box-shadow: 0 0 13px currentColor;
 }
 
 .traffic-light-red.is-active {
@@ -913,6 +924,51 @@ select {
 .dashboard-stats-grid {
   grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
   gap: 10px;
+}
+
+.dashboard-heading-actions,
+.dashboard-annual-traffic {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-heading-actions {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dashboard-annual-traffic {
+  gap: 10px;
+  padding: 7px 12px 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--card-background);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-annual-traffic > span:last-child {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.dashboard-annual-traffic strong {
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.dashboard-annual-traffic:hover {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: var(--surface-hover);
+}
+
+.dashboard-annual-traffic:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 .dashboard-stats-grid .stat-card {
@@ -4584,6 +4640,16 @@ select {
   .page-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .dashboard-heading-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dashboard-annual-traffic {
+    justify-content: space-between;
   }
 
   .accounting-heading-actions,

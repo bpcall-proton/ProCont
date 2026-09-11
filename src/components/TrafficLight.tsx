@@ -6,11 +6,17 @@ const labels: Record<TrafficLightTone, string> = {
   red: 'rosso',
 }
 
-export function TrafficLight({ tone }: { tone: TrafficLightTone }) {
+export function TrafficLight({
+  tone,
+  size = 'default',
+}: {
+  tone: TrafficLightTone
+  size?: 'default' | 'large'
+}) {
   return (
     <span
       aria-label={`Semaforo ${labels[tone]}`}
-      className="traffic-light"
+      className={`traffic-light traffic-light-${size}`}
       role="img"
     >
       <i
