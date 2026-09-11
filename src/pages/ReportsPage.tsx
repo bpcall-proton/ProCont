@@ -52,6 +52,7 @@ interface BusinessHealth {
   markup: number | null
   netMargin: number | null
   cashCoverage: number | null
+  fiscalMarkup: number | null
 }
 
 function rangeFor(period: Period, selected: string) {
@@ -161,6 +162,10 @@ function calculateBusinessHealth({
       : null
   const netMargin = percentage(real - goodsCost - fixedCosts, real)
   const cashCoverage = percentage(official, real)
+  const fiscalMarkup =
+    goodsCost > 0
+      ? roundMoney(((official - goodsCost) / goodsCost) * 100)
+      : null
   const coherenceScore =
     coherence === null
       ? null
@@ -177,21 +182,17 @@ function calculateBusinessHealth({
     netMargin === null
       ? null
       : clampScore(((netMargin + 15) / 30) * 100)
-  const cashScore =
-    cashCoverage === null
-      ? null
-      : clampScore(100 - Math.abs(cashCoverage - 100) * 2)
   return {
     score: weightedHealthScore([
-      { score: coherenceScore, weight: 0.35 },
-      { score: markupScore, weight: 0.25 },
-      { score: marginScore, weight: 0.25 },
-      { score: cashScore, weight: 0.15 },
+      { score: coherenceScore, weight: 0.4 },
+      { score: markupScore, weight: 0.3 },
+      { score: marginScore, weight: 0.3 },
     ]),
     coherence,
     markup,
     netMargin,
     cashCoverage,
+    fiscalMarkup,
   }
 }
 
@@ -207,6 +208,13 @@ function overallHealthLabel(score: number | null) {
   if (score >= 80) return 'Parametri coerenti'
   if (score >= 60) return 'Controllare alcuni valori'
   return 'Possibile anomalia'
+}
+
+function healthToneLabel(tone: HealthTone) {
+  if (tone === 'green') return 'Coerente'
+  if (tone === 'amber') return 'Attenzione'
+  if (tone === 'red') return 'Problema'
+  return 'Dati insufficienti'
 }
 
 function rangeHealthTone(
@@ -1530,7 +1538,7 @@ export function ReportsPage() {
       <HealthOverview
         health={companyHealth}
         title="Indice salute aziendale"
-        note="Confronta acquisti, Venit teorico, incasso reale, cash/POS e tutte le spese del periodo. Usa un periodo ampio quando una parte dello stock è stata acquistata in mesi precedenti."
+        note="La valutazione economica usa incasso reale, acquisti, Venit teorico e tutte le spese del periodo. Cash e POS sono separati e generano soltanto alert fiscali."
       />
 
       <section className="report-kpis">
@@ -1870,11 +1878,29 @@ function HealthOverview({
           status="Verde da 10%, giallo da 0%"
           tone={minimumHealthTone(health.netMargin, 10, 0)}
         />
+      </div>
+      <div className="health-section-heading">
+        <div>
+          <span className="eyebrow">CONTROLLO FISCALE</span>
+          <strong>Alert separati dall’indice economico</strong>
+        </div>
+        <p>
+          Confrontano quanto battuto in cassa con l’incasso reale e con gli
+          acquisti del periodo.
+        </p>
+      </div>
+      <div className="report-kpis health-kpis">
         <HealthCard
-          label="Copertura cash/POS"
+          label="Copertura fiscale"
           value={percentageLabel(health.cashCoverage)}
-          status="Verde tra 95% e 105%"
+          status="Cash + POS rispetto all’incasso reale · verde 95–105%"
           tone={rangeHealthTone(health.cashCoverage, 95, 105, 85, 115)}
+        />
+        <HealthCard
+          label="Ricarico fiscale su acquisti"
+          value={percentageLabel(health.fiscalMarkup)}
+          status="Battuto meno acquisti · riferimento 85–110%"
+          tone={rangeHealthTone(health.fiscalMarkup, 85, 110, 70, 150)}
         />
       </div>
     </section>
@@ -1896,6 +1922,10 @@ function HealthCard({
     <article className={`report-card health-card report-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+      <span className={`health-status health-status-${tone}`}>
+        <i aria-hidden="true" />
+        {healthToneLabel(tone)}
+      </span>
       <em>{status}</em>
     </article>
   )

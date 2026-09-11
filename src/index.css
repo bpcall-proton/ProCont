@@ -3893,6 +3893,66 @@ select {
   font-weight: 700;
 }
 
+.health-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.health-section-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.health-section-heading strong {
+  font-size: 0.86rem;
+}
+
+.health-section-heading p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.health-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  font-size: 0.68rem !important;
+  font-weight: 900;
+}
+
+.health-status i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.health-status-green {
+  color: var(--success) !important;
+}
+
+.health-status-amber {
+  color: var(--warning) !important;
+}
+
+.health-status-red {
+  color: var(--error) !important;
+}
+
+.health-status-violet {
+  color: var(--lavender) !important;
+}
+
 .health-card.report-green,
 .health-inline.health-green {
   border-color: rgba(45, 212, 191, 0.48);
@@ -3925,6 +3985,17 @@ select {
 
 .health-inline.health-red {
   color: var(--error) !important;
+}
+
+@media (max-width: 720px) {
+  .health-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .health-section-heading p {
+    text-align: left;
+  }
 }
 
 .report-card-button {
