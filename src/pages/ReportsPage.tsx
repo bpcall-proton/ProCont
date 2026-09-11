@@ -30,10 +30,52 @@ type MetricKey =
   | 'vat-balance'
   | 'stock'
   | 'forecast'
+type HealthMetricKey =
+  | 'health-score'
+  | 'health-coherence'
+  | 'health-markup'
+  | 'health-margin'
+  | 'health-coverage'
+  | 'health-fiscal-markup'
+type SellerMetricKey =
+  | 'official'
+  | 'real'
+  | 'purchases'
+  | 'unregistered-goods'
+  | 'fixed-costs'
+  | 'official-profit'
+  | 'real-profit'
+  | 'input-vat'
+  | 'output-vat'
+  | 'vat-balance'
+  | 'theoretical'
+  | 'stock'
+  | 'invoice-remaining'
+type SupplierMetricKey =
+  | 'invoice-count'
+  | 'purchased'
+  | 'paid'
+  | 'remaining'
+  | 'overdue-count'
 type ReportDetail =
   | { type: 'seller'; id: string }
   | { type: 'supplier'; id: string }
-  | { type: 'metric'; metric: MetricKey }
+  | null
+type CalculationSelection =
+  | {
+      scope: 'company'
+      metric: MetricKey | HealthMetricKey
+    }
+  | {
+      scope: 'seller'
+      sellerId: string
+      metric: SellerMetricKey | HealthMetricKey
+    }
+  | {
+      scope: 'supplier'
+      supplierId: string
+      metric: SupplierMetricKey
+    }
   | null
 
 interface MetricDetailRow {
@@ -42,6 +84,29 @@ interface MetricDetailRow {
   description: string
   reference: string
   amount: number
+}
+
+type MetricValueKind = 'money' | 'percentage' | 'score' | 'count'
+type ReportTone = 'green' | 'cyan' | 'violet' | 'amber' | 'red'
+
+interface CalculationStep {
+  label: string
+  value: number
+  kind: MetricValueKind
+  reference: string
+  operation?: string
+}
+
+interface MetricDetailDefinition {
+  title: string
+  note: string
+  value: number | null
+  kind: MetricValueKind
+  tone: ReportTone
+  formula: string
+  steps: CalculationStep[]
+  rows: MetricDetailRow[]
+  rowKind?: MetricValueKind
 }
 
 type HealthTone = 'green' | 'violet' | 'amber' | 'red'
@@ -53,6 +118,14 @@ interface BusinessHealth {
   netMargin: number | null
   cashCoverage: number | null
   fiscalMarkup: number | null
+  grossGoodsCost: number
+  inventorySaleValue: number
+  estimatedInventoryCost: number
+  economicGoodsCost: number
+  expectedRevenue: number
+  coherenceScore: number | null
+  markupScore: number | null
+  marginScore: number | null
 }
 
 function rangeFor(period: Period, selected: string) {
@@ -208,19 +281,30 @@ function calculateBusinessHealth({
   real,
   goodsCost,
   fixedCosts,
+  theoreticalRevenue,
 }: {
   official: number
   real: number
   goodsCost: number
   fixedCosts: number
+  theoreticalRevenue: number
 }): BusinessHealth {
-  const expectedRevenue = goodsCost * 1.975
+  const inventorySaleValue = roundMoney(
+    Math.max(theoreticalRevenue - real, 0),
+  )
+  const estimatedInventoryCost = roundMoney(
+    Math.min(goodsCost, inventorySaleValue / 1.975),
+  )
+  const economicGoodsCost = roundMoney(
+    Math.max(goodsCost - estimatedInventoryCost, 0),
+  )
+  const expectedRevenue = roundMoney(economicGoodsCost * 1.975)
   const coherence = percentage(real, expectedRevenue)
   const markup =
-    goodsCost > 0
-      ? roundMoney(((real - goodsCost) / goodsCost) * 100)
+    economicGoodsCost > 0
+      ? roundMoney(((real - economicGoodsCost) / economicGoodsCost) * 100)
       : null
-  const netMargin = percentage(real - goodsCost - fixedCosts, real)
+  const netMargin = percentage(real - economicGoodsCost - fixedCosts, real)
   const cashCoverage = percentage(official, real)
   const fiscalMarkup =
     goodsCost > 0
@@ -253,6 +337,14 @@ function calculateBusinessHealth({
     netMargin,
     cashCoverage,
     fiscalMarkup,
+    grossGoodsCost: goodsCost,
+    inventorySaleValue,
+    estimatedInventoryCost,
+    economicGoodsCost,
+    expectedRevenue,
+    coherenceScore,
+    markupScore,
+    marginScore,
   }
 }
 
@@ -301,6 +393,271 @@ function minimumHealthTone(
   return 'red'
 }
 
+function metricValue(value: number | null, kind: MetricValueKind) {
+  if (value === null) return '—'
+  if (kind === 'money') return money(value)
+  if (kind === 'percentage') return `${value.toFixed(2)}%`
+  if (kind === 'score') return `${Math.round(value)}/100`
+  return `${Math.round(value)}`
+}
+
+function metricTone(tone: HealthTone): ReportTone {
+  return tone === 'violet' ? 'violet' : tone
+}
+
+function calculationRowsByCategory(rows: MetricDetailRow[]) {
+  const categories = new Map<string, number>()
+  rows.forEach((row) => {
+    categories.set(
+      row.category,
+      roundMoney((categories.get(row.category) ?? 0) + row.amount),
+    )
+  })
+  return [...categories.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
+}
+
+function calculationRowsByMonth(rows: MetricDetailRow[]) {
+  const months = new Map<string, number>()
+  rows.forEach((row) => {
+    if (!row.date) return
+    const month = row.date.slice(0, 7)
+    months.set(month, roundMoney((months.get(month) ?? 0) + row.amount))
+  })
+  return [...months.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([label, value]) => ({ label, value }))
+}
+
+function sumRows(rows: MetricDetailRow[]) {
+  return roundMoney(rows.reduce((sum, row) => sum + row.amount, 0))
+}
+
+function healthMetricDetails({
+  health,
+  realRows,
+  officialRows,
+  purchaseRows,
+  unregisteredGoodsRows,
+  fixedCostRows,
+}: {
+  health: BusinessHealth
+  realRows: MetricDetailRow[]
+  officialRows: MetricDetailRow[]
+  purchaseRows: MetricDetailRow[]
+  unregisteredGoodsRows: MetricDetailRow[]
+  fixedCostRows: MetricDetailRow[]
+}): Record<HealthMetricKey, MetricDetailDefinition> {
+  const goodsRows = [...purchaseRows, ...unregisteredGoodsRows]
+  const economicRows = [...realRows, ...goodsRows, ...fixedCostRows]
+  const fiscalRows = [...officialRows, ...goodsRows]
+  return {
+    'health-score': {
+      title: 'Indice salute economica',
+      note: 'Media ponderata di coerenza vendite, ricarico reale e margine netto. Cash e POS non entrano nel punteggio.',
+      value: health.score,
+      kind: 'score',
+      tone: metricTone(overallHealthTone(health.score)),
+      formula:
+        '(Punteggio coerenza × 40%) + (punteggio ricarico × 30%) + (punteggio margine × 30%)',
+      steps: [
+        {
+          label: 'Punteggio coerenza vendite',
+          value: health.coherenceScore ?? 0,
+          kind: 'score',
+          reference: `Deriva dalla coerenza economica ${percentageLabel(health.coherence)}.`,
+          operation: '× 40%',
+        },
+        {
+          label: 'Punteggio ricarico reale',
+          value: health.markupScore ?? 0,
+          kind: 'score',
+          reference: `Deriva dal ricarico reale ${percentageLabel(health.markup)}; fascia di riferimento 85–110%.`,
+          operation: '× 30%',
+        },
+        {
+          label: 'Punteggio margine netto',
+          value: health.marginScore ?? 0,
+          kind: 'score',
+          reference: `Deriva dal margine netto ${percentageLabel(health.netMargin)}.`,
+          operation: '× 30%',
+        },
+      ],
+      rows: economicRows,
+    },
+    'health-coherence': {
+      title: 'Coerenza vendite',
+      note: 'Confronta l’incasso reale con il valore atteso della sola merce stimata come venduta. La merce ancora in magazzino non viene trattata come perdita.',
+      value: health.coherence,
+      kind: 'percentage',
+      tone: metricTone(
+        rangeHealthTone(health.coherence, 90, 110, 80, 120),
+      ),
+      formula:
+        'Incasso reale ÷ (costo merce venduta stimato × 1,975) × 100',
+      steps: [
+        {
+          label: 'Incasso reale',
+          value: sumRows(realRows),
+          kind: 'money',
+          reference: 'Somma degli incassi reali registrati nel periodo.',
+          operation: 'Numeratore',
+        },
+        {
+          label: 'Costo merce acquistata',
+          value: health.grossGoodsCost,
+          kind: 'money',
+          reference: 'Fatture fornitori più merce acquistata senza fattura.',
+        },
+        {
+          label: 'Valore vendita dello stock residuo',
+          value: health.inventorySaleValue,
+          kind: 'money',
+          reference: 'Venit teorico netto meno incasso reale; rappresenta merce ancora in magazzino.',
+          operation: '÷ 1,975',
+        },
+        {
+          label: 'Costo stimato dello stock',
+          value: health.estimatedInventoryCost,
+          kind: 'money',
+          reference: 'Quota del costo acquisti attribuita alla merce non ancora venduta.',
+          operation: 'Sottratto dagli acquisti',
+        },
+        {
+          label: 'Costo merce venduta stimato',
+          value: health.economicGoodsCost,
+          kind: 'money',
+          reference: 'Costo acquistato meno costo stimato dello stock residuo.',
+          operation: '× 1,975',
+        },
+        {
+          label: 'Vendite attese sulla merce venduta',
+          value: health.expectedRevenue,
+          kind: 'money',
+          reference: 'Riferimento medio tra ricarico 85% e 110%.',
+          operation: 'Denominatore',
+        },
+      ],
+      rows: economicRows,
+    },
+    'health-markup': {
+      title: 'Ricarico reale',
+      note: 'Misura il ricarico ottenuto sull’incasso reale usando il costo stimato della merce effettivamente venduta.',
+      value: health.markup,
+      kind: 'percentage',
+      tone: metricTone(
+        rangeHealthTone(health.markup, 85, 110, 70, 150),
+      ),
+      formula:
+        '(Incasso reale − costo merce venduta stimato) ÷ costo merce venduta stimato × 100',
+      steps: [
+        {
+          label: 'Incasso reale',
+          value: sumRows(realRows),
+          kind: 'money',
+          reference: 'Totale effettivamente incassato nel periodo.',
+          operation: 'Meno',
+        },
+        {
+          label: 'Costo merce venduta stimato',
+          value: health.economicGoodsCost,
+          kind: 'money',
+          reference: 'Acquisti al netto del costo stimato della merce ancora in magazzino.',
+          operation: 'Poi diviso per questo valore',
+        },
+      ],
+      rows: [...realRows, ...goodsRows],
+    },
+    'health-margin': {
+      title: 'Margine netto',
+      note: 'Mostra quanto resta dell’incasso reale dopo merce venduta e costi fissi maturati sui giorni lavorati.',
+      value: health.netMargin,
+      kind: 'percentage',
+      tone: metricTone(minimumHealthTone(health.netMargin, 10, 0)),
+      formula:
+        '(Incasso reale − costo merce venduta stimato − costi fissi maturati) ÷ incasso reale × 100',
+      steps: [
+        {
+          label: 'Incasso reale',
+          value: sumRows(realRows),
+          kind: 'money',
+          reference: 'Totale effettivamente incassato nel periodo.',
+          operation: 'Base 100%',
+        },
+        {
+          label: 'Costo merce venduta stimato',
+          value: health.economicGoodsCost,
+          kind: 'money',
+          reference: 'Acquisti al netto dello stock residuo stimato.',
+          operation: 'Sottratto',
+        },
+        {
+          label: 'Costi fissi maturati',
+          value: sumRows(fixedCostRows),
+          kind: 'money',
+          reference: 'Affitti, stipendi, tasse, contabile e altre spese attribuite al periodo.',
+          operation: 'Sottratti',
+        },
+      ],
+      rows: economicRows,
+    },
+    'health-coverage': {
+      title: 'Copertura fiscale',
+      note: 'Alert fiscale separato: confronta Cash + POS battuti con l’incasso reale dichiarato.',
+      value: health.cashCoverage,
+      kind: 'percentage',
+      tone: metricTone(
+        rangeHealthTone(health.cashCoverage, 95, 105, 85, 115),
+      ),
+      formula: '(Cash + POS) ÷ incasso reale × 100',
+      steps: [
+        {
+          label: 'Incasso fiscale battuto',
+          value: sumRows(officialRows),
+          kind: 'money',
+          reference: 'Somma di Cash e POS registrati nel periodo.',
+          operation: 'Numeratore',
+        },
+        {
+          label: 'Incasso reale',
+          value: sumRows(realRows),
+          kind: 'money',
+          reference: 'Totale effettivamente incassato nel periodo.',
+          operation: 'Denominatore',
+        },
+      ],
+      rows: [...officialRows, ...realRows],
+    },
+    'health-fiscal-markup': {
+      title: 'Ricarico fiscale su acquisti',
+      note: 'Alert fiscale calcolato sul battuto e sugli acquisti, senza usare il ricarico configurato nei prodotti.',
+      value: health.fiscalMarkup,
+      kind: 'percentage',
+      tone: metricTone(minimumHealthTone(health.fiscalMarkup, 10, 0)),
+      formula:
+        '((Cash + POS) − costo merce acquistata) ÷ costo merce acquistata × 100',
+      steps: [
+        {
+          label: 'Incasso fiscale battuto',
+          value: sumRows(officialRows),
+          kind: 'money',
+          reference: 'Somma di Cash e POS registrati nel periodo.',
+          operation: 'Meno',
+        },
+        {
+          label: 'Costo merce acquistata',
+          value: health.grossGoodsCost,
+          kind: 'money',
+          reference: 'Fatture fornitori più merce acquistata senza fattura.',
+          operation: 'Poi diviso per questo valore',
+        },
+      ],
+      rows: fiscalRows,
+    },
+  }
+}
+
 function percentageLabel(value: number | null) {
   return value === null ? '—' : `${value.toLocaleString('it-IT')}%`
 }
@@ -322,6 +679,8 @@ export function ReportsPage() {
   const setSelected = (nextSelected: string) =>
     setReportFilters((current) => ({ ...current, selected: nextSelected }))
   const [detail, setDetail] = useState<ReportDetail>(null)
+  const [calculation, setCalculation] =
+    useState<CalculationSelection>(null)
   const source = activeAccounting(state.accounting)
   const range = rangeFor(period, selected)
 
@@ -611,6 +970,7 @@ export function ReportsPage() {
     real,
     goodsCost: purchases + unregisteredGoods,
     fixedCosts,
+    theoreticalRevenue: companyTheoretical,
   })
 
   const sellerStats = source.sellers.map((seller) => {
@@ -643,6 +1003,7 @@ export function ReportsPage() {
       real,
       goodsCost: invoiceTotal + unregisteredGoods,
       fixedCosts: costs.total,
+      theoreticalRevenue: totalVenit,
     })
     return {
       id: seller.id,
@@ -938,20 +1299,21 @@ export function ReportsPage() {
       amount: -row.amount,
     })),
   ]
-  const metricDetails: Record<
-    MetricKey,
-    {
-      title: string
-      note: string
-      value: number
-      rows: MetricDetailRow[]
-      tone: 'green' | 'cyan' | 'violet' | 'amber' | 'red'
-    }
-  > = {
+  const metricDetails: Record<MetricKey, MetricDetailDefinition> = {
     official: {
       title: 'Incasso fiscale',
       note: 'Somma di Cash e POS; l’IVA indicata è già compresa.',
       value: official,
+      kind: 'money',
+      formula: 'Somma di Cash + POS di ogni incasso registrato',
+      steps: [
+        {
+          label: 'Cash + POS del periodo',
+          value: official,
+          kind: 'money',
+          reference: `${officialRows.length} registrazioni di incasso comprese tra ${range.start} e ${range.end}.`,
+        },
+      ],
       rows: officialRows,
       tone: 'green',
     },
@@ -959,6 +1321,16 @@ export function ReportsPage() {
       title: 'Incasso reale',
       note: 'Totale effettivamente incassato, separato dall’incasso fiscale.',
       value: real,
+      kind: 'money',
+      formula: 'Somma del campo Incasso reale di ogni giornata registrata',
+      steps: [
+        {
+          label: 'Incassi reali del periodo',
+          value: real,
+          kind: 'money',
+          reference: `${realRows.length} registrazioni comprese tra ${range.start} e ${range.end}; Cash e POS non vengono sommati nuovamente.`,
+        },
+      ],
       rows: realRows,
       tone: 'violet',
     },
@@ -966,6 +1338,16 @@ export function ReportsPage() {
       title: 'Costi totali delle fatture',
       note: 'Imponibile più IVA di tutte le fatture fornitori del periodo.',
       value: purchases,
+      kind: 'money',
+      formula: 'Somma del totale fattura (imponibile + IVA)',
+      steps: [
+        {
+          label: 'Totale fatture fornitori',
+          value: purchases,
+          kind: 'money',
+          reference: `${purchaseRows.length} fatture con data compresa tra ${range.start} e ${range.end}.`,
+        },
+      ],
       rows: purchaseRows,
       tone: 'amber',
     },
@@ -973,6 +1355,16 @@ export function ReportsPage() {
       title: 'Merce acquistata senza fattura',
       note: 'Spese pagate dalla cassa, escluse dall’IVA e dai costi documentati.',
       value: unregisteredGoods,
+      kind: 'money',
+      formula: 'Somma del campo Merce senza fattura nelle fatture del periodo',
+      steps: [
+        {
+          label: 'Merce senza fattura',
+          value: unregisteredGoods,
+          kind: 'money',
+          reference: `${unregisteredGoodsRows.length} movimenti non documentati compresi nel periodo.`,
+        },
+      ],
       rows: unregisteredGoodsRows,
       tone: 'red',
     },
@@ -980,6 +1372,53 @@ export function ReportsPage() {
       title: 'Spese fisse e ripartite',
       note: 'Affitti, stipendi, tasse, contabile e altre spese del periodo.',
       value: fixedCosts,
+      kind: 'money',
+      formula:
+        'Quote affitto + quote contabile + stipendi + tasse + altre spese maturate',
+      steps: [
+        {
+          label: 'Affitti maturati',
+          value: rents,
+          kind: 'money',
+          reference: `Importi mensili ripartiti su ${companyWorkedDates.size} giorni con incassi.`,
+          operation: 'Somma',
+        },
+        {
+          label: 'Fatture contabile maturate',
+          value: accountant,
+          kind: 'money',
+          reference: `Quote mensili riferite ai ${companyWorkedDates.size} giorni lavorati.`,
+          operation: 'Somma',
+        },
+        {
+          label: 'Stipendi corrisposti',
+          value: expenseByType.stipendi,
+          kind: 'money',
+          reference: 'Spese stipendio attribuite alla data di pagamento.',
+          operation: 'Somma',
+        },
+        {
+          label: 'Tasse',
+          value: expenseByType.tasse,
+          kind: 'money',
+          reference: 'Tasse singole o quote mensili maturate nel periodo.',
+          operation: 'Somma',
+        },
+        {
+          label: 'Costi contabile',
+          value: expenseByType.contabile,
+          kind: 'money',
+          reference: 'Spese contabile registrate nella gestione spese.',
+          operation: 'Somma',
+        },
+        {
+          label: 'Altre spese',
+          value: expenseByType.altre,
+          kind: 'money',
+          reference: 'Altre uscite singole o ricorrenti attribuite al periodo.',
+          operation: 'Somma',
+        },
+      ],
       rows: fixedCostRows,
       tone: 'amber',
     },
@@ -987,6 +1426,32 @@ export function ReportsPage() {
       title: 'Utile fiscale',
       note: 'Incasso fiscale meno fatture fornitori e spese documentate.',
       value: official - operatingCosts,
+      kind: 'money',
+      formula:
+        'Incasso fiscale − costi fatture fornitori − spese fisse e ripartite',
+      steps: [
+        {
+          label: 'Incasso fiscale',
+          value: official,
+          kind: 'money',
+          reference: 'Cash + POS registrati nel periodo.',
+          operation: 'Partenza',
+        },
+        {
+          label: 'Fatture fornitori',
+          value: purchases,
+          kind: 'money',
+          reference: 'Totale documentato delle fatture del periodo.',
+          operation: 'Sottratte',
+        },
+        {
+          label: 'Spese fisse e ripartite',
+          value: fixedCosts,
+          kind: 'money',
+          reference: 'Costi maturati e uscite attribuite al periodo.',
+          operation: 'Sottratte',
+        },
+      ],
       rows: [...officialRows, ...negativeOperatingRows],
       tone: official - operatingCosts >= 0 ? 'green' : 'red',
     },
@@ -994,6 +1459,39 @@ export function ReportsPage() {
       title: 'Utile reale',
       note: 'Incasso reale meno costi documentati e merce senza fattura.',
       value: real - realOperatingCosts,
+      kind: 'money',
+      formula:
+        'Incasso reale − fatture fornitori − merce senza fattura − spese fisse e ripartite',
+      steps: [
+        {
+          label: 'Incasso reale',
+          value: real,
+          kind: 'money',
+          reference: 'Totale effettivamente incassato nel periodo.',
+          operation: 'Partenza',
+        },
+        {
+          label: 'Fatture fornitori',
+          value: purchases,
+          kind: 'money',
+          reference: 'Costo totale documentato degli acquisti.',
+          operation: 'Sottratte',
+        },
+        {
+          label: 'Merce senza fattura',
+          value: unregisteredGoods,
+          kind: 'money',
+          reference: 'Acquisti non documentati registrati nel periodo.',
+          operation: 'Sottratta',
+        },
+        {
+          label: 'Spese fisse e ripartite',
+          value: fixedCosts,
+          kind: 'money',
+          reference: 'Affitti, stipendi, tasse, contabile e altre spese.',
+          operation: 'Sottratte',
+        },
+      ],
       rows: [...realRows, ...negativeRealOperatingRows],
       tone: real - realOperatingCosts >= 0 ? 'cyan' : 'red',
     },
@@ -1001,6 +1499,16 @@ export function ReportsPage() {
       title: 'IVA a credito',
       note: 'IVA delle fatture fornitori, degli affitti e del contabile.',
       value: inputVat,
+      kind: 'money',
+      formula: 'IVA fatture fornitori + IVA affitti + IVA contabile',
+      steps: [
+        {
+          label: 'IVA a credito totale',
+          value: inputVat,
+          kind: 'money',
+          reference: `${inputVatRows.length} documenti fiscali inclusi nel periodo.`,
+        },
+      ],
       rows: inputVatRows,
       tone: 'cyan',
     },
@@ -1008,6 +1516,16 @@ export function ReportsPage() {
       title: 'IVA a debito',
       note: 'IVA già inclusa negli importi fiscali Cash e POS.',
       value: outputVat,
+      kind: 'money',
+      formula: 'Somma IVA indicata negli incassi fiscali del periodo',
+      steps: [
+        {
+          label: 'IVA a debito totale',
+          value: outputVat,
+          kind: 'money',
+          reference: `${outputVatRows.length} registrazioni di incasso incluse.`,
+        },
+      ],
       rows: outputVatRows,
       tone: 'amber',
     },
@@ -1015,6 +1533,23 @@ export function ReportsPage() {
       title: 'Saldo IVA',
       note: 'IVA a debito meno IVA a credito.',
       value: outputVat - inputVat,
+      kind: 'money',
+      formula: 'IVA a debito − IVA a credito',
+      steps: [
+        {
+          label: 'IVA a debito',
+          value: outputVat,
+          kind: 'money',
+          reference: 'IVA inclusa in Cash e POS.',
+          operation: 'Meno',
+        },
+        {
+          label: 'IVA a credito',
+          value: inputVat,
+          kind: 'money',
+          reference: 'IVA di fatture fornitori, affitti e contabile.',
+        },
+      ],
       rows: [
         ...outputVatRows,
         ...inputVatRows.map((row) => ({ ...row, amount: -row.amount })),
@@ -1025,6 +1560,32 @@ export function ReportsPage() {
       title: 'Venit stock',
       note: 'Venit teorico netto dei trasferimenti interni meno l’incasso reale.',
       value: companyTheoretical - real,
+      kind: 'money',
+      formula:
+        'Venit teorico fatture − Venit ceduto internamente − incasso reale',
+      steps: [
+        {
+          label: 'Venit teorico delle fatture',
+          value: theoretical,
+          kind: 'money',
+          reference: 'Valore di vendita teorico registrato nelle fatture del periodo.',
+          operation: 'Partenza',
+        },
+        {
+          label: 'Venit ceduto internamente',
+          value: transferredVenit,
+          kind: 'money',
+          reference: 'Trasferimenti da fornitori marcati verso altri venditori.',
+          operation: 'Sottratto',
+        },
+        {
+          label: 'Incasso reale',
+          value: real,
+          kind: 'money',
+          reference: 'Valore della merce già venduta e incassata.',
+          operation: 'Sottratto',
+        },
+      ],
       rows: [
         ...data.invoices.map((item) => ({
           date: item.date,
@@ -1048,6 +1609,46 @@ export function ReportsPage() {
       title: `Pronostico utile al ${seasonEnd}`,
       note: 'Incassi reali acquisiti e stimati meno costi sostenuti e futuri.',
       value: seasonForecast,
+      kind: 'money',
+      formula:
+        'Incassi reali acquisiti + media giornaliera × giorni rimanenti − costi sostenuti − costi futuri',
+      steps: [
+        {
+          label: 'Incassi reali acquisiti',
+          value: allRealTakings,
+          kind: 'money',
+          reference: `${allTakingDays} giornate con incassi dall’inizio dell’anno.`,
+          operation: 'Somma',
+        },
+        {
+          label: 'Media incasso giornaliera',
+          value: averageDailyTaking,
+          kind: 'money',
+          reference: 'Incassi reali acquisiti divisi per giornate con incasso.',
+          operation: `× ${remainingDays} giorni`,
+        },
+        {
+          label: 'Incassi futuri stimati',
+          value: averageDailyTaking * remainingDays,
+          kind: 'money',
+          reference: `Proiezione fino al ${seasonEnd}.`,
+          operation: 'Somma',
+        },
+        {
+          label: 'Costi sostenuti',
+          value: yearCosts,
+          kind: 'money',
+          reference: 'Fatture, merce senza fattura e spese dall’inizio dell’anno.',
+          operation: 'Sottratti',
+        },
+        {
+          label: 'Spese fisse future',
+          value: futureFixedCosts,
+          kind: 'money',
+          reference: `Quote mensili previste fino al ${seasonEnd}.`,
+          operation: 'Sottratte',
+        },
+      ],
       rows: [
         {
           date: today(),
@@ -1081,8 +1682,20 @@ export function ReportsPage() {
       tone: seasonForecast >= 0 ? 'cyan' : 'red',
     },
   }
+  const companyHealthDetails = healthMetricDetails({
+    health: companyHealth,
+    realRows,
+    officialRows,
+    purchaseRows,
+    unregisteredGoodsRows,
+    fixedCostRows,
+  })
   const selectedMetric =
-    detail?.type === 'metric' ? metricDetails[detail.metric] : undefined
+    calculation?.scope === 'company'
+      ? calculation.metric in metricDetails
+        ? metricDetails[calculation.metric as MetricKey]
+        : companyHealthDetails[calculation.metric as HealthMetricKey]
+      : undefined
 
   async function exportMetricExcel() {
     if (!selectedMetric) return
@@ -1222,65 +1835,16 @@ export function ReportsPage() {
 
   if (selectedMetric) {
     return (
-      <div className="page-stack">
-        <DetailHeader
-          eyebrow="DETTAGLIO STATISTICA"
-          name={selectedMetric.title}
-          note={selectedMetric.note}
-          onBack={() => setDetail(null)}
-          onExport={exportMetricExcel}
-          period={period}
-          selected={selected}
-          setPeriod={setPeriod}
-          setSelected={setSelected}
-        />
-        <section className="report-kpis">
-          <ReportCard
-            label={selectedMetric.title}
-            value={selectedMetric.value}
-            tone={selectedMetric.tone}
-          />
-          <CountCard label="Voci nel dettaglio" value={selectedMetric.rows.length} />
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">DATI DEL PERIODO</span>
-              <h2>Composizione del valore</h2>
-            </div>
-          </div>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Categoria</th>
-                  <th>Descrizione</th>
-                  <th>Riferimento</th>
-                  <th>Importo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedMetric.rows.map((row, index) => (
-                  <tr key={`${row.category}-${row.date}-${index}`}>
-                    <td>{row.date || '—'}</td>
-                    <td>{row.category}</td>
-                    <td>{row.description}</td>
-                    <td>{row.reference}</td>
-                    <td>{money(row.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {selectedMetric.rows.length === 0 && (
-              <div className="empty-state compact-empty">
-                <strong>Nessun dato nel periodo</strong>
-                <span>Modifica il filtro temporale per vedere altre voci.</span>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
+      <CalculationDetailPage
+        detail={selectedMetric}
+        eyebrow="VERIFICA CALCOLO AZIENDALE"
+        onBack={() => setCalculation(null)}
+        onExport={exportMetricExcel}
+        period={period}
+        selected={selected}
+        setPeriod={setPeriod}
+        setSelected={setSelected}
+      />
     )
   }
 
@@ -1341,7 +1905,562 @@ export function ReportsPage() {
         real: sellerReal,
         goodsCost: sellerInvoiceTotal + sellerUnregisteredGoods,
         fixedCosts: sellerCosts.total,
+        theoreticalRevenue: sellerTheoretical,
       })
+    const sellerWorkedDates = workedDatesForTakings(
+      sellerTakings,
+      range.start,
+      range.end,
+    )
+    const sellerOfficialRows: MetricDetailRow[] = sellerTakings.map((item) => ({
+      date: item.date,
+      category: 'Incasso fiscale',
+      description: selectedSeller.name,
+      reference: `Cash ${money(item.cash)} · POS ${money(item.pos)}`,
+      amount: officialTaking(item),
+    }))
+    const sellerRealRows: MetricDetailRow[] = sellerTakings.map((item) => ({
+      date: item.date,
+      category: 'Incasso reale',
+      description: selectedSeller.name,
+      reference: `Incasso fiscale della giornata ${money(officialTaking(item))}`,
+      amount: realTaking(item),
+    }))
+    const sellerPurchaseRows: MetricDetailRow[] = sellerInvoices.map((item) => ({
+      date: item.date,
+      category: 'Fattura fornitore',
+      description: item.supplierName || 'Fornitore non indicato',
+      reference: item.number || 'Senza numero',
+      amount: item.total,
+    }))
+    const sellerUnregisteredRows: MetricDetailRow[] = sellerInvoices
+      .filter((item) => item.unregisteredGoods !== 0)
+      .map((item) => ({
+        date: item.date,
+        category: 'Merce senza fattura',
+        description: item.supplierName || item.description || 'Acquisto',
+        reference: item.number || 'Senza numero',
+        amount: item.unregisteredGoods,
+      }))
+    const sellerCostRows: MetricDetailRow[] = [
+      ...data.rentals
+        .map((item) => {
+          const matured = monthlyAmountForWorkedDates(
+            item.total,
+            item.date,
+            sellerWorkedDates,
+          )
+          const allocated = allocatedSellerCost(
+            matured,
+            item,
+            selectedSeller.id,
+          )
+          return {
+            date: item.date,
+            category: 'Quota affitto',
+            description: item.property || item.tenant || 'Affitto',
+            reference: `${money(item.total)} mensili · ${sellerWorkedDates.size} giorni lavorati · ripartito tra ${allocationTargets(item).length} venditori`,
+            amount: allocated,
+          }
+        })
+        .filter((row) => row.amount !== 0),
+      ...data.accountantInvoices
+        .map((item) => {
+          const matured = monthlyAmountForWorkedDates(
+            item.total,
+            item.date,
+            sellerWorkedDates,
+          )
+          return {
+            date: item.date,
+            category: 'Quota contabile',
+            description: item.description || 'Fattura contabile',
+            reference: `${money(item.total)} mensili · ${sellerWorkedDates.size} giorni lavorati · ripartito tra ${allocationTargets(item).length} venditori`,
+            amount: allocatedSellerCost(
+              matured,
+              item,
+              selectedSeller.id,
+            ),
+          }
+        })
+        .filter((row) => row.amount !== 0),
+      ...data.expenses
+        .map((item) => {
+          const salarySellerId =
+            item.sellerId && knownSellerIds.has(item.sellerId)
+              ? item.sellerId
+              : bestContactNameMatch(item.sellerName, source.sellers)?.id
+          const isSalary =
+            item.type === 'stipendio' &&
+            salarySellerId === selectedSeller.id &&
+            inRange(item.date, range.start, range.end)
+          const allocated = isSalary
+            ? item.amount
+            : item.type === 'stipendio'
+              ? 0
+              : allocatedSellerCost(
+                  expenseForWorkedDates(
+                    item,
+                    range.start,
+                    range.end,
+                    sellerWorkedDates,
+                  ),
+                  item,
+                  selectedSeller.id,
+                )
+          return {
+            date: item.date,
+            category: {
+              stipendio: 'Stipendio corrisposto',
+              tassa: 'Quota tassa',
+              contabile: 'Quota contabile',
+              altra: 'Quota altra spesa',
+            }[item.type],
+            description: item.description || item.sellerName || 'Spesa',
+            reference: isSalary
+              ? `Pagamento attribuito direttamente a ${selectedSeller.name}`
+              : `${item.recurrence === 'monthly' ? 'Quota mensile maturata' : 'Spesa del periodo'} · ripartita tra ${allocationTargets(item).length} venditori`,
+            amount: allocated,
+          }
+        })
+        .filter((row) => row.amount !== 0),
+    ]
+    const sellerInputVatRows: MetricDetailRow[] = [
+      ...sellerInvoices.map((item) => ({
+        date: item.date,
+        category: 'IVA fattura fornitore',
+        description: item.supplierName || 'Fornitore non indicato',
+        reference: item.number || 'Senza numero',
+        amount: item.vat,
+      })),
+      ...data.rentals
+        .map((item) => ({
+          date: item.date,
+          category: 'Quota IVA affitto',
+          description: item.property || item.tenant || 'Affitto',
+          reference: `Ripartita tra ${allocationTargets(item).length} venditori`,
+          amount: allocatedSellerCost(item.vat, item, selectedSeller.id),
+        }))
+        .filter((row) => row.amount !== 0),
+      ...data.accountantInvoices
+        .map((item) => ({
+          date: item.date,
+          category: 'Quota IVA contabile',
+          description: item.description || 'Fattura contabile',
+          reference: `Ripartita tra ${allocationTargets(item).length} venditori`,
+          amount: allocatedSellerCost(item.vat, item, selectedSeller.id),
+        }))
+        .filter((row) => row.amount !== 0),
+    ]
+    const sellerOutputVatRows: MetricDetailRow[] = sellerTakings.map((item) => ({
+      date: item.date,
+      category: 'IVA incassi',
+      description: selectedSeller.name,
+      reference: 'IVA già inclusa in Cash + POS',
+      amount: item.vat,
+    }))
+    const sellerTheoreticalRows: MetricDetailRow[] = [
+      ...sellerInvoices.map((item) => ({
+        date: item.date,
+        category: 'Venit teorico fattura',
+        description: item.supplierName || 'Fornitore non indicato',
+        reference: item.number || 'Senza numero',
+        amount: item.theoreticalRevenue,
+      })),
+      ...supplierSellerRevenueTransfers
+        .filter((transfer) => transfer.fromSellerId === selectedSeller.id)
+        .map((transfer) => ({
+          date: transfer.date,
+          category: 'Venit ceduto internamente',
+          description: transfer.supplierName,
+          reference: transfer.invoiceNumber || 'Senza numero',
+          amount: -transfer.amount,
+        })),
+    ]
+    const sellerRemainingRows: MetricDetailRow[] = sellerInvoices
+      .map((item) => ({
+        date: item.date,
+        category: 'Residuo fattura',
+        description: item.supplierName || 'Fornitore non indicato',
+        reference: item.number || 'Senza numero',
+        amount: invoiceRemaining(item),
+      }))
+      .filter((row) => row.amount !== 0)
+    const sellerMetricDetails: Record<
+      SellerMetricKey,
+      MetricDetailDefinition
+    > = {
+      official: {
+        title: 'Incasso fiscale personale',
+        note: `Cash e POS registrati per ${selectedSeller.name}.`,
+        value: sellerOfficial,
+        kind: 'money',
+        tone: 'green',
+        formula: 'Somma Cash + POS delle giornate attribuite al venditore',
+        steps: [
+          {
+            label: 'Incasso fiscale',
+            value: sellerOfficial,
+            kind: 'money',
+            reference: `${sellerOfficialRows.length} giornate attribuite a ${selectedSeller.name}.`,
+          },
+        ],
+        rows: sellerOfficialRows,
+      },
+      real: {
+        title: 'Incasso reale personale',
+        note: `Incasso effettivo registrato per ${selectedSeller.name}.`,
+        value: sellerReal,
+        kind: 'money',
+        tone: 'violet',
+        formula: 'Somma Incasso reale delle giornate attribuite al venditore',
+        steps: [
+          {
+            label: 'Incasso reale',
+            value: sellerReal,
+            kind: 'money',
+            reference: `${sellerRealRows.length} giornate attribuite a ${selectedSeller.name}.`,
+          },
+        ],
+        rows: sellerRealRows,
+      },
+      purchases: {
+        title: 'Costi fatture fornitori personali',
+        note: `Fatture attribuite a ${selectedSeller.name}.`,
+        value: sellerInvoiceTotal,
+        kind: 'money',
+        tone: 'amber',
+        formula: 'Somma totale delle fatture attribuite al venditore',
+        steps: [
+          {
+            label: 'Costo fatture',
+            value: sellerInvoiceTotal,
+            kind: 'money',
+            reference: `${sellerPurchaseRows.length} fatture attribuite a ${selectedSeller.name}.`,
+          },
+        ],
+        rows: sellerPurchaseRows,
+      },
+      'unregistered-goods': {
+        title: 'Merce senza fattura personale',
+        note: `Acquisti non documentati attribuiti a ${selectedSeller.name}.`,
+        value: sellerUnregisteredGoods,
+        kind: 'money',
+        tone: 'red',
+        formula: 'Somma Merce senza fattura delle fatture attribuite',
+        steps: [
+          {
+            label: 'Merce senza fattura',
+            value: sellerUnregisteredGoods,
+            kind: 'money',
+            reference: `${sellerUnregisteredRows.length} movimenti attribuiti.`,
+          },
+        ],
+        rows: sellerUnregisteredRows,
+      },
+      'fixed-costs': {
+        title: 'Spese personali e ripartite',
+        note: 'Costi assegnati direttamente o ripartiti usando i venditori selezionati in ogni spesa.',
+        value: sellerCosts.total,
+        kind: 'money',
+        tone: 'amber',
+        formula:
+          'Quota affitto + quota tasse + quota contabile + altre quote + stipendio corrisposto',
+        steps: [
+          {
+            label: 'Quota affitto',
+            value: sellerCosts.rent,
+            kind: 'money',
+            reference: `${sellerWorkedDates.size} giorni lavorati dal venditore.`,
+            operation: 'Somma',
+          },
+          {
+            label: 'Quota tasse',
+            value: sellerCosts.taxes,
+            kind: 'money',
+            reference: 'Tasse assegnate o ripartite sul venditore.',
+            operation: 'Somma',
+          },
+          {
+            label: 'Quota contabile',
+            value: sellerCosts.accounting,
+            kind: 'money',
+            reference: 'Fatture e spese contabile assegnate o ripartite.',
+            operation: 'Somma',
+          },
+          {
+            label: 'Quota altre spese',
+            value: sellerCosts.other,
+            kind: 'money',
+            reference: 'Altre spese assegnate o ripartite.',
+            operation: 'Somma',
+          },
+          {
+            label: 'Stipendio corrisposto',
+            value: sellerCosts.salaryPaid,
+            kind: 'money',
+            reference: 'Pagamento registrato nel periodo per questo venditore.',
+            operation: 'Somma',
+          },
+        ],
+        rows: sellerCostRows,
+      },
+      'official-profit': {
+        title: 'Utile fiscale personale',
+        note: 'Risultato basato su Cash + POS, fatture e costi attribuiti.',
+        value: sellerOfficial - sellerOperatingCosts,
+        kind: 'money',
+        tone:
+          sellerOfficial - sellerOperatingCosts >= 0 ? 'green' : 'red',
+        formula:
+          'Incasso fiscale − costi fatture − spese personali e ripartite',
+        steps: [
+          {
+            label: 'Incasso fiscale',
+            value: sellerOfficial,
+            kind: 'money',
+            reference: 'Cash + POS del venditore.',
+            operation: 'Partenza',
+          },
+          {
+            label: 'Costi fatture',
+            value: sellerInvoiceTotal,
+            kind: 'money',
+            reference: 'Fatture attribuite al venditore.',
+            operation: 'Sottratti',
+          },
+          {
+            label: 'Spese attribuite',
+            value: sellerCosts.total,
+            kind: 'money',
+            reference: 'Quote e pagamenti personali del periodo.',
+            operation: 'Sottratte',
+          },
+        ],
+        rows: [
+          ...sellerOfficialRows,
+          ...sellerPurchaseRows.map((row) => ({ ...row, amount: -row.amount })),
+          ...sellerCostRows.map((row) => ({ ...row, amount: -row.amount })),
+        ],
+      },
+      'real-profit': {
+        title: 'Utile reale personale',
+        note: 'Risultato economico basato sull’incasso reale e tutte le uscite attribuite.',
+        value: sellerReal - sellerRealOperatingCosts,
+        kind: 'money',
+        tone:
+          sellerReal - sellerRealOperatingCosts >= 0 ? 'cyan' : 'red',
+        formula:
+          'Incasso reale − costi fatture − merce senza fattura − spese attribuite',
+        steps: [
+          {
+            label: 'Incasso reale',
+            value: sellerReal,
+            kind: 'money',
+            reference: 'Incasso effettivo del venditore.',
+            operation: 'Partenza',
+          },
+          {
+            label: 'Costi fatture',
+            value: sellerInvoiceTotal,
+            kind: 'money',
+            reference: 'Fatture attribuite al venditore.',
+            operation: 'Sottratti',
+          },
+          {
+            label: 'Merce senza fattura',
+            value: sellerUnregisteredGoods,
+            kind: 'money',
+            reference: 'Acquisti non documentati attribuiti.',
+            operation: 'Sottratta',
+          },
+          {
+            label: 'Spese attribuite',
+            value: sellerCosts.total,
+            kind: 'money',
+            reference: 'Quote e pagamenti personali del periodo.',
+            operation: 'Sottratte',
+          },
+        ],
+        rows: [
+          ...sellerRealRows,
+          ...sellerPurchaseRows.map((row) => ({ ...row, amount: -row.amount })),
+          ...sellerUnregisteredRows.map((row) => ({
+            ...row,
+            amount: -row.amount,
+          })),
+          ...sellerCostRows.map((row) => ({ ...row, amount: -row.amount })),
+        ],
+      },
+      'input-vat': {
+        title: 'IVA a credito personale',
+        note: 'IVA delle fatture e quote IVA di affitti e contabile attribuite.',
+        value: sellerInputVat,
+        kind: 'money',
+        tone: 'cyan',
+        formula: 'IVA fatture + quota IVA affitti + quota IVA contabile',
+        steps: [
+          {
+            label: 'IVA a credito',
+            value: sellerInputVat,
+            kind: 'money',
+            reference: `${sellerInputVatRows.length} documenti o quote attribuite.`,
+          },
+        ],
+        rows: sellerInputVatRows,
+      },
+      'output-vat': {
+        title: 'IVA a debito personale',
+        note: 'IVA indicata negli incassi fiscali attribuiti.',
+        value: sellerOutputVat,
+        kind: 'money',
+        tone: 'amber',
+        formula: 'Somma IVA degli incassi attribuiti al venditore',
+        steps: [
+          {
+            label: 'IVA a debito',
+            value: sellerOutputVat,
+            kind: 'money',
+            reference: `${sellerOutputVatRows.length} giornate attribuite.`,
+          },
+        ],
+        rows: sellerOutputVatRows,
+      },
+      'vat-balance': {
+        title: 'Saldo IVA personale',
+        note: 'IVA a debito meno IVA a credito attribuita.',
+        value: sellerOutputVat - sellerInputVat,
+        kind: 'money',
+        tone: sellerOutputVat - sellerInputVat > 0 ? 'red' : 'green',
+        formula: 'IVA a debito − IVA a credito',
+        steps: [
+          {
+            label: 'IVA a debito',
+            value: sellerOutputVat,
+            kind: 'money',
+            reference: 'IVA degli incassi fiscali.',
+            operation: 'Meno',
+          },
+          {
+            label: 'IVA a credito',
+            value: sellerInputVat,
+            kind: 'money',
+            reference: 'IVA di fatture, affitti e contabile attribuita.',
+          },
+        ],
+        rows: [
+          ...sellerOutputVatRows,
+          ...sellerInputVatRows.map((row) => ({
+            ...row,
+            amount: -row.amount,
+          })),
+        ],
+      },
+      theoretical: {
+        title: 'Totale Venit personale',
+        note: 'Venit teorico delle fatture meno le cessioni interne del venditore.',
+        value: sellerTheoretical,
+        kind: 'money',
+        tone: 'violet',
+        formula: 'Venit teorico fatture − Venit ceduto internamente',
+        steps: [
+          {
+            label: 'Venit teorico fatture',
+            value: sellerInvoices.reduce(
+              (sum, item) => sum + item.theoreticalRevenue,
+              0,
+            ),
+            kind: 'money',
+            reference: `${sellerInvoices.length} fatture attribuite.`,
+            operation: 'Meno',
+          },
+          {
+            label: 'Venit ceduto',
+            value: supplierSellerRevenueTransfers
+              .filter(
+                (transfer) => transfer.fromSellerId === selectedSeller.id,
+              )
+              .reduce((sum, transfer) => sum + transfer.amount, 0),
+            kind: 'money',
+            reference: 'Trasferimenti interni da fornitori marcati.',
+          },
+        ],
+        rows: sellerTheoreticalRows,
+      },
+      stock: {
+        title: 'Venit stock personale',
+        note: 'Valore di vendita teorico ancora non trasformato in incasso reale.',
+        value: sellerTheoretical - sellerReal,
+        kind: 'money',
+        tone: 'violet',
+        formula: 'Totale Venit personale − incasso reale personale',
+        steps: [
+          {
+            label: 'Totale Venit',
+            value: sellerTheoretical,
+            kind: 'money',
+            reference: 'Venit teorico netto dei trasferimenti interni.',
+            operation: 'Meno',
+          },
+          {
+            label: 'Incasso reale',
+            value: sellerReal,
+            kind: 'money',
+            reference: 'Valore già venduto e incassato.',
+          },
+        ],
+        rows: [
+          ...sellerTheoreticalRows,
+          ...sellerRealRows.map((row) => ({ ...row, amount: -row.amount })),
+        ],
+      },
+      'invoice-remaining': {
+        title: 'Residuo fatture da pagare',
+        note: 'Debito ancora aperto sulle fatture attribuite al venditore.',
+        value: sellerInvoiceRemaining,
+        kind: 'money',
+        tone: 'red',
+        formula: 'Somma (totale fattura − pagamenti registrati)',
+        steps: [
+          {
+            label: 'Residuo totale',
+            value: sellerInvoiceRemaining,
+            kind: 'money',
+            reference: `${sellerRemainingRows.length} fatture con residuo aperto.`,
+          },
+        ],
+        rows: sellerRemainingRows,
+      },
+    }
+    const sellerHealthDetails = healthMetricDetails({
+      health: sellerHealth,
+      realRows: sellerRealRows,
+      officialRows: sellerOfficialRows,
+      purchaseRows: sellerPurchaseRows,
+      unregisteredGoodsRows: sellerUnregisteredRows,
+      fixedCostRows: sellerCostRows,
+    })
+    const selectedSellerMetric =
+      calculation?.scope === 'seller' &&
+      calculation.sellerId === selectedSeller.id
+        ? calculation.metric in sellerMetricDetails
+          ? sellerMetricDetails[calculation.metric as SellerMetricKey]
+          : sellerHealthDetails[calculation.metric as HealthMetricKey]
+        : undefined
+    if (selectedSellerMetric) {
+      return (
+        <CalculationDetailPage
+          detail={selectedSellerMetric}
+          eyebrow={`VERIFICA CALCOLO · ${selectedSeller.name}`}
+          onBack={() => setCalculation(null)}
+          onExport={exportSellerExcel}
+          period={period}
+          selected={selected}
+          setPeriod={setPeriod}
+          setSelected={setSelected}
+        />
+      )
+    }
     return (
       <div className="page-stack">
         <DetailHeader
@@ -1370,6 +2489,13 @@ export function ReportsPage() {
             health={sellerHealth}
             title={`Controllo del punto ${selectedSeller.name}`}
             note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${workedDatesForTakings(sellerTakings, range.start, range.end).size} giorni effettivamente lavorati.`}
+            onSelect={(metric) =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric,
+              })
+            }
           />
         )}
         <section className="report-kpis">
@@ -1377,32 +2503,74 @@ export function ReportsPage() {
             label="Incasso fiscale"
             value={sellerOfficial}
             tone="green"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'official',
+              })
+            }
           />
           <ReportCard
             label="Incasso reale"
             value={sellerReal}
             tone="violet"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'real',
+              })
+            }
           />
           <ReportCard
             label="Costi fatture fornitori"
             value={sellerInvoiceTotal}
             tone="amber"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'purchases',
+              })
+            }
           />
           <ReportCard
             label="Merce senza fattura"
             value={sellerUnregisteredGoods}
             tone="red"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'unregistered-goods',
+              })
+            }
           />
           <ReportCard
             label="Spese personali e ripartite"
             value={sellerCosts.total}
             tone="amber"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'fixed-costs',
+              })
+            }
           />
           <ReportCard
             label="Utile fiscale personale"
             value={sellerOfficial - sellerOperatingCosts}
             tone={
               sellerOfficial - sellerOperatingCosts >= 0 ? 'green' : 'red'
+            }
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'official-profit',
+              })
             }
           />
           <ReportCard
@@ -1411,36 +2579,85 @@ export function ReportsPage() {
             tone={
               sellerReal - sellerRealOperatingCosts >= 0 ? 'cyan' : 'red'
             }
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'real-profit',
+              })
+            }
           />
           <ReportCard
             label="IVA a credito"
             value={sellerInputVat}
             tone="cyan"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'input-vat',
+              })
+            }
           />
           <ReportCard
             label="IVA a debito"
             value={sellerOutputVat}
             tone="amber"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'output-vat',
+              })
+            }
           />
           <ReportCard
             label="Saldo IVA"
             value={sellerOutputVat - sellerInputVat}
             tone={sellerOutputVat - sellerInputVat > 0 ? 'red' : 'green'}
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'vat-balance',
+              })
+            }
           />
           <ReportCard
             label="Totale Venit"
             value={sellerTheoretical}
             tone="violet"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'theoretical',
+              })
+            }
           />
           <ReportCard
             label="Venit stock"
             value={sellerTheoretical - sellerReal}
             tone="violet"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'stock',
+              })
+            }
           />
           <ReportCard
             label="Residuo fatture da pagare"
             value={sellerInvoiceRemaining}
             tone="red"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'invoice-remaining',
+              })
+            }
           />
         </section>
         <section className="panel">
@@ -1556,6 +2773,161 @@ export function ReportsPage() {
     const supplierOverdue = supplierInvoices.filter(
       (invoice) => invoiceDueState(invoice) === 'overdue',
     ).length
+    const supplierPurchaseRows: MetricDetailRow[] = supplierInvoices.map(
+      (invoice) => ({
+        date: invoice.date,
+        category: 'Fattura fornitore',
+        description: invoice.number || 'Senza numero',
+        reference: invoice.sellerName || 'Venditore non indicato',
+        amount: invoice.total,
+      }),
+    )
+    const supplierPaidRows: MetricDetailRow[] = supplierInvoices
+      .map((invoice) => ({
+        date: invoice.paymentDate || invoice.date,
+        category: 'Importo pagato',
+        description: invoice.number || 'Senza numero',
+        reference: `${invoice.sellerName || 'Venditore non indicato'} · ${invoice.payments.length} pagamenti registrati`,
+        amount: invoice.total - invoiceRemaining(invoice),
+      }))
+      .filter((row) => row.amount !== 0)
+    const supplierRemainingRows: MetricDetailRow[] = supplierInvoices
+      .map((invoice) => ({
+        date: invoice.dueDate || invoice.date,
+        category: 'Residuo da pagare',
+        description: invoice.number || 'Senza numero',
+        reference: `${invoice.sellerName || 'Venditore non indicato'} · scadenza ${invoice.dueDate || 'non indicata'}`,
+        amount: invoiceRemaining(invoice),
+      }))
+      .filter((row) => row.amount !== 0)
+    const supplierOverdueRows: MetricDetailRow[] = supplierInvoices
+      .filter((invoice) => invoiceDueState(invoice) === 'overdue')
+      .map((invoice) => ({
+        date: invoice.dueDate || invoice.date,
+        category: 'Fattura scaduta',
+        description: invoice.number || 'Senza numero',
+        reference: `${invoice.sellerName || 'Venditore non indicato'} · residuo ${money(invoiceRemaining(invoice))}`,
+        amount: 1,
+      }))
+    const supplierMetricDetails: Record<
+      SupplierMetricKey,
+      MetricDetailDefinition
+    > = {
+      'invoice-count': {
+        title: 'Numero fatture fornitore',
+        note: `Fatture di ${selectedSupplier.name} comprese nel periodo.`,
+        value: supplierInvoices.length,
+        kind: 'count',
+        rowKind: 'money',
+        tone: 'violet',
+        formula: 'Conteggio delle fatture del fornitore nel periodo selezionato',
+        steps: [
+          {
+            label: 'Fatture incluse',
+            value: supplierInvoices.length,
+            kind: 'count',
+            reference: `Data fattura compresa tra ${range.start} e ${range.end}.`,
+          },
+        ],
+        rows: supplierPurchaseRows,
+      },
+      purchased: {
+        title: 'Totale acquistato dal fornitore',
+        note: `Somma delle fatture di ${selectedSupplier.name}.`,
+        value: supplierTotal,
+        kind: 'money',
+        tone: 'cyan',
+        formula: 'Somma del totale di ogni fattura del fornitore',
+        steps: [
+          {
+            label: 'Totale acquistato',
+            value: supplierTotal,
+            kind: 'money',
+            reference: `${supplierInvoices.length} fatture incluse.`,
+          },
+        ],
+        rows: supplierPurchaseRows,
+      },
+      paid: {
+        title: 'Totale pagato al fornitore',
+        note: 'Totali fattura meno residui ancora aperti.',
+        value: supplierTotal - supplierRemaining,
+        kind: 'money',
+        tone: 'green',
+        formula: 'Totale acquistato − residuo ancora da pagare',
+        steps: [
+          {
+            label: 'Totale acquistato',
+            value: supplierTotal,
+            kind: 'money',
+            reference: 'Somma delle fatture del fornitore.',
+            operation: 'Meno',
+          },
+          {
+            label: 'Residuo aperto',
+            value: supplierRemaining,
+            kind: 'money',
+            reference: 'Somma dei debiti ancora presenti.',
+          },
+        ],
+        rows: supplierPaidRows,
+      },
+      remaining: {
+        title: 'Residuo fornitore',
+        note: 'Debito totale ancora aperto sulle fatture del periodo.',
+        value: supplierRemaining,
+        kind: 'money',
+        tone: 'amber',
+        formula: 'Somma (totale fattura − pagamenti registrati)',
+        steps: [
+          {
+            label: 'Residuo da pagare',
+            value: supplierRemaining,
+            kind: 'money',
+            reference: `${supplierRemainingRows.length} fatture con debito aperto.`,
+          },
+        ],
+        rows: supplierRemainingRows,
+      },
+      'overdue-count': {
+        title: 'Fatture scadute',
+        note: 'Fatture non saldate con data di scadenza precedente a oggi.',
+        value: supplierOverdue,
+        kind: 'count',
+        rowKind: 'count',
+        tone: 'red',
+        formula:
+          'Conteggio fatture con residuo positivo e scadenza precedente a oggi',
+        steps: [
+          {
+            label: 'Fatture scadute',
+            value: supplierOverdue,
+            kind: 'count',
+            reference: `${supplierRemainingRows.length} fatture aperte controllate.`,
+          },
+        ],
+        rows: supplierOverdueRows,
+      },
+    }
+    const selectedSupplierMetric =
+      calculation?.scope === 'supplier' &&
+      calculation.supplierId === selectedSupplier.id
+        ? supplierMetricDetails[calculation.metric]
+        : undefined
+    if (selectedSupplierMetric) {
+      return (
+        <CalculationDetailPage
+          detail={selectedSupplierMetric}
+          eyebrow={`VERIFICA CALCOLO · ${selectedSupplier.name}`}
+          onBack={() => setCalculation(null)}
+          onExport={exportSupplierExcel}
+          period={period}
+          selected={selected}
+          setPeriod={setPeriod}
+          setSelected={setSelected}
+        />
+      )
+    }
     return (
       <div className="page-stack">
         <DetailHeader
@@ -1572,15 +2944,65 @@ export function ReportsPage() {
           setSelected={setSelected}
         />
         <section className="report-kpis">
-          <CountCard label="Fatture" value={supplierInvoices.length} />
-          <ReportCard label="Totale acquistato" value={supplierTotal} tone="cyan" />
+          <CountCard
+            label="Fatture"
+            value={supplierInvoices.length}
+            onClick={() =>
+              setCalculation({
+                scope: 'supplier',
+                supplierId: selectedSupplier.id,
+                metric: 'invoice-count',
+              })
+            }
+          />
+          <ReportCard
+            label="Totale acquistato"
+            value={supplierTotal}
+            tone="cyan"
+            onClick={() =>
+              setCalculation({
+                scope: 'supplier',
+                supplierId: selectedSupplier.id,
+                metric: 'purchased',
+              })
+            }
+          />
           <ReportCard
             label="Totale pagato"
             value={supplierTotal - supplierRemaining}
             tone="green"
+            onClick={() =>
+              setCalculation({
+                scope: 'supplier',
+                supplierId: selectedSupplier.id,
+                metric: 'paid',
+              })
+            }
           />
-          <ReportCard label="Residuo" value={supplierRemaining} tone="amber" />
-          <CountCard label="Fatture scadute" value={supplierOverdue} tone="red" />
+          <ReportCard
+            label="Residuo"
+            value={supplierRemaining}
+            tone="amber"
+            onClick={() =>
+              setCalculation({
+                scope: 'supplier',
+                supplierId: selectedSupplier.id,
+                metric: 'remaining',
+              })
+            }
+          />
+          <CountCard
+            label="Fatture scadute"
+            value={supplierOverdue}
+            tone="red"
+            onClick={() =>
+              setCalculation({
+                scope: 'supplier',
+                supplierId: selectedSupplier.id,
+                metric: 'overdue-count',
+              })
+            }
+          />
         </section>
         <section className="panel">
           <div className="panel-heading">
@@ -1692,6 +3114,9 @@ export function ReportsPage() {
         health={companyHealth}
         title="Indice salute aziendale"
         note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati. Cash e POS generano soltanto alert fiscali.`}
+        onSelect={(metric) =>
+          setCalculation({ scope: 'company', metric })
+        }
       />
 
       <section className="report-kpis">
@@ -1699,40 +3124,51 @@ export function ReportsPage() {
           label="Incasso fiscale"
           value={official}
           tone="green"
-          onClick={() => setDetail({ type: 'metric', metric: 'official' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'official' })
+          }
         />
         <ReportCard
           label="Incasso reale"
           value={real}
           tone="violet"
-          onClick={() => setDetail({ type: 'metric', metric: 'real' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'real' })
+          }
         />
         <ReportCard
           label="Costi totali (fatture)"
           value={purchases}
           tone="amber"
-          onClick={() => setDetail({ type: 'metric', metric: 'purchases' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'purchases' })
+          }
         />
         <ReportCard
           label="Merce acquistata senza fattura"
           value={unregisteredGoods}
           tone="red"
           onClick={() =>
-            setDetail({ type: 'metric', metric: 'unregistered-goods' })
+            setCalculation({
+              scope: 'company',
+              metric: 'unregistered-goods',
+            })
           }
         />
         <ReportCard
           label="Spese fisse e ripartite"
           value={fixedCosts}
           tone="amber"
-          onClick={() => setDetail({ type: 'metric', metric: 'fixed-costs' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'fixed-costs' })
+          }
         />
         <ReportCard
           label="Utile fiscale"
           value={official - operatingCosts}
           tone={official - operatingCosts >= 0 ? 'green' : 'red'}
           onClick={() =>
-            setDetail({ type: 'metric', metric: 'official-profit' })
+            setCalculation({ scope: 'company', metric: 'official-profit' })
           }
         />
         <ReportCard
@@ -1740,38 +3176,48 @@ export function ReportsPage() {
           value={real - realOperatingCosts}
           tone={real - realOperatingCosts >= 0 ? 'cyan' : 'red'}
           onClick={() =>
-            setDetail({ type: 'metric', metric: 'real-profit' })
+            setCalculation({ scope: 'company', metric: 'real-profit' })
           }
         />
         <ReportCard
           label="IVA a credito"
           value={inputVat}
           tone="cyan"
-          onClick={() => setDetail({ type: 'metric', metric: 'input-vat' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'input-vat' })
+          }
         />
         <ReportCard
           label="IVA a debito"
           value={outputVat}
           tone="amber"
-          onClick={() => setDetail({ type: 'metric', metric: 'output-vat' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'output-vat' })
+          }
         />
         <ReportCard
           label="Saldo IVA"
           value={outputVat - inputVat}
           tone={outputVat - inputVat > 0 ? 'red' : 'green'}
-          onClick={() => setDetail({ type: 'metric', metric: 'vat-balance' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'vat-balance' })
+          }
         />
         <ReportCard
           label="Venit stock"
           value={companyTheoretical - real}
           tone="violet"
-          onClick={() => setDetail({ type: 'metric', metric: 'stock' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'stock' })
+          }
         />
         <ReportCard
           label={`Pronostico utile al ${seasonEnd}`}
           value={seasonForecast}
           tone={seasonForecast >= 0 ? 'cyan' : 'red'}
-          onClick={() => setDetail({ type: 'metric', metric: 'forecast' })}
+          onClick={() =>
+            setCalculation({ scope: 'company', metric: 'forecast' })
+          }
         />
       </section>
 
@@ -1956,6 +3402,224 @@ export function ReportsPage() {
   )
 }
 
+function CalculationDetailPage({
+  detail,
+  eyebrow,
+  onBack,
+  onExport,
+  period,
+  selected,
+  setPeriod,
+  setSelected,
+}: {
+  detail: MetricDetailDefinition
+  eyebrow: string
+  onBack: () => void
+  onExport?: () => void
+  period: Period
+  selected: string
+  setPeriod: (period: Period) => void
+  setSelected: (selected: string) => void
+}) {
+  const categoryRows = calculationRowsByCategory(detail.rows)
+  const monthRows = calculationRowsByMonth(detail.rows)
+  const rowKind = detail.rowKind ?? 'money'
+  const sourceTotal = sumRows(detail.rows)
+  const canReconcile = detail.kind === rowKind && detail.value !== null
+  const reconciliationDifference =
+    canReconcile && detail.value !== null
+      ? roundMoney(detail.value - sourceTotal)
+      : null
+  const reconciled =
+    reconciliationDifference !== null &&
+    Math.abs(reconciliationDifference) < 0.01
+  const chartMaximum = Math.max(
+    ...categoryRows.map((row) => Math.abs(row.value)),
+    ...monthRows.map((row) => Math.abs(row.value)),
+    1,
+  )
+
+  const renderChart = (
+    rows: Array<{ label: string; value: number }>,
+    emptyMessage: string,
+  ) => (
+    <div className="calculation-chart">
+      {rows.map((row) => (
+        <div className="calculation-chart-row" key={row.label}>
+          <strong>{row.label}</strong>
+          <div className="calculation-chart-track">
+            <span
+              className={
+                row.value < 0
+                  ? 'calculation-chart-bar negative'
+                  : 'calculation-chart-bar positive'
+              }
+              style={{
+                width: `${(Math.abs(row.value) / chartMaximum) * 100}%`,
+              }}
+            />
+          </div>
+          <small>{metricValue(row.value, rowKind)}</small>
+        </div>
+      ))}
+      {rows.length === 0 && (
+        <div className="empty-state compact-empty">
+          <strong>Nessun dato disponibile</strong>
+          <span>{emptyMessage}</span>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="page-stack">
+      <DetailHeader
+        eyebrow={eyebrow}
+        name={detail.title}
+        note={detail.note}
+        onBack={onBack}
+        onExport={onExport}
+        period={period}
+        selected={selected}
+        setPeriod={setPeriod}
+        setSelected={setSelected}
+      />
+
+      <section className="calculation-summary-grid">
+        <article className={`calculation-result report-${detail.tone}`}>
+          <span className="eyebrow">RISULTATO FINALE</span>
+          <strong>{metricValue(detail.value, detail.kind)}</strong>
+          <p>
+            Tipo di dato:{' '}
+            {{
+              money: 'importo monetario',
+              percentage: 'percentuale',
+              score: 'punteggio su 100',
+              count: 'numero di record',
+            }[detail.kind]}
+          </p>
+        </article>
+        <article className="calculation-formula">
+          <span className="eyebrow">FORMULA APPLICATA</span>
+          <strong>{detail.formula}</strong>
+          <p>Ogni valore usato è spiegato nei passaggi sottostanti.</p>
+        </article>
+        <article
+          className={`calculation-reconciliation ${
+            canReconcile ? (reconciled ? 'is-matched' : 'is-different') : ''
+          }`}
+        >
+          <span className="eyebrow">CONTROLLO DATI SORGENTE</span>
+          <strong>{metricValue(sourceTotal, rowKind)}</strong>
+          <p>
+            {canReconcile
+              ? reconciled
+                ? 'La somma algebrica delle righe coincide con il risultato.'
+                : `Differenza rispetto al risultato: ${metricValue(
+                    reconciliationDifference,
+                    detail.kind,
+                  )}.`
+              : 'Le righe mostrano i dati usati nella formula: una percentuale o un punteggio non deve coincidere con la loro somma.'}
+          </p>
+        </article>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">OPERAZIONI E RIFERIMENTI</span>
+            <h2>Calcolo passo per passo</h2>
+          </div>
+        </div>
+        <div className="calculation-steps">
+          {detail.steps.map((step, index) => (
+            <article className="calculation-step" key={`${step.label}-${index}`}>
+              <span className="calculation-step-index">{index + 1}</span>
+              <div>
+                <strong>{step.label}</strong>
+                <b>{metricValue(step.value, step.kind)}</b>
+                {step.operation && <em>{step.operation}</em>}
+                <p>{step.reference}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="calculation-chart-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">GRAFICO PER CATEGORIA</span>
+              <h2>Da cosa è composto</h2>
+            </div>
+          </div>
+          {renderChart(
+            categoryRows,
+            'Le categorie appariranno quando saranno presenti righe sorgente.',
+          )}
+        </article>
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">GRAFICO TEMPORALE</span>
+              <h2>Andamento per mese</h2>
+            </div>
+          </div>
+          {renderChart(
+            monthRows,
+            'Il grafico mensile richiede righe sorgente con una data.',
+          )}
+        </article>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">DATI ORIGINALI DEL PERIODO</span>
+            <h2>Righe usate o consultate dal calcolo</h2>
+          </div>
+          <strong>{detail.rows.length} voci</strong>
+        </div>
+        <div className="data-table-wrap">
+          <table className="data-table calculation-source-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Categoria / riferimento</th>
+                <th>Descrizione</th>
+                <th>A cosa si riferisce</th>
+                <th>Valore usato</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.rows.map((row, index) => (
+                <tr key={`${row.category}-${row.date}-${index}`}>
+                  <td>{row.date || '—'}</td>
+                  <td>{row.category}</td>
+                  <td>{row.description}</td>
+                  <td>{row.reference}</td>
+                  <td className={row.amount < 0 ? 'value-negative' : ''}>
+                    {metricValue(row.amount, rowKind)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {detail.rows.length === 0 && (
+            <div className="empty-state compact-empty">
+              <strong>Nessun dato nel periodo</strong>
+              <span>
+                Modifica il filtro temporale per controllare altre registrazioni.
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function ReportCard({
   label,
   value,
@@ -1992,10 +3656,12 @@ function HealthOverview({
   health,
   title,
   note,
+  onSelect,
 }: {
   health: BusinessHealth
   title: string
   note: string
+  onSelect: (metric: HealthMetricKey) => void
 }) {
   return (
     <section className="panel health-overview">
@@ -2012,24 +3678,28 @@ function HealthOverview({
           value={health.score === null ? '—' : `${health.score}/100`}
           status={overallHealthLabel(health.score)}
           tone={overallHealthTone(health.score)}
+          onClick={() => onSelect('health-score')}
         />
         <HealthCard
           label="Coerenza vendite"
           value={percentageLabel(health.coherence)}
           status="Incasso reale rispetto al valore atteso dagli acquisti"
           tone={rangeHealthTone(health.coherence, 90, 110, 80, 120)}
+          onClick={() => onSelect('health-coherence')}
         />
         <HealthCard
           label="Ricarico reale"
           value={percentageLabel(health.markup)}
           status="Incasso reale meno acquisti · riferimento 85–110%"
           tone={rangeHealthTone(health.markup, 85, 110, 70, 150)}
+          onClick={() => onSelect('health-markup')}
         />
         <HealthCard
           label="Margine netto"
           value={percentageLabel(health.netMargin)}
           status="Verde da 10%, giallo da 0%"
           tone={minimumHealthTone(health.netMargin, 10, 0)}
+          onClick={() => onSelect('health-margin')}
         />
       </div>
       <div className="health-section-heading">
@@ -2048,12 +3718,14 @@ function HealthOverview({
           value={percentageLabel(health.cashCoverage)}
           status="Cash + POS rispetto all’incasso reale · verde 95–105%"
           tone={rangeHealthTone(health.cashCoverage, 95, 105, 85, 115)}
+          onClick={() => onSelect('health-coverage')}
         />
         <HealthCard
           label="Ricarico fiscale su acquisti"
           value={percentageLabel(health.fiscalMarkup)}
           status="Battuto meno acquisti · verde da 10%, giallo da 0%"
           tone={minimumHealthTone(health.fiscalMarkup, 10, 0)}
+          onClick={() => onSelect('health-fiscal-markup')}
         />
       </div>
     </section>
@@ -2065,14 +3737,20 @@ function HealthCard({
   value,
   status,
   tone,
+  onClick,
 }: {
   label: string
   value: string
   status: string
   tone: HealthTone
+  onClick: () => void
 }) {
   return (
-    <article className={`report-card health-card report-${tone}`}>
+    <button
+      className={`report-card report-card-button health-card report-${tone}`}
+      onClick={onClick}
+      type="button"
+    >
       <span>{label}</span>
       <strong>{value}</strong>
       <span className={`health-status health-status-${tone}`}>
@@ -2080,7 +3758,8 @@ function HealthCard({
         {healthToneLabel(tone)}
       </span>
       <em>{status}</em>
-    </article>
+      <em>Apri dati, formula e grafici</em>
+    </button>
   )
 }
 
@@ -2088,11 +3767,26 @@ function CountCard({
   label,
   value,
   tone = 'violet',
+  onClick,
 }: {
   label: string
   value: number
   tone?: 'violet' | 'red'
+  onClick?: () => void
 }) {
+  if (onClick) {
+    return (
+      <button
+        className={`report-card report-card-button report-${tone}`}
+        onClick={onClick}
+        type="button"
+      >
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <em>Apri dati, formula e grafici</em>
+      </button>
+    )
+  }
   return (
     <article className={`report-card report-${tone}`}>
       <span>{label}</span>
