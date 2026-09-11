@@ -124,6 +124,67 @@ function percentage(numerator: number, denominator: number) {
   return denominator > 0 ? roundMoney((numerator / denominator) * 100) : null
 }
 
+function workedDatesForTakings(
+  takings: Array<{ date: string }>,
+  start: string,
+  end: string,
+) {
+  return new Set(
+    takings
+      .filter((item) => inRange(item.date, start, end))
+      .map((item) => item.date),
+  )
+}
+
+function monthlyAmountForWorkedDates(
+  amount: number,
+  referenceDate: string,
+  workedDates: Set<string>,
+) {
+  const reference = new Date(`${referenceDate}T00:00:00Z`)
+  if (Number.isNaN(reference.valueOf())) return 0
+  const month = referenceDate.slice(0, 7)
+  const daysWorked = [...workedDates].filter((date) =>
+    date.startsWith(month),
+  ).length
+  const daysInMonth = new Date(
+    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  return roundMoney((amount / daysInMonth) * daysWorked)
+}
+
+function expenseForWorkedDates(
+  expense: {
+    amount: number
+    date: string
+    recurrence: 'once' | 'monthly'
+    recurrenceEndDate: string | null
+  },
+  start: string,
+  end: string,
+  workedDates: Set<string>,
+) {
+  if (expense.recurrence !== 'monthly') {
+    return inRange(expense.date, start, end) ? expense.amount : 0
+  }
+  return roundMoney(
+    [...workedDates].reduce((sum, date) => {
+      if (
+        !inRange(date, start, end) ||
+        date < expense.date ||
+        (expense.recurrenceEndDate && date > expense.recurrenceEndDate)
+      ) {
+        return sum
+      }
+      const cursor = new Date(`${date}T00:00:00Z`)
+      const daysInMonth = new Date(
+        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+      ).getUTCDate()
+      return sum + expense.amount / daysInMonth
+    }, 0),
+  )
+}
+
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value))
 }
@@ -147,18 +208,17 @@ function calculateBusinessHealth({
   real,
   goodsCost,
   fixedCosts,
-  theoretical,
 }: {
   official: number
   real: number
   goodsCost: number
   fixedCosts: number
-  theoretical: number
 }): BusinessHealth {
-  const coherence = percentage(real, theoretical)
+  const expectedRevenue = goodsCost * 1.975
+  const coherence = percentage(real, expectedRevenue)
   const markup =
     goodsCost > 0
-      ? roundMoney(((theoretical - goodsCost) / goodsCost) * 100)
+      ? roundMoney(((real - goodsCost) / goodsCost) * 100)
       : null
   const netMargin = percentage(real - goodsCost - fixedCosts, real)
   const cashCoverage = percentage(official, real)
@@ -308,13 +368,40 @@ export function ReportsPage() {
     (sum, item) => sum + item.unregisteredGoods,
     0,
   )
-  const rents = data.rentals.reduce((sum, item) => sum + item.total, 0)
+  const companyWorkedDates = workedDatesForTakings(
+    data.takings,
+    range.start,
+    range.end,
+  )
+  const rents = data.rentals.reduce(
+    (sum, item) =>
+      sum +
+      monthlyAmountForWorkedDates(
+        item.total,
+        item.date,
+        companyWorkedDates,
+      ),
+    0,
+  )
   const accountant = data.accountantInvoices.reduce(
-    (sum, item) => sum + item.total,
+    (sum, item) =>
+      sum +
+      monthlyAmountForWorkedDates(
+        item.total,
+        item.date,
+        companyWorkedDates,
+      ),
     0,
   )
   const expenseCosts = data.expenses.reduce(
-    (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+    (sum, item) =>
+      sum +
+      expenseForWorkedDates(
+        item,
+        range.start,
+        range.end,
+        companyWorkedDates,
+      ),
     0,
   )
   const fixedCosts = rents + accountant + expenseCosts
@@ -324,25 +411,53 @@ export function ReportsPage() {
     stipendi: data.expenses
       .filter((item) => item.type === 'stipendio')
       .reduce(
-        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        (sum, item) =>
+          sum +
+          expenseForWorkedDates(
+            item,
+            range.start,
+            range.end,
+            companyWorkedDates,
+          ),
         0,
       ),
     tasse: data.expenses
       .filter((item) => item.type === 'tassa')
       .reduce(
-        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        (sum, item) =>
+          sum +
+          expenseForWorkedDates(
+            item,
+            range.start,
+            range.end,
+            companyWorkedDates,
+          ),
         0,
       ),
     contabile: data.expenses
       .filter((item) => item.type === 'contabile')
       .reduce(
-        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        (sum, item) =>
+          sum +
+          expenseForWorkedDates(
+            item,
+            range.start,
+            range.end,
+            companyWorkedDates,
+          ),
         0,
       ),
     altre: data.expenses
       .filter((item) => item.type === 'altra')
       .reduce(
-        (sum, item) => sum + allocatedExpense(item, range.start, range.end),
+        (sum, item) =>
+          sum +
+          expenseForWorkedDates(
+            item,
+            range.start,
+            range.end,
+            companyWorkedDates,
+          ),
         0,
       ),
   }
@@ -365,9 +480,23 @@ export function ReportsPage() {
       : 0
   }
   const sellerCostBreakdown = (seller: { id: string }) => {
+    const sellerWorkedDates = workedDatesForTakings(
+      data.takings.filter((item) => item.sellerId === seller.id),
+      range.start,
+      range.end,
+    )
     const rent = data.rentals.reduce(
       (sum, item) =>
-        sum + allocatedSellerCost(item.total, item, seller.id),
+        sum +
+        allocatedSellerCost(
+          monthlyAmountForWorkedDates(
+            item.total,
+            item.date,
+            sellerWorkedDates,
+          ),
+          item,
+          seller.id,
+        ),
       0,
     )
     const allocatedExpenseType = (type: 'tassa' | 'contabile' | 'altra') =>
@@ -377,7 +506,12 @@ export function ReportsPage() {
           (sum, item) =>
             sum +
             allocatedSellerCost(
-              allocatedExpense(item, range.start, range.end),
+              expenseForWorkedDates(
+                item,
+                range.start,
+                range.end,
+                sellerWorkedDates,
+              ),
               item,
               seller.id,
             ),
@@ -387,7 +521,16 @@ export function ReportsPage() {
     const accounting =
       data.accountantInvoices.reduce(
         (sum, item) =>
-          sum + allocatedSellerCost(item.total, item, seller.id),
+          sum +
+          allocatedSellerCost(
+            monthlyAmountForWorkedDates(
+              item.total,
+              item.date,
+              sellerWorkedDates,
+            ),
+            item,
+            seller.id,
+          ),
         0,
       ) + allocatedExpenseType('contabile')
     const other = allocatedExpenseType('altra')
@@ -468,7 +611,6 @@ export function ReportsPage() {
     real,
     goodsCost: purchases + unregisteredGoods,
     fixedCosts,
-    theoretical: companyTheoretical,
   })
 
   const sellerStats = source.sellers.map((seller) => {
@@ -501,7 +643,6 @@ export function ReportsPage() {
       real,
       goodsCost: invoiceTotal + unregisteredGoods,
       fixedCosts: costs.total,
-      theoretical: totalVenit,
     })
     return {
       id: seller.id,
@@ -709,20 +850,33 @@ export function ReportsPage() {
       date: item.date,
       category: 'Affitto',
       description: item.property || item.tenant || 'Affitto',
-      reference: item.period || 'Periodo non indicato',
-      amount: item.total,
+      reference: `${item.period || 'Periodo non indicato'} · quota sui giorni lavorati`,
+      amount: monthlyAmountForWorkedDates(
+        item.total,
+        item.date,
+        companyWorkedDates,
+      ),
     })),
     ...data.accountantInvoices.map((item) => ({
       date: item.date,
       category: 'Contabile',
       description: item.description || 'Fattura contabile',
-      reference: item.number || 'Senza numero',
-      amount: item.total,
+      reference: `${item.number || 'Senza numero'} · quota sui giorni lavorati`,
+      amount: monthlyAmountForWorkedDates(
+        item.total,
+        item.date,
+        companyWorkedDates,
+      ),
     })),
     ...data.expenses
       .map((item) => ({
         item,
-        allocated: allocatedExpense(item, range.start, range.end),
+        allocated: expenseForWorkedDates(
+          item,
+          range.start,
+          range.end,
+          companyWorkedDates,
+        ),
       }))
       .filter(({ allocated }) => allocated !== 0)
       .map(({ item, allocated }) => ({
@@ -736,7 +890,7 @@ export function ReportsPage() {
         description: item.description || item.sellerName || 'Spesa',
         reference:
           item.recurrence === 'monthly'
-            ? 'Importo mensile ripartito nel periodo'
+            ? 'Importo mensile ripartito sui giorni lavorati'
             : item.notes || 'Spesa del periodo',
         amount: allocated,
       })),
@@ -1187,7 +1341,6 @@ export function ReportsPage() {
         real: sellerReal,
         goodsCost: sellerInvoiceTotal + sellerUnregisteredGoods,
         fixedCosts: sellerCosts.total,
-        theoretical: sellerTheoretical,
       })
     return (
       <div className="page-stack">
@@ -1216,7 +1369,7 @@ export function ReportsPage() {
           <HealthOverview
             health={sellerHealth}
             title={`Controllo del punto ${selectedSeller.name}`}
-            note="Il Venit ceduto viene sottratto; quello acquisito è già incluso nella fattura della venditrice destinataria."
+            note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${workedDatesForTakings(sellerTakings, range.start, range.end).size} giorni effettivamente lavorati.`}
           />
         )}
         <section className="report-kpis">
@@ -1538,7 +1691,7 @@ export function ReportsPage() {
       <HealthOverview
         health={companyHealth}
         title="Indice salute aziendale"
-        note="La valutazione economica usa incasso reale, acquisti, Venit teorico e tutte le spese del periodo. Cash e POS sono separati e generano soltanto alert fiscali."
+        note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati. Cash e POS generano soltanto alert fiscali.`}
       />
 
       <section className="report-kpis">
@@ -1863,13 +2016,13 @@ function HealthOverview({
         <HealthCard
           label="Coerenza vendite"
           value={percentageLabel(health.coherence)}
-          status="Verde tra 90% e 110%"
+          status="Incasso reale rispetto al valore atteso dagli acquisti"
           tone={rangeHealthTone(health.coherence, 90, 110, 80, 120)}
         />
         <HealthCard
-          label="Ricarico medio"
+          label="Ricarico reale"
           value={percentageLabel(health.markup)}
-          status="Riferimento aziendale 85–110%"
+          status="Incasso reale meno acquisti · riferimento 85–110%"
           tone={rangeHealthTone(health.markup, 85, 110, 70, 150)}
         />
         <HealthCard
@@ -1885,8 +2038,8 @@ function HealthOverview({
           <strong>Alert separati dall’indice economico</strong>
         </div>
         <p>
-          Confrontano quanto battuto in cassa con l’incasso reale e con gli
-          acquisti del periodo.
+          Confrontano quanto battuto in cassa con l’incasso reale e gli acquisti,
+          senza usare il ricarico impostato sui prodotti.
         </p>
       </div>
       <div className="report-kpis health-kpis">
@@ -1899,8 +2052,8 @@ function HealthOverview({
         <HealthCard
           label="Ricarico fiscale su acquisti"
           value={percentageLabel(health.fiscalMarkup)}
-          status="Battuto meno acquisti · riferimento 85–110%"
-          tone={rangeHealthTone(health.fiscalMarkup, 85, 110, 70, 150)}
+          status="Battuto meno acquisti · verde da 10%, giallo da 0%"
+          tone={minimumHealthTone(health.fiscalMarkup, 10, 0)}
         />
       </div>
     </section>
