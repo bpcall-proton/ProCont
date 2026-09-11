@@ -2310,6 +2310,8 @@ function ExpensesPanel() {
                     date: expenseDate,
                     recurrence: expenseRecurrence,
                     recurrenceEndDate: expenseEndDate || null,
+                    settled:
+                      expenseType === 'stipendio' ? true : expense.settled,
                   }
                 : expense,
             )
@@ -2332,7 +2334,7 @@ function ExpensesPanel() {
                 recurrence: expenseRecurrence,
                 recurrenceEndDate: expenseEndDate || null,
                 notes: '',
-                settled: false,
+                settled: expenseType === 'stipendio',
               },
               ...current.expenses,
             ],
@@ -2512,7 +2514,7 @@ function ExpenseList({
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button>{item.type === 'stipendio' ? <small>Corrisposto</small> : <button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button>}<RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
 }
 
 function SettlementList({
