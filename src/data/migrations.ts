@@ -238,6 +238,8 @@ function mapSeller(value: JsonRecord): AccountingSeller {
     city: text(value.citta),
     notes: text(value.note),
     pointOfSaleSeller: flag(value.venditricePuntoVendita),
+    productionCostDistributor: flag(value.distributoreCostiProduzione),
+    productionCostRecipient: flag(value.riceveCostiProduzione),
     autoSelect: flag(value.selezioneAutomatica),
     overviewPriority: positiveInteger(value.prioritaPanoramica, 0),
   }
@@ -569,6 +571,8 @@ export function normalizeStoredState(
           city: '',
           notes: 'Venditrice collegata a un punto vendita',
           pointOfSaleSeller: true,
+          productionCostDistributor: false,
+          productionCostRecipient: false,
           autoSelect: false,
           overviewPriority: 0,
         })
@@ -728,6 +732,10 @@ export function normalizeStoredState(
           pointOfSaleSeller:
             seller.pointOfSaleSeller ??
             activeAccountingSellerIds.has(seller.id),
+          productionCostDistributor:
+            seller.productionCostDistributor ?? false,
+          productionCostRecipient:
+            seller.productionCostRecipient ?? false,
           autoSelect: seller.autoSelect ?? false,
           overviewPriority: positiveInteger(seller.overviewPriority, 0),
         })),
@@ -1305,6 +1313,8 @@ export function exportLegacyAccounting(state: AccountingState) {
           citta: seller.city,
           note: seller.notes,
           venditricePuntoVendita: seller.pointOfSaleSeller,
+          distributoreCostiProduzione: seller.productionCostDistributor,
+          riceveCostiProduzione: seller.productionCostRecipient,
           selezioneAutomatica: seller.autoSelect,
           prioritaPanoramica: seller.overviewPriority,
         })),

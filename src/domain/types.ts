@@ -183,6 +183,8 @@ export interface AccountingSeller {
   city: string
   notes: string
   pointOfSaleSeller: boolean
+  productionCostDistributor: boolean
+  productionCostRecipient: boolean
   autoSelect: boolean
   overviewPriority: number
 }
