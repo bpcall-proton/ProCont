@@ -212,21 +212,42 @@ function workedDatesForTakings(
   )
 }
 
-function monthlyAmountForWorkedDates(
-  amount: number,
-  referenceDate: string,
+function monthlyCostsForWorkedDates<
+  T extends { id: string; date: string; total: number },
+>(
+  items: T[],
   workedDates: Set<string>,
+  costKey: (item: T) => string,
 ) {
-  const reference = new Date(`${referenceDate}T00:00:00Z`)
-  if (Number.isNaN(reference.valueOf())) return 0
-  const month = referenceDate.slice(0, 7)
-  const daysWorked = [...workedDates].filter((date) =>
-    date.startsWith(month),
-  ).length
-  const daysInMonth = new Date(
-    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 0),
-  ).getUTCDate()
-  return roundMoney((amount / daysInMonth) * daysWorked)
+  const costs = new Map<string, { item: T; amount: number }>()
+  const orderedItems = [...items].sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) || left.id.localeCompare(right.id),
+  )
+  const sortedWorkedDates = [...workedDates].sort()
+  sortedWorkedDates.forEach((date) => {
+    const activeItems = new Map<string, T>()
+    orderedItems.forEach((item) => {
+      if (item.date.slice(0, 7) <= date.slice(0, 7)) {
+        activeItems.set(costKey(item), item)
+      }
+    })
+    activeItems.forEach((item) => {
+      const cursor = new Date(`${date}T00:00:00Z`)
+      const daysInMonth = new Date(
+        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+      ).getUTCDate()
+      const current = costs.get(item.id)
+      costs.set(item.id, {
+        item,
+        amount: (current?.amount ?? 0) + item.total / daysInMonth,
+      })
+    })
+  })
+  return [...costs.values()].map(({ item, amount }) => ({
+    item,
+    amount: roundMoney(amount),
+  }))
 }
 
 function expenseForWorkedDates(
@@ -247,7 +268,7 @@ function expenseForWorkedDates(
     [...workedDates].reduce((sum, date) => {
       if (
         !inRange(date, start, end) ||
-        date < expense.date ||
+        date.slice(0, 7) < expense.date.slice(0, 7) ||
         (expense.recurrenceEndDate && date > expense.recurrenceEndDate)
       ) {
         return sum
@@ -785,7 +806,6 @@ export function ReportsPage() {
       source.takings,
     ],
   )
-
   const official = data.takings.reduce(
     (sum, item) => sum + officialTaking(item),
     0,
@@ -807,24 +827,22 @@ export function ReportsPage() {
     range.start,
     range.end,
   )
-  const rents = data.rentals.reduce(
-    (sum, item) =>
-      sum +
-      monthlyAmountForWorkedDates(
-        item.total,
-        item.date,
-        companyWorkedDates,
-      ),
+  const companyRentalCosts = monthlyCostsForWorkedDates(
+    source.rentals,
+    companyWorkedDates,
+    (item) => item.property.trim().toLocaleLowerCase() || item.id,
+  )
+  const companyAccountantCosts = monthlyCostsForWorkedDates(
+    source.accountantInvoices,
+    companyWorkedDates,
+    (item) => item.description.trim().toLocaleLowerCase() || item.id,
+  )
+  const rents = companyRentalCosts.reduce(
+    (sum, cost) => sum + cost.amount,
     0,
   )
-  const accountant = data.accountantInvoices.reduce(
-    (sum, item) =>
-      sum +
-      monthlyAmountForWorkedDates(
-        item.total,
-        item.date,
-        companyWorkedDates,
-      ),
+  const accountant = companyAccountantCosts.reduce(
+    (sum, cost) => sum + cost.amount,
     0,
   )
   const expenseCosts = data.expenses.reduce(
@@ -914,21 +932,12 @@ export function ReportsPage() {
       : 0
   }
   const sellerCostBreakdown = (seller: { id: string }) => {
-    const sellerWorkedDates = workedDatesForTakings(
-      data.takings.filter((item) => item.sellerId === seller.id),
-      range.start,
-      range.end,
-    )
-    const rent = data.rentals.reduce(
-      (sum, item) =>
+    const rent = companyRentalCosts.reduce(
+      (sum, cost) =>
         sum +
         allocatedSellerCost(
-          monthlyAmountForWorkedDates(
-            item.total,
-            item.date,
-            sellerWorkedDates,
-          ),
-          item,
+          cost.amount,
+          cost.item,
           seller.id,
         ),
       0,
@@ -944,7 +953,7 @@ export function ReportsPage() {
                 item,
                 range.start,
                 range.end,
-                sellerWorkedDates,
+                companyWorkedDates,
               ),
               item,
               seller.id,
@@ -953,16 +962,12 @@ export function ReportsPage() {
         )
     const taxes = allocatedExpenseType('tassa')
     const accounting =
-      data.accountantInvoices.reduce(
-        (sum, item) =>
+      companyAccountantCosts.reduce(
+        (sum, cost) =>
           sum +
           allocatedSellerCost(
-            monthlyAmountForWorkedDates(
-              item.total,
-              item.date,
-              sellerWorkedDates,
-            ),
-            item,
+            cost.amount,
+            cost.item,
             seller.id,
           ),
         0,
@@ -1282,27 +1287,19 @@ export function ReportsPage() {
     }))
     .filter((row) => row.amount !== 0)
   const fixedCostRows: MetricDetailRow[] = [
-    ...data.rentals.map((item) => ({
+    ...companyRentalCosts.map(({ item, amount }) => ({
       date: item.date,
       category: 'Affitto',
       description: item.property || item.tenant || 'Affitto',
       reference: `${item.period || 'Periodo non indicato'} · quota sui giorni lavorati`,
-      amount: monthlyAmountForWorkedDates(
-        item.total,
-        item.date,
-        companyWorkedDates,
-      ),
+      amount,
     })),
-    ...data.accountantInvoices.map((item) => ({
+    ...companyAccountantCosts.map(({ item, amount }) => ({
       date: item.date,
       category: 'Contabile',
       description: item.description || 'Fattura contabile',
       reference: `${item.number || 'Senza numero'} · quota sui giorni lavorati`,
-      amount: monthlyAmountForWorkedDates(
-        item.total,
-        item.date,
-        companyWorkedDates,
-      ),
+      amount,
     })),
     ...data.expenses
       .map((item) => ({
@@ -1982,11 +1979,6 @@ export function ReportsPage() {
         fixedCosts: sellerCosts.total,
         theoreticalRevenue: sellerTheoretical,
       })
-    const sellerWorkedDates = workedDatesForTakings(
-      sellerTakings,
-      range.start,
-      range.end,
-    )
     const sellerOfficialRows: MetricDetailRow[] = sellerTakings.map((item) => ({
       date: item.date,
       category: 'Incasso fiscale',
@@ -2018,15 +2010,10 @@ export function ReportsPage() {
         amount: item.unregisteredGoods,
       }))
     const sellerCostRows: MetricDetailRow[] = [
-      ...data.rentals
-        .map((item) => {
-          const matured = monthlyAmountForWorkedDates(
-            item.total,
-            item.date,
-            sellerWorkedDates,
-          )
+      ...companyRentalCosts
+        .map(({ item, amount }) => {
           const allocated = allocatedSellerCost(
-            matured,
+            amount,
             item,
             selectedSeller.id,
           )
@@ -2034,25 +2021,20 @@ export function ReportsPage() {
             date: item.date,
             category: 'Quota affitto',
             description: item.property || item.tenant || 'Affitto',
-            reference: `${money(item.total)} mensili · ${sellerWorkedDates.size} giorni lavorati · ripartito tra ${allocationTargets(item).length} venditori`,
+            reference: `${money(item.total)} mensili · ${companyWorkedDates.size} giorni lavorati aziendali · ripartito tra ${allocationTargets(item).length} venditori`,
             amount: allocated,
           }
         })
         .filter((row) => row.amount !== 0),
-      ...data.accountantInvoices
-        .map((item) => {
-          const matured = monthlyAmountForWorkedDates(
-            item.total,
-            item.date,
-            sellerWorkedDates,
-          )
+      ...companyAccountantCosts
+        .map(({ item, amount }) => {
           return {
             date: item.date,
             category: 'Quota contabile',
             description: item.description || 'Fattura contabile',
-            reference: `${money(item.total)} mensili · ${sellerWorkedDates.size} giorni lavorati · ripartito tra ${allocationTargets(item).length} venditori`,
+            reference: `${money(item.total)} mensili · ${companyWorkedDates.size} giorni lavorati aziendali · ripartito tra ${allocationTargets(item).length} venditori`,
             amount: allocatedSellerCost(
-              matured,
+              amount,
               item,
               selectedSeller.id,
             ),
@@ -2078,7 +2060,7 @@ export function ReportsPage() {
                     item,
                     range.start,
                     range.end,
-                    sellerWorkedDates,
+                    companyWorkedDates,
                   ),
                   item,
                   selectedSeller.id,
@@ -2246,7 +2228,7 @@ export function ReportsPage() {
             label: 'Quota affitto',
             value: sellerCosts.rent,
             kind: 'money',
-            reference: `${sellerWorkedDates.size} giorni lavorati dal venditore.`,
+            reference: `${companyWorkedDates.size} giorni lavorati aziendali.`,
             operation: 'Somma',
           },
           {
@@ -2563,7 +2545,7 @@ export function ReportsPage() {
           <HealthOverview
             health={sellerHealth}
             title={`Controllo del punto ${selectedSeller.name}`}
-            note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${workedDatesForTakings(sellerTakings, range.start, range.end).size} giorni effettivamente lavorati.`}
+            note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati dall'azienda.`}
             onSelect={(metric) =>
               setCalculation({
                 scope: 'seller',
