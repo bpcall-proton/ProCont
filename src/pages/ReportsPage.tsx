@@ -210,27 +210,50 @@ export function ReportsPage() {
         0,
       ),
   }
-  const pointOfSaleSellerCount = source.sellers.filter(
-    (seller) => seller.pointOfSaleSeller,
-  ).length
-  const sharedSellerCost = (
-    value: number,
-    seller: { pointOfSaleSeller: boolean },
-  ) =>
-    seller.pointOfSaleSeller && pointOfSaleSellerCount > 0
-      ? roundMoney(value / pointOfSaleSellerCount)
-      : 0
-  const sellerCostBreakdown = (seller: {
-    id: string
-    pointOfSaleSeller: boolean
-  }) => {
-    const rent = sharedSellerCost(rents, seller)
-    const taxes = sharedSellerCost(expenseByType.tasse, seller)
-    const accounting = sharedSellerCost(
-      accountant + expenseByType.contabile,
-      seller,
+  const allSellerIds = source.sellers.map((seller) => seller.id)
+  const allocationTargets = (item: { allocationSellerIds: string[] }) => {
+    const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
+      allSellerIds.includes(sellerId),
     )
-    const other = sharedSellerCost(expenseByType.altre, seller)
+    return validSellerIds.length > 0 ? validSellerIds : allSellerIds
+  }
+  const allocatedSellerCost = (
+    value: number,
+    item: { allocationSellerIds: string[] },
+    sellerId: string,
+  ) => {
+    const sellerIds = allocationTargets(item)
+    return sellerIds.includes(sellerId) && sellerIds.length > 0
+      ? roundMoney(value / sellerIds.length)
+      : 0
+  }
+  const sellerCostBreakdown = (seller: { id: string }) => {
+    const rent = data.rentals.reduce(
+      (sum, item) =>
+        sum + allocatedSellerCost(item.total, item, seller.id),
+      0,
+    )
+    const allocatedExpenseType = (type: 'tassa' | 'contabile' | 'altra') =>
+      data.expenses
+        .filter((item) => item.type === type)
+        .reduce(
+          (sum, item) =>
+            sum +
+            allocatedSellerCost(
+              allocatedExpense(item, range.start, range.end),
+              item,
+              seller.id,
+            ),
+          0,
+        )
+    const taxes = allocatedExpenseType('tassa')
+    const accounting =
+      data.accountantInvoices.reduce(
+        (sum, item) =>
+          sum + allocatedSellerCost(item.total, item, seller.id),
+        0,
+      ) + allocatedExpenseType('contabile')
+    const other = allocatedExpenseType('altra')
     const salaryPaid = data.expenses
       .filter(
         (item) =>
@@ -959,13 +982,15 @@ export function ReportsPage() {
       sellerOperatingCosts + sellerUnregisteredGoods
     const sellerInputVat =
       sellerInvoices.reduce((sum, item) => sum + item.vat, 0) +
-      sharedSellerCost(
-        data.rentals.reduce((sum, item) => sum + item.vat, 0),
-        selectedSeller,
+      data.rentals.reduce(
+        (sum, item) =>
+          sum + allocatedSellerCost(item.vat, item, selectedSeller.id),
+        0,
       ) +
-      sharedSellerCost(
-        data.accountantInvoices.reduce((sum, item) => sum + item.vat, 0),
-        selectedSeller,
+      data.accountantInvoices.reduce(
+        (sum, item) =>
+          sum + allocatedSellerCost(item.vat, item, selectedSeller.id),
+        0,
       )
     const sellerOutputVat = sellerTakings.reduce(
       (sum, item) => sum + item.vat,
@@ -1078,11 +1103,7 @@ export function ReportsPage() {
           <div className="panel-heading">
             <div>
               <span className="eyebrow">RIPARTIZIONE USCITE PERSONALI</span>
-              <h2>
-                {selectedSeller.pointOfSaleSeller
-                  ? `Quota uguale tra ${pointOfSaleSellerCount} venditrici dei punti vendita`
-                  : 'Nessuna spesa generale dei punti vendita attribuita'}
-              </h2>
+              <h2>Quote definite nei singoli affitti e nelle singole spese</h2>
             </div>
           </div>
           <div className="stats-strip expense-breakdown">
@@ -1094,8 +1115,9 @@ export function ReportsPage() {
             <div><span>Totale attribuito</span><strong>{money(sellerCosts.total)}</strong></div>
           </div>
           <p className="production-help">
-            Lo stipendio usa la data della spesa pagata e può riferirsi anche
-            al mese di lavoro precedente.
+            Senza nomi selezionati, ogni costo viene ripartito tra tutti i
+            venditori. Lo stipendio usa la data della spesa pagata e può
+            riferirsi anche al mese di lavoro precedente.
           </p>
         </section>
         <section className="report-columns">
