@@ -1934,6 +1934,10 @@ function ContactsPanel() {
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
   const [sellerPointOfSale, setSellerPointOfSale] = useState(false)
+  const [sellerProductionCostDistributor, setSellerProductionCostDistributor] =
+    useState(false)
+  const [sellerProductionCostRecipient, setSellerProductionCostRecipient] =
+    useState(false)
   const [sellerAutoSelect, setSellerAutoSelect] = useState(false)
   const [sellerOverviewPriority, setSellerOverviewPriority] = useState('')
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(
@@ -1961,6 +1965,7 @@ function ContactsPanel() {
       0,
       Math.round(numberValue(sellerOverviewPriority)),
     )
+    const sellerId = editingSellerId ?? createId('accounting-seller')
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
         const sellers = sellerAutoSelect
@@ -1979,6 +1984,9 @@ function ContactsPanel() {
                       name,
                       phone,
                       pointOfSaleSeller: sellerPointOfSale,
+                      productionCostDistributor:
+                        sellerProductionCostDistributor,
+                      productionCostRecipient: sellerProductionCostRecipient,
                       autoSelect: sellerAutoSelect,
                       overviewPriority,
                     }
@@ -1986,7 +1994,7 @@ function ContactsPanel() {
               )
             : [
                 {
-                  id: createId('accounting-seller'),
+                  id: sellerId,
                   companyId,
                   name,
                   email: '',
@@ -1994,6 +2002,9 @@ function ContactsPanel() {
                   city: '',
                   notes: '',
                   pointOfSaleSeller: sellerPointOfSale,
+                  productionCostDistributor:
+                    sellerProductionCostDistributor,
+                  productionCostRecipient: sellerProductionCostRecipient,
                   autoSelect: sellerAutoSelect,
                   overviewPriority,
                 },
@@ -2013,6 +2024,25 @@ function ContactsPanel() {
                   : taking,
               )
             : current.takings,
+          suppliers: sellerProductionCostDistributor
+            ? current.suppliers.map((supplier) => {
+                const normalizedSupplierName = supplier.name
+                  .trim()
+                  .toLocaleLowerCase()
+                const normalizedOldName = current.sellers
+                  .find((seller) => seller.id === editingSellerId)
+                  ?.name.trim()
+                  .toLocaleLowerCase()
+                return (
+                  supplier.linkedSellerId === sellerId ||
+                  normalizedSupplierName === name.toLocaleLowerCase() ||
+                  (normalizedOldName &&
+                    normalizedSupplierName === normalizedOldName)
+                )
+                  ? { ...supplier, linkedSellerId: sellerId }
+                  : supplier
+              })
+            : current.suppliers,
           expenses: editingSellerId
             ? current.expenses.map((expense) =>
                 expense.sellerId === editingSellerId
@@ -2027,6 +2057,8 @@ function ContactsPanel() {
     setSellerName('')
     setSellerPhone('')
     setSellerPointOfSale(false)
+    setSellerProductionCostDistributor(false)
+    setSellerProductionCostRecipient(false)
     setSellerAutoSelect(false)
     setSellerOverviewPriority('')
   }
@@ -2036,6 +2068,8 @@ function ContactsPanel() {
     setSellerName(seller.name)
     setSellerPhone(seller.phone)
     setSellerPointOfSale(seller.pointOfSaleSeller)
+    setSellerProductionCostDistributor(seller.productionCostDistributor)
+    setSellerProductionCostRecipient(seller.productionCostRecipient)
     setSellerAutoSelect(seller.autoSelect)
     setSellerOverviewPriority(
       seller.overviewPriority > 0 ? String(seller.overviewPriority) : '',
@@ -2047,6 +2081,8 @@ function ContactsPanel() {
     setSellerName('')
     setSellerPhone('')
     setSellerPointOfSale(false)
+    setSellerProductionCostDistributor(false)
+    setSellerProductionCostRecipient(false)
     setSellerAutoSelect(false)
     setSellerOverviewPriority('')
   }
@@ -2177,6 +2213,28 @@ function ContactsPanel() {
             Venditrice reale del punto vendita
           </label>
           <label className="contact-checkbox-field">
+            <input
+              checked={sellerProductionCostDistributor}
+              onChange={(event) => {
+                setSellerProductionCostDistributor(event.target.checked)
+                if (event.target.checked) setSellerProductionCostRecipient(false)
+              }}
+              type="checkbox"
+            />
+            Distributore costi produzione
+          </label>
+          <label className="contact-checkbox-field">
+            <input
+              checked={sellerProductionCostRecipient}
+              onChange={(event) => {
+                setSellerProductionCostRecipient(event.target.checked)
+                if (event.target.checked) setSellerProductionCostDistributor(false)
+              }}
+              type="checkbox"
+            />
+            Riceve quota fatture del distributore
+          </label>
+          <label className="contact-checkbox-field">
             <input checked={sellerAutoSelect} onChange={(event) => setSellerAutoSelect(event.target.checked)} type="checkbox" />
             Selezione automatica in fatture e incassi
           </label>
@@ -2188,7 +2246,7 @@ function ContactsPanel() {
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.pointOfSaleSeller ? 'Venditrice reale del punto vendita' : 'Personale produzione / altro'} · {seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.pointOfSaleSeller ? 'Venditrice reale del punto vendita' : 'Personale produzione / altro'} · {seller.productionCostDistributor ? 'Distributore costi produzione' : seller.productionCostRecipient ? 'Riceve quota costi produzione' : 'Nessuna quota produzione'} · {seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
         })}</div>
       </article>
       <article className="panel">

@@ -1052,6 +1052,108 @@ export function ReportsPage() {
     fixedCosts,
     theoreticalRevenue: companyTheoretical,
   })
+  const productionCostRecipients = source.sellers.filter(
+    (seller) => seller.productionCostRecipient,
+  )
+  const productionCostAllocations = source.sellers
+    .filter((seller) => seller.productionCostDistributor)
+    .flatMap((distributor) => {
+      const sourceInvoices = data.invoices.filter(
+        (invoice) => invoice.sellerId === distributor.id,
+      )
+      const sourceCost = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+      )
+      const sourceVat = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.vat, 0),
+      )
+      const recipients = productionCostRecipients
+        .filter((recipient) => recipient.id !== distributor.id)
+        .map((recipient) => {
+          const deliveryInvoices = data.invoices.filter((invoice) => {
+            if (
+              invoice.sellerId !== recipient.id ||
+              invoice.theoreticalRevenue <= 0
+            ) {
+              return false
+            }
+            const supplier = source.suppliers.find(
+              (item) => item.id === invoice.supplierId,
+            )
+            return (
+              supplier?.linkedSellerId === distributor.id ||
+              bestContactNameMatch(
+                invoice.supplierName || supplier?.name || '',
+                [distributor],
+              )?.id === distributor.id
+            )
+          })
+          return {
+            recipient,
+            deliveryInvoices,
+            venit: roundMoney(
+              deliveryInvoices.reduce(
+                (sum, invoice) => sum + invoice.theoreticalRevenue,
+                0,
+              ),
+            ),
+          }
+        })
+        .filter((recipient) => recipient.venit > 0)
+      const totalVenit = roundMoney(
+        recipients.reduce((sum, recipient) => sum + recipient.venit, 0),
+      )
+      if (sourceCost <= 0 || totalVenit <= 0) return []
+      let allocatedCost = 0
+      let allocatedVat = 0
+      return recipients.map((recipient, index) => {
+        const isLast = index === recipients.length - 1
+        const cost = isLast
+          ? roundMoney(sourceCost - allocatedCost)
+          : roundMoney(sourceCost * (recipient.venit / totalVenit))
+        const vat = isLast
+          ? roundMoney(sourceVat - allocatedVat)
+          : roundMoney(sourceVat * (recipient.venit / totalVenit))
+        allocatedCost = roundMoney(allocatedCost + cost)
+        allocatedVat = roundMoney(allocatedVat + vat)
+        return {
+          distributor,
+          recipient: recipient.recipient,
+          sourceInvoices,
+          deliveryInvoices: recipient.deliveryInvoices,
+          sourceCost,
+          sourceVat,
+          recipientVenit: recipient.venit,
+          totalVenit,
+          cost,
+          vat,
+        }
+      })
+    })
+  const allocatedProductionCost = (sellerId: string) =>
+    roundMoney(
+      productionCostAllocations
+        .filter((allocation) => allocation.recipient.id === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0),
+    )
+  const distributedProductionCost = (sellerId: string) =>
+    roundMoney(
+      productionCostAllocations
+        .filter((allocation) => allocation.distributor.id === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0),
+    )
+  const allocatedProductionVat = (sellerId: string) =>
+    roundMoney(
+      productionCostAllocations
+        .filter((allocation) => allocation.recipient.id === sellerId)
+        .reduce((sum, allocation) => sum + allocation.vat, 0),
+    )
+  const distributedProductionVat = (sellerId: string) =>
+    roundMoney(
+      productionCostAllocations
+        .filter((allocation) => allocation.distributor.id === sellerId)
+        .reduce((sum, allocation) => sum + allocation.vat, 0),
+    )
 
   const sellerStats = source.sellers.map((seller) => {
     const takings = data.takings.filter((item) => item.sellerId === seller.id)
@@ -1068,7 +1170,17 @@ export function ReportsPage() {
           .filter((transfer) => transfer.fromSellerId === seller.id)
           .reduce((sum, transfer) => sum + transfer.amount, 0),
     )
-    const invoiceTotal = invoices.reduce((sum, item) => sum + item.total, 0)
+    const directInvoiceTotal = invoices.reduce(
+      (sum, item) => sum + item.total,
+      0,
+    )
+    const productionCostShare = allocatedProductionCost(seller.id)
+    const productionCostDistributed = distributedProductionCost(seller.id)
+    const invoiceTotal = roundMoney(
+      directInvoiceTotal +
+        productionCostShare -
+        productionCostDistributed,
+    )
     const unregisteredGoods = invoices.reduce(
       (sum, item) => sum + item.unregisteredGoods,
       0,
@@ -1089,6 +1201,7 @@ export function ReportsPage() {
       id: seller.id,
       name: seller.name,
       pointOfSaleSeller: seller.pointOfSaleSeller,
+      productionCostShare,
       official,
       invoiceTotal,
       invoiceRemaining: invoices.reduce(
@@ -1801,6 +1914,13 @@ export function ReportsPage() {
       (sum, invoice) => sum + invoice.total,
       0,
     )
+    const productionCostShare = allocatedProductionCost(selectedSeller.id)
+    const productionCostDistributed = distributedProductionCost(
+      selectedSeller.id,
+    )
+    const effectiveInvoiceTotal = roundMoney(
+      invoiceTotal + productionCostShare - productionCostDistributed,
+    )
     const unregisteredGoods = sellerInvoices.reduce(
       (sum, invoice) => sum + invoice.unregisteredGoods,
       0,
@@ -1816,10 +1936,22 @@ export function ReportsPage() {
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet([
-        { Voce: 'Venditrice punto vendita', Importo: selectedSeller.pointOfSaleSeller ? 'Sì' : 'No' },
+        {
+          Voce: 'Venditrice punto vendita',
+          Importo: selectedSeller.pointOfSaleSeller ? 'Sì' : 'No',
+        },
         { Voce: 'Incasso fiscale', Importo: officialTotal },
         { Voce: 'Incasso reale', Importo: realTotal },
-        { Voce: 'Costi fatture fornitori', Importo: invoiceTotal },
+        { Voce: 'Costi fatture dirette', Importo: invoiceTotal },
+        {
+          Voce: 'Quota fatture produzione ricevuta',
+          Importo: productionCostShare,
+        },
+        {
+          Voce: 'Fatture produzione distribuite',
+          Importo: -productionCostDistributed,
+        },
+        { Voce: 'Costi fatture complessivi', Importo: effectiveInvoiceTotal },
         { Voce: 'Merce senza fattura', Importo: unregisteredGoods },
         { Voce: 'Quota affitto', Importo: costs.rent },
         { Voce: 'Quota tasse', Importo: costs.taxes },
@@ -1828,16 +1960,45 @@ export function ReportsPage() {
         { Voce: 'Stipendio corrisposto', Importo: costs.salaryPaid },
         {
           Voce: 'Utile fiscale personale',
-          Importo: roundMoney(officialTotal - invoiceTotal - costs.total),
+          Importo: roundMoney(
+            officialTotal - effectiveInvoiceTotal - costs.total,
+          ),
         },
         {
           Voce: 'Utile reale personale',
           Importo: roundMoney(
-            realTotal - invoiceTotal - unregisteredGoods - costs.total,
+            realTotal -
+              effectiveInvoiceTotal -
+              unregisteredGoods -
+              costs.total,
           ),
         },
       ]),
       'Riepilogo',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        productionCostAllocations
+          .filter(
+            (allocation) =>
+              allocation.recipient.id === selectedSeller.id ||
+              allocation.distributor.id === selectedSeller.id,
+          )
+          .map((allocation) => ({
+            Distributore: allocation.distributor.name,
+            Destinatario: allocation.recipient.name,
+            'Costo fatture distributore': allocation.sourceCost,
+            'Venit destinatario': allocation.recipientVenit,
+            'Venit totale destinatari': allocation.totalVenit,
+            Percentuale:
+              allocation.totalVenit > 0
+                ? allocation.recipientVenit / allocation.totalVenit
+                : 0,
+            'Quota attribuita': allocation.cost,
+          })),
+      ),
+      'Quote produzione',
     )
     XLSX.utils.book_append_sheet(
       workbook,
@@ -1929,9 +2090,20 @@ export function ReportsPage() {
       (sum, item) => sum + realTaking(item),
       0,
     )
-    const sellerInvoiceTotal = sellerInvoices.reduce(
+    const sellerDirectInvoiceTotal = sellerInvoices.reduce(
       (sum, item) => sum + item.total,
       0,
+    )
+    const sellerProductionCostShare = allocatedProductionCost(
+      selectedSeller.id,
+    )
+    const sellerProductionCostDistributed = distributedProductionCost(
+      selectedSeller.id,
+    )
+    const sellerInvoiceTotal = roundMoney(
+      sellerDirectInvoiceTotal +
+        sellerProductionCostShare -
+        sellerProductionCostDistributed,
     )
     const sellerInvoiceRemaining = sellerInvoices.reduce(
       (sum, item) => sum + invoiceRemaining(item),
@@ -1947,6 +2119,8 @@ export function ReportsPage() {
       sellerOperatingCosts + sellerUnregisteredGoods
     const sellerInputVat =
       sellerInvoices.reduce((sum, item) => sum + item.vat, 0) +
+      allocatedProductionVat(selectedSeller.id) -
+      distributedProductionVat(selectedSeller.id) +
       data.rentals.reduce(
         (sum, item) =>
           sum + allocatedSellerCost(item.vat, item, selectedSeller.id),
@@ -1993,13 +2167,45 @@ export function ReportsPage() {
       reference: `Incasso fiscale della giornata ${money(officialTaking(item))}`,
       amount: realTaking(item),
     }))
-    const sellerPurchaseRows: MetricDetailRow[] = sellerInvoices.map((item) => ({
-      date: item.date,
-      category: 'Fattura fornitore',
-      description: item.supplierName || 'Fornitore non indicato',
-      reference: item.number || 'Senza numero',
-      amount: item.total,
-    }))
+    const sellerPurchaseRows: MetricDetailRow[] = [
+      ...sellerInvoices.map((item) => ({
+        date: item.date,
+        category: 'Fattura fornitore',
+        description: item.supplierName || 'Fornitore non indicato',
+        reference: item.number || 'Senza numero',
+        amount: item.total,
+      })),
+      ...productionCostAllocations
+        .filter(
+          (allocation) => allocation.recipient.id === selectedSeller.id,
+        )
+        .map((allocation) => ({
+          date:
+            allocation.sourceInvoices
+              .map((invoice) => invoice.date)
+              .sort()
+              .at(-1) ?? range.end,
+          category: 'Quota fatture produzione',
+          description: allocation.distributor.name,
+          reference: `${money(allocation.sourceCost)} × ${roundMoney((allocation.recipientVenit / allocation.totalVenit) * 100)}% (${money(allocation.recipientVenit)} su ${money(allocation.totalVenit)} Venit) · ${allocation.deliveryInvoices.length} carichi`,
+          amount: allocation.cost,
+        })),
+      ...productionCostAllocations
+        .filter(
+          (allocation) => allocation.distributor.id === selectedSeller.id,
+        )
+        .map((allocation) => ({
+          date:
+            allocation.sourceInvoices
+              .map((invoice) => invoice.date)
+              .sort()
+              .at(-1) ?? range.end,
+          category: 'Costo produzione distribuito',
+          description: allocation.recipient.name,
+          reference: `${money(allocation.sourceCost)} × ${roundMoney((allocation.recipientVenit / allocation.totalVenit) * 100)}% (${money(allocation.recipientVenit)} su ${money(allocation.totalVenit)} Venit) · ${allocation.deliveryInvoices.length} carichi`,
+          amount: -allocation.cost,
+        })),
+    ]
     const sellerUnregisteredRows: MetricDetailRow[] = sellerInvoices
       .filter((item) => item.unregisteredGoods !== 0)
       .map((item) => ({
@@ -2182,18 +2388,35 @@ export function ReportsPage() {
         rows: sellerRealRows,
       },
       purchases: {
-        title: 'Costi fatture fornitori personali',
-        note: `Fatture attribuite a ${selectedSeller.name}.`,
+        title: 'Costi fatture e quota produzione',
+        note: `Fatture dirette di ${selectedSeller.name} più la quota delle fatture del distributore, ripartita in base al Venit ricevuto.`,
         value: sellerInvoiceTotal,
         kind: 'money',
         tone: 'amber',
-        formula: 'Somma totale delle fatture attribuite al venditore',
+        formula:
+          'Fatture dirette + quota fatture produzione ricevuta − costi produzione distribuiti',
         steps: [
           {
-            label: 'Costo fatture',
-            value: sellerInvoiceTotal,
+            label: 'Fatture dirette',
+            value: sellerDirectInvoiceTotal,
             kind: 'money',
-            reference: `${sellerPurchaseRows.length} fatture attribuite a ${selectedSeller.name}.`,
+            reference: `${sellerInvoices.length} fatture attribuite direttamente a ${selectedSeller.name}.`,
+          },
+          {
+            label: 'Quota produzione ricevuta',
+            value: sellerProductionCostShare,
+            kind: 'money',
+            reference:
+              'Ripartizione proporzionale al Venit ricevuto dai distributori selezionati; senza Venit positivo il costo resta al distributore.',
+            operation: 'Più',
+          },
+          {
+            label: 'Costi produzione distribuiti',
+            value: sellerProductionCostDistributed,
+            kind: 'money',
+            reference:
+              'Fatture del distributore trasferite ai venditori destinatari.',
+            operation: 'Meno',
           },
         ],
         rows: sellerPurchaseRows,
@@ -2270,7 +2493,7 @@ export function ReportsPage() {
         tone:
           sellerOfficial - sellerOperatingCosts >= 0 ? 'green' : 'red',
         formula:
-          'Incasso fiscale − costi fatture − spese personali e ripartite',
+          'Incasso fiscale − costi fatture e quota produzione − spese personali e ripartite',
         steps: [
           {
             label: 'Incasso fiscale',
@@ -2280,10 +2503,11 @@ export function ReportsPage() {
             operation: 'Partenza',
           },
           {
-            label: 'Costi fatture',
+            label: 'Costi fatture e produzione',
             value: sellerInvoiceTotal,
             kind: 'money',
-            reference: 'Fatture attribuite al venditore.',
+            reference:
+              'Fatture dirette, quote ricevute e costi distribuiti.',
             operation: 'Sottratti',
           },
           {
@@ -2308,7 +2532,7 @@ export function ReportsPage() {
         tone:
           sellerReal - sellerRealOperatingCosts >= 0 ? 'cyan' : 'red',
         formula:
-          'Incasso reale − costi fatture − merce senza fattura − spese attribuite',
+          'Incasso reale − costi fatture e quota produzione − merce senza fattura − spese attribuite',
         steps: [
           {
             label: 'Incasso reale',
@@ -2318,10 +2542,11 @@ export function ReportsPage() {
             operation: 'Partenza',
           },
           {
-            label: 'Costi fatture',
+            label: 'Costi fatture e produzione',
             value: sellerInvoiceTotal,
             kind: 'money',
-            reference: 'Fatture attribuite al venditore.',
+            reference:
+              'Fatture dirette, quote ricevute e costi distribuiti.',
             operation: 'Sottratti',
           },
           {
@@ -2581,7 +2806,7 @@ export function ReportsPage() {
             }
           />
           <ReportCard
-            label="Costi fatture fornitori"
+            label="Costi fatture + quota produzione"
             value={sellerInvoiceTotal}
             tone="amber"
             onClick={() =>
