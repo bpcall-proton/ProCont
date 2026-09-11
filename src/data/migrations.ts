@@ -65,6 +65,12 @@ function records(value: unknown) {
   return Array.isArray(value) ? value.filter(isRecord) : []
 }
 
+function textList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
 function pricingMode(value: unknown) {
   return value === 'markup' || value === 'manual' ? value : 'sale-price'
 }
@@ -287,6 +293,7 @@ function mapRental(value: JsonRecord): Rental {
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
+    allocationSellerIds: textList(value.venditoriRipartizioneIds),
     property: text(value.immobile),
     tenant: text(value.inquilino),
     total,
@@ -314,6 +321,7 @@ function mapAccountantInvoice(value: JsonRecord): AccountantInvoice {
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
+    allocationSellerIds: textList(value.venditoriRipartizioneIds),
     description: text(value.descrizione),
     number: text(value.numero),
     total,
@@ -344,6 +352,7 @@ function mapExpense(value: JsonRecord): AccountingExpense {
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
+    allocationSellerIds: textList(value.venditoriRipartizioneIds),
     type,
     description: text(value.descrizione),
     sellerId: nullableText(value.venditoreId),
@@ -621,6 +630,7 @@ export function normalizeStoredState(
     const expenses = (accounting.expenses ?? []).map((expense) => ({
       ...expense,
       companyId: expense.companyId || fallbackCompanyId,
+      allocationSellerIds: expense.allocationSellerIds ?? [],
       recurrence: expense.recurrence ?? 'once',
       recurrenceEndDate: expense.recurrenceEndDate ?? null,
     }))
@@ -860,11 +870,13 @@ export function normalizeStoredState(
         rentals: (accounting.rentals ?? []).map((rental) => ({
           ...rental,
           companyId: rental.companyId || fallbackCompanyId,
+          allocationSellerIds: rental.allocationSellerIds ?? [],
         })),
         accountantInvoices: (accounting.accountantInvoices ?? []).map(
           (invoice) => ({
             ...invoice,
             companyId: invoice.companyId || fallbackCompanyId,
+            allocationSellerIds: invoice.allocationSellerIds ?? [],
           }),
         ),
       },
@@ -1327,6 +1339,7 @@ export function exportLegacyAccounting(state: AccountingState) {
         affitti: state.rentals.map((rental) => ({
           id: rental.id,
           aziendaId: rental.companyId,
+          venditoriRipartizioneIds: rental.allocationSellerIds,
           immobile: rental.property,
           inquilino: rental.tenant,
           canone: rental.total,
@@ -1343,6 +1356,7 @@ export function exportLegacyAccounting(state: AccountingState) {
         contabile: state.accountantInvoices.map((invoice) => ({
           id: invoice.id,
           aziendaId: invoice.companyId,
+          venditoriRipartizioneIds: invoice.allocationSellerIds,
           descrizione: invoice.description,
           numero: invoice.number,
           importo: invoice.total,
@@ -1359,6 +1373,7 @@ export function exportLegacyAccounting(state: AccountingState) {
         stipendiTasse: state.expenses.map((expense) => ({
           id: expense.id,
           aziendaId: expense.companyId,
+          venditoriRipartizioneIds: expense.allocationSellerIds,
           tipo: expense.type,
           descrizione: expense.description,
           venditoreId: expense.sellerId,

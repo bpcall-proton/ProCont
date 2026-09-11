@@ -2271,11 +2271,19 @@ function ExpensesPanel() {
     useState<AccountingExpense['recurrence']>('once')
   const [expenseEndDate, setExpenseEndDate] = useState('')
   const [expenseSellerId, setExpenseSellerId] = useState('')
+  const [expenseAllocationSellerIds, setExpenseAllocationSellerIds] =
+    useState<string[]>([])
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
   const [rentalProperty, setRentalProperty] = useState('')
   const [rentalTotal, setRentalTotal] = useState('')
+  const [rentalAllocationSellerIds, setRentalAllocationSellerIds] =
+    useState<string[]>([])
   const [accountantDescription, setAccountantDescription] = useState('')
   const [accountantTotal, setAccountantTotal] = useState('')
+  const [
+    accountantAllocationSellerIds,
+    setAccountantAllocationSellerIds,
+  ] = useState<string[]>([])
 
   function addExpense(event: FormEvent) {
     event.preventDefault()
@@ -2288,6 +2296,10 @@ function ExpensesPanel() {
               expense.id === editingExpenseId
                 ? {
                     ...expense,
+                    allocationSellerIds:
+                      expenseType === 'stipendio'
+                        ? []
+                        : expenseAllocationSellerIds,
                     type: expenseType,
                     description: expenseDescription.trim(),
                     sellerId:
@@ -2305,6 +2317,10 @@ function ExpensesPanel() {
               {
                 id: createId('expense'),
                 companyId,
+                allocationSellerIds:
+                  expenseType === 'stipendio'
+                    ? []
+                    : expenseAllocationSellerIds,
                 type: expenseType,
                 description: expenseDescription.trim(),
                 sellerId:
@@ -2329,6 +2345,7 @@ function ExpensesPanel() {
     setExpenseRecurrence('once')
     setExpenseEndDate('')
     setExpenseSellerId('')
+    setExpenseAllocationSellerIds([])
   }
 
   function editExpense(expense: AccountingExpense) {
@@ -2340,6 +2357,7 @@ function ExpensesPanel() {
     setExpenseRecurrence(expense.recurrence)
     setExpenseEndDate(expense.recurrenceEndDate ?? '')
     setExpenseSellerId(expense.sellerId ?? '')
+    setExpenseAllocationSellerIds(expense.allocationSellerIds)
   }
 
   function addRental(event: FormEvent) {
@@ -2351,6 +2369,7 @@ function ExpensesPanel() {
         const rental: Rental = {
           id: createId('rental'),
           companyId,
+          allocationSellerIds: rentalAllocationSellerIds,
           property: rentalProperty.trim(),
           tenant: '',
           total,
@@ -2372,6 +2391,7 @@ function ExpensesPanel() {
     )
     setRentalProperty('')
     setRentalTotal('')
+    setRentalAllocationSellerIds([])
   }
 
   function addAccountantInvoice(event: FormEvent) {
@@ -2383,6 +2403,7 @@ function ExpensesPanel() {
         const invoice: AccountantInvoice = {
           id: createId('accountant-invoice'),
           companyId,
+          allocationSellerIds: accountantAllocationSellerIds,
           description: accountantDescription.trim(),
           number: '',
           total,
@@ -2404,6 +2425,7 @@ function ExpensesPanel() {
     )
     setAccountantDescription('')
     setAccountantTotal('')
+    setAccountantAllocationSellerIds([])
   }
 
   return (
@@ -2433,30 +2455,47 @@ function ExpensesPanel() {
           {expenseRecurrence === 'monthly' && (
             <label>Fine ricorrenza (facoltativa)<input type="date" min={expenseDate} value={expenseEndDate} onChange={(event) => setExpenseEndDate(event.target.value)} /></label>
           )}
+          {expenseType !== 'stipendio' && (
+            <SellerAllocationFields
+              selectedSellerIds={expenseAllocationSellerIds}
+              sellers={data.sellers}
+              onChange={setExpenseAllocationSellerIds}
+            />
+          )}
           <div className="form-actions">
             {editingExpenseId && <button className="button button-secondary" type="button" onClick={() => setEditingExpenseId(null)}>Annulla</button>}
             <button className="button button-primary" type="submit">{editingExpenseId ? 'Salva modifica' : 'Registra'}</button>
           </div>
         </form>
-        <ExpenseList items={data.expenses} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} />
+        <ExpenseList items={data.expenses} sellers={data.sellers} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addRental}>
           <input placeholder="Immobile / locale" required value={rentalProperty} onChange={(event) => setRentalProperty(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={rentalTotal} onChange={(event) => setRentalTotal(event.target.value)} />
+          <SellerAllocationFields
+            selectedSellerIds={rentalAllocationSellerIds}
+            sellers={data.sellers}
+            onChange={setRentalAllocationSellerIds}
+          />
           <button className="button button-primary" type="submit">Registra</button>
         </form>
-        <SettlementList items={data.rentals} kind="rentals" />
+        <SettlementList items={data.rentals} kind="rentals" sellers={data.sellers} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">PRESTAZIONI</span><h2>Fatture del contabile</h2></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addAccountantInvoice}>
           <input placeholder="Descrizione" required value={accountantDescription} onChange={(event) => setAccountantDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={accountantTotal} onChange={(event) => setAccountantTotal(event.target.value)} />
+          <SellerAllocationFields
+            selectedSellerIds={accountantAllocationSellerIds}
+            sellers={data.sellers}
+            onChange={setAccountantAllocationSellerIds}
+          />
           <button className="button button-primary" type="submit">Registra</button>
         </form>
-        <SettlementList items={data.accountantInvoices} kind="accountantInvoices" />
+        <SettlementList items={data.accountantInvoices} kind="accountantInvoices" sellers={data.sellers} />
       </article>
     </section>
   )
@@ -2464,26 +2503,67 @@ function ExpensesPanel() {
 
 function ExpenseList({
   items,
+  sellers,
   onEdit,
   onUpdate,
 }: {
   items: AccountingExpense[]
+  sellers: AccountingSeller[]
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span><span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button><button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
 }
 
 function SettlementList({
   items,
   kind,
+  sellers,
 }: {
   items: Rental[] | AccountantInvoice[]
   kind: 'rentals' | 'accountantInvoices'
+  sellers: AccountingSeller[]
 }) {
   const { updateAccounting } = useAppStore()
   return <div className="record-list">{items.map((item) => {
     const label = 'property' in item ? item.property : item.description
-    return <div className="record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small></span><span><strong>{money(item.total)}</strong><button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))} /></span></div>
+    return <div className="record-card allocation-record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small></span><SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, allocationSellerIds } : currentItem) }))} /><span><strong>{money(item.total)}</strong><button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))} /></span></div>
   })}</div>
+}
+
+function SellerAllocationFields({
+  sellers,
+  selectedSellerIds,
+  onChange,
+  compact = false,
+}: {
+  sellers: AccountingSeller[]
+  selectedSellerIds: string[]
+  onChange: (sellerIds: string[]) => void
+  compact?: boolean
+}) {
+  return (
+    <fieldset className={`seller-allocation-fields${compact ? ' compact' : ''}`}>
+      <legend>Ripartizione spesa</legend>
+      {sellers.map((seller) => (
+        <label className="checkbox-row" key={seller.id}>
+          <input
+            checked={selectedSellerIds.includes(seller.id)}
+            onChange={(event) =>
+              onChange(
+                event.target.checked
+                  ? [...selectedSellerIds, seller.id]
+                  : selectedSellerIds.filter(
+                      (sellerId) => sellerId !== seller.id,
+                    ),
+              )
+            }
+            type="checkbox"
+          />
+          {seller.name}
+        </label>
+      ))}
+      <small>Nessun nome selezionato: ripartizione su tutti.</small>
+    </fieldset>
+  )
 }

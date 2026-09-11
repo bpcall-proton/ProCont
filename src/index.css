@@ -3682,6 +3682,39 @@ select {
   grid-template-columns: 1fr;
 }
 
+.seller-allocation-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.seller-allocation-fields legend {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0 5px;
+}
+
+.seller-allocation-fields .checkbox-row {
+  white-space: nowrap;
+}
+
+.seller-allocation-fields > small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.seller-allocation-fields.compact {
+  min-width: 220px;
+  max-width: 440px;
+  padding: 7px 9px;
+}
+
 .record-list {
   display: grid;
   gap: 8px;
@@ -3705,6 +3738,10 @@ select {
 
 .record-card > span:last-child {
   justify-items: end;
+}
+
+.allocation-record-card {
+  align-items: flex-start;
 }
 
 .supplier-card {

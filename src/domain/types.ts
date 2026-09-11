@@ -206,6 +206,7 @@ export interface AccountingSupplier {
 export interface Rental {
   id: string
   companyId: string
+  allocationSellerIds: string[]
   property: string
   tenant: string
   total: number
@@ -223,6 +224,7 @@ export interface Rental {
 export interface AccountantInvoice {
   id: string
   companyId: string
+  allocationSellerIds: string[]
   description: string
   number: string
   total: number
@@ -240,6 +242,7 @@ export interface AccountantInvoice {
 export interface AccountingExpense {
   id: string
   companyId: string
+  allocationSellerIds: string[]
   type: ExpenseType
   description: string
   sellerId: string | null
