@@ -4,14 +4,17 @@ import {
   addDays,
   allocatedExpense,
   bestContactNameMatch,
+  expenseForWorkedDates,
   invoiceDueState,
   invoiceRemaining,
   money,
+  monthlyCostsForWorkedDates,
   officialTaking,
   realTaking,
   roundMoney,
   sellerColorClass,
   today,
+  workedDatesForPeriod,
 } from '../domain/accounting'
 import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
@@ -32,6 +35,7 @@ type MetricKey =
   | 'forecast'
 type HealthMetricKey =
   | 'health-score'
+  | 'health-real-balance'
   | 'health-coherence'
   | 'health-markup'
   | 'health-margin'
@@ -128,6 +132,8 @@ interface BusinessHealth {
   estimatedFiscalInventoryCost: number
   estimatedFiscalGoodsCost: number
   expectedRevenue: number
+  realBalance: number
+  potentialRealBalance: number
   coherenceScore: number | null
   markupScore: number | null
   marginScore: number | null
@@ -202,88 +208,6 @@ function percentage(numerator: number, denominator: number) {
   return denominator > 0 ? roundMoney((numerator / denominator) * 100) : null
 }
 
-function workedDatesForTakings(
-  takings: Array<{ date: string }>,
-  start: string,
-  end: string,
-) {
-  return new Set(
-    takings
-      .filter((item) => inRange(item.date, start, end))
-      .map((item) => item.date),
-  )
-}
-
-function monthlyCostsForWorkedDates<
-  T extends { id: string; date: string; total: number },
->(
-  items: T[],
-  workedDates: Set<string>,
-  costKey: (item: T) => string,
-) {
-  const costs = new Map<string, { item: T; amount: number }>()
-  const orderedItems = [...items].sort(
-    (left, right) =>
-      left.date.localeCompare(right.date) || left.id.localeCompare(right.id),
-  )
-  const sortedWorkedDates = [...workedDates].sort()
-  sortedWorkedDates.forEach((date) => {
-    const activeItems = new Map<string, T>()
-    orderedItems.forEach((item) => {
-      if (item.date.slice(0, 7) <= date.slice(0, 7)) {
-        activeItems.set(costKey(item), item)
-      }
-    })
-    activeItems.forEach((item) => {
-      const cursor = new Date(`${date}T00:00:00Z`)
-      const daysInMonth = new Date(
-        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
-      ).getUTCDate()
-      const current = costs.get(item.id)
-      costs.set(item.id, {
-        item,
-        amount: (current?.amount ?? 0) + item.total / daysInMonth,
-      })
-    })
-  })
-  return [...costs.values()].map(({ item, amount }) => ({
-    item,
-    amount: roundMoney(amount),
-  }))
-}
-
-function expenseForWorkedDates(
-  expense: {
-    amount: number
-    date: string
-    recurrence: 'once' | 'monthly'
-    recurrenceEndDate: string | null
-  },
-  start: string,
-  end: string,
-  workedDates: Set<string>,
-) {
-  if (expense.recurrence !== 'monthly') {
-    return inRange(expense.date, start, end) ? expense.amount : 0
-  }
-  return roundMoney(
-    [...workedDates].reduce((sum, date) => {
-      if (
-        !inRange(date, start, end) ||
-        date.slice(0, 7) < expense.date.slice(0, 7) ||
-        (expense.recurrenceEndDate && date > expense.recurrenceEndDate)
-      ) {
-        return sum
-      }
-      const cursor = new Date(`${date}T00:00:00Z`)
-      const daysInMonth = new Date(
-        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
-      ).getUTCDate()
-      return sum + expense.amount / daysInMonth
-    }, 0),
-  )
-}
-
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value))
 }
@@ -330,6 +254,10 @@ function calculateBusinessHealth({
     Math.max(economicGrossGoodsCost - estimatedInventoryCost, 0),
   )
   const expectedRevenue = roundMoney(economicGoodsCost * 1.975)
+  const realBalance = roundMoney(real - goodsCost - fixedCosts)
+  const potentialRealBalance = roundMoney(
+    realBalance + inventorySaleValue,
+  )
   const fiscalSoldPercentage =
     theoreticalRevenue > 0
       ? roundMoney(
@@ -402,6 +330,8 @@ function calculateBusinessHealth({
     estimatedFiscalInventoryCost,
     estimatedFiscalGoodsCost,
     expectedRevenue,
+    realBalance,
+    potentialRealBalance,
     coherenceScore,
     markupScore,
     marginScore,
@@ -458,6 +388,24 @@ function fiscalMarkupTone(value: number | null): HealthTone {
   if (value < 0) return 'red'
   if (value >= 15) return 'green'
   return 'amber'
+}
+
+function realBalanceTone(
+  realBalance: number,
+  potentialRealBalance: number,
+): HealthTone {
+  if (realBalance >= 0) return 'green'
+  if (potentialRealBalance >= 0) return 'amber'
+  return 'red'
+}
+
+function realBalanceLabel(
+  realBalance: number,
+  potentialRealBalance: number,
+) {
+  if (realBalance >= 0) return 'Positivo'
+  if (potentialRealBalance >= 0) return 'Recuperabile con lo stock'
+  return 'Negativo anche con lo stock'
 }
 
 function metricValue(value: number | null, kind: MetricValueKind) {
@@ -568,6 +516,83 @@ function healthMetricDetails({
         },
       ],
       rows: economicRows,
+    },
+    'health-real-balance': {
+      title: 'Bilancio reale',
+      note: 'Semaforo del periodo selezionato basato esclusivamente su incasso reale, acquisti e spese. La previsione gialla aggiunge il Venit stock ipotizzando di venderlo interamente senza nuovi costi. Cash, POS e quota statistica del Venit trasferito sono esclusi.',
+      value: health.realBalance,
+      kind: 'money',
+      tone: metricTone(
+        realBalanceTone(
+          health.realBalance,
+          health.potentialRealBalance,
+        ),
+      ),
+      formula:
+        'Bilancio attuale = incasso reale − acquisti − spese; potenziale = bilancio attuale + Venit stock',
+      steps: [
+        {
+          label: 'Incasso reale',
+          value: sumRows(realRows),
+          kind: 'money',
+          reference: 'Totale effettivamente incassato nel periodo.',
+          operation: 'Partenza',
+        },
+        {
+          label: 'Acquisti reali',
+          value: health.grossGoodsCost,
+          kind: 'money',
+          reference: 'Fatture e merce acquistata senza fattura.',
+          operation: 'Sottratti',
+        },
+        {
+          label: 'Spese maturate',
+          value: sumRows(fixedCostRows),
+          kind: 'money',
+          reference: 'Affitti, stipendi, tasse, contabile e altre spese del periodo.',
+          operation: 'Sottratte',
+        },
+        {
+          label: 'Bilancio reale attuale',
+          value: health.realBalance,
+          kind: 'money',
+          reference: realBalanceLabel(
+            health.realBalance,
+            health.potentialRealBalance,
+          ),
+          operation: 'Risultato',
+        },
+        {
+          label: 'Venit stock ancora vendibile',
+          value: health.inventorySaleValue,
+          kind: 'money',
+          reference: 'Valore teorico della merce residua, non ancora incassato.',
+          operation: 'Aggiunto solo alla previsione',
+        },
+        {
+          label: 'Bilancio potenziale vendendo tutto lo stock',
+          value: health.potentialRealBalance,
+          kind: 'money',
+          reference: 'Stima valida se lo stock viene venduto senza nuovi acquisti o spese.',
+          operation: 'Scenario',
+        },
+      ],
+      rows: [
+        ...realRows,
+        ...goodsRows.map((row) => ({ ...row, amount: -row.amount })),
+        ...fixedCostRows.map((row) => ({ ...row, amount: -row.amount })),
+        ...(health.inventorySaleValue > 0
+          ? [
+              {
+                date: '',
+                category: 'Scenario vendita stock',
+                description: 'Venit stock ancora vendibile',
+                reference: 'Aggiunto solo al bilancio potenziale',
+                amount: health.inventorySaleValue,
+              },
+            ]
+          : []),
+      ],
     },
     'health-coherence': {
       title: 'Coerenza vendite',
@@ -834,7 +859,7 @@ export function ReportsPage() {
     (sum, item) => sum + item.unregisteredGoods,
     0,
   )
-  const companyWorkedDates = workedDatesForTakings(
+  const companyWorkedDates = workedDatesForPeriod(
     data.takings,
     range.start,
     range.end,
@@ -2967,6 +2992,11 @@ export function ReportsPage() {
         />
         {selectedSeller.pointOfSaleSeller && (
             <HealthOverview
+              balanceLabel={
+                period === 'month'
+                  ? 'Bilancio reale mensile'
+                  : 'Bilancio reale del periodo'
+              }
               health={sellerHealth}
               title={`Controllo del punto ${selectedSeller.name}`}
               note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati dall'azienda. La quota costo del Venit trasferito è applicata solo alla salute statistica.`}
@@ -3604,6 +3634,11 @@ export function ReportsPage() {
       </header>
 
       <HealthOverview
+        balanceLabel={
+          period === 'month'
+            ? 'Bilancio reale mensile'
+            : 'Bilancio reale del periodo'
+        }
         health={companyHealth}
         title="Indice salute aziendale"
         note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati. Cash e POS generano soltanto alert fiscali.`}
@@ -4146,11 +4181,13 @@ function ReportCard({
 }
 
 function HealthOverview({
+  balanceLabel,
   health,
   title,
   note,
   onSelect,
 }: {
+  balanceLabel: string
   health: BusinessHealth
   title: string
   note: string
@@ -4172,6 +4209,19 @@ function HealthOverview({
           status={overallHealthLabel(health.score)}
           tone={overallHealthTone(health.score)}
           onClick={() => onSelect('health-score')}
+        />
+        <HealthCard
+          label={balanceLabel}
+          value={money(health.realBalance)}
+          status={realBalanceLabel(
+            health.realBalance,
+            health.potentialRealBalance,
+          )}
+          tone={realBalanceTone(
+            health.realBalance,
+            health.potentialRealBalance,
+          )}
+          onClick={() => onSelect('health-real-balance')}
         />
         <HealthCard
           label="Coerenza vendite"
