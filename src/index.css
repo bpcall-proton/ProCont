@@ -4068,6 +4068,173 @@ select {
 .report-amber strong { color: var(--warning); }
 .report-red strong { color: var(--error); }
 
+.calculation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calculation-result,
+.calculation-formula,
+.calculation-reconciliation {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: rgba(19, 27, 46, 0.82);
+}
+
+.calculation-result strong {
+  font-size: 1.65rem;
+}
+
+.calculation-formula strong,
+.calculation-reconciliation strong {
+  color: var(--cyan);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.calculation-result p,
+.calculation-formula p,
+.calculation-reconciliation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.calculation-reconciliation.is-matched {
+  border-color: rgba(45, 212, 191, 0.48);
+}
+
+.calculation-reconciliation.is-matched strong {
+  color: var(--success);
+}
+
+.calculation-reconciliation.is-different {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.calculation-reconciliation.is-different strong {
+  color: var(--warning);
+}
+
+.calculation-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calculation-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.calculation-step-index {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #061018;
+  background: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.calculation-step > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.calculation-step b {
+  color: var(--lavender);
+  font-size: 1rem;
+}
+
+.calculation-step em {
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.09);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.calculation-step p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.calculation-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calculation-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.calculation-chart-row {
+  display: grid;
+  grid-template-columns: minmax(105px, 0.75fr) minmax(120px, 1.5fr) minmax(90px, auto);
+  align-items: center;
+  gap: 10px;
+}
+
+.calculation-chart-row strong,
+.calculation-chart-row small {
+  font-size: 0.7rem;
+}
+
+.calculation-chart-row small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.calculation-chart-track {
+  height: 11px;
+  border-radius: 999px;
+  background: rgba(7, 11, 22, 0.8);
+  overflow: hidden;
+}
+
+.calculation-chart-bar {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+}
+
+.calculation-chart-bar.positive {
+  background: linear-gradient(90deg, var(--cyan), var(--success));
+}
+
+.calculation-chart-bar.negative {
+  background: linear-gradient(90deg, var(--warning), var(--error));
+}
+
+.calculation-source-table .value-negative {
+  color: var(--error);
+  font-weight: 800;
+}
+
 .monthly-chart {
   display: grid;
   gap: 13px;
@@ -4129,6 +4296,11 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .calculation-summary-grid,
+  .calculation-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .expense-grid {
     grid-template-columns: 1fr;
   }
@@ -4144,6 +4316,11 @@ select {
   .stats-strip,
   .report-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calculation-summary-grid,
+  .calculation-chart-grid {
+    grid-template-columns: 1fr;
   }
 
   .production-grid {
@@ -4208,6 +4385,15 @@ select {
 
   .month-row small {
     grid-column: 1 / -1;
+  }
+
+  .calculation-chart-row {
+    grid-template-columns: minmax(90px, 0.8fr) minmax(100px, 1.2fr);
+  }
+
+  .calculation-chart-row small {
+    grid-column: 1 / -1;
+    text-align: left;
   }
 }
 
