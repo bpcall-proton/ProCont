@@ -2989,10 +2989,28 @@ export function ReportsPage() {
           }
           onBack={() => setDetail(null)}
           onExport={exportSellerExcel}
+          onTrafficLightClick={
+            selectedSeller.pointOfSaleSeller
+              ? () =>
+                  setCalculation({
+                    scope: 'seller',
+                    sellerId: selectedSeller.id,
+                    metric: 'health-real-balance',
+                  })
+              : undefined
+          }
           period={period}
           selected={selected}
           setPeriod={setPeriod}
           setSelected={setSelected}
+          trafficLightTone={
+            selectedSeller.pointOfSaleSeller
+              ? realBalanceTone(
+                  sellerHealth.realBalance,
+                  sellerHealth.potentialRealBalance,
+                )
+              : undefined
+          }
         />
         {selectedSeller.pointOfSaleSeller && (
             <HealthOverview
@@ -3604,7 +3622,28 @@ export function ReportsPage() {
       <header className="page-heading">
         <div>
           <span className="eyebrow">STATISTICHE E FISCO</span>
-          <h1>Situazione aziendale</h1>
+          <div className="statistics-heading-title">
+            <h1>Situazione generale</h1>
+            <button
+              aria-label="Apri il dettaglio del bilancio reale generale"
+              className="statistics-heading-traffic"
+              onClick={() =>
+                setCalculation({
+                  scope: 'company',
+                  metric: 'health-real-balance',
+                })
+              }
+              type="button"
+            >
+              <TrafficLight
+                size="large"
+                tone={realBalanceTone(
+                  companyHealth.realBalance,
+                  companyHealth.potentialRealBalance,
+                )}
+              />
+            </button>
+          </div>
           <p>
             Incassi fiscali e reali, fatture, spese fisse, IVA e andamento per
             venditore.
@@ -4225,10 +4264,6 @@ function HealthOverview({
             health.realBalance,
             health.potentialRealBalance,
           )}
-          trafficLightTone={realBalanceTone(
-            health.realBalance,
-            health.potentialRealBalance,
-          )}
           onClick={() => onSelect('health-real-balance')}
         />
         <HealthCard
@@ -4288,14 +4323,12 @@ function HealthCard({
   value,
   status,
   tone,
-  trafficLightTone,
   onClick,
 }: {
   label: string
   value: string
   status: string
   tone: HealthTone
-  trafficLightTone?: TrafficLightTone
   onClick: () => void
 }) {
   return (
@@ -4304,7 +4337,6 @@ function HealthCard({
       onClick={onClick}
       type="button"
     >
-      {trafficLightTone && <TrafficLight tone={trafficLightTone} />}
       <span>{label}</span>
       <strong>{value}</strong>
       <span className={`health-status health-status-${tone}`}>
@@ -4355,26 +4387,42 @@ function DetailHeader({
   note,
   onBack,
   onExport,
+  onTrafficLightClick,
   period,
   selected,
   setPeriod,
   setSelected,
+  trafficLightTone,
 }: {
   eyebrow: string
   name: string
   note: string
   onBack: () => void
   onExport?: () => void
+  onTrafficLightClick?: () => void
   period: Period
   selected: string
   setPeriod: (period: Period) => void
   setSelected: (selected: string) => void
+  trafficLightTone?: TrafficLightTone
 }) {
   return (
     <header className="page-heading">
       <div>
         <span className="eyebrow">{eyebrow}</span>
-        <h1>{name}</h1>
+        <div className="statistics-heading-title">
+          <h1>{name}</h1>
+          {trafficLightTone && onTrafficLightClick && (
+            <button
+              aria-label={`Apri il dettaglio del bilancio reale di ${name}`}
+              className="statistics-heading-traffic"
+              onClick={onTrafficLightClick}
+              type="button"
+            >
+              <TrafficLight size="large" tone={trafficLightTone} />
+            </button>
+          )}
+        </div>
         <p>{note}</p>
         <div className="detail-heading-actions">
           <button className="button button-secondary" onClick={onBack} type="button">

@@ -772,6 +772,35 @@ select {
   margin-bottom: 0;
 }
 
+.statistics-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.statistics-heading-title h1 {
+  margin-right: 0;
+}
+
+.statistics-heading-traffic {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.statistics-heading-traffic:hover {
+  transform: scale(1.04);
+}
+
+.statistics-heading-traffic:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
