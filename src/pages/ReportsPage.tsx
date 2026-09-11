@@ -41,6 +41,7 @@ type SellerMetricKey =
   | 'official'
   | 'real'
   | 'purchases'
+  | 'statistical-transfer-cost'
   | 'unregistered-goods'
   | 'fixed-costs'
   | 'official-profit'
@@ -119,6 +120,7 @@ interface BusinessHealth {
   cashCoverage: number | null
   fiscalMarkup: number | null
   grossGoodsCost: number
+  economicGrossGoodsCost: number
   inventorySaleValue: number
   estimatedInventoryCost: number
   economicGoodsCost: number
@@ -304,23 +306,28 @@ function calculateBusinessHealth({
   official,
   real,
   goodsCost,
+  economicGoodsCostAdjustment = 0,
   fixedCosts,
   theoreticalRevenue,
 }: {
   official: number
   real: number
   goodsCost: number
+  economicGoodsCostAdjustment?: number
   fixedCosts: number
   theoreticalRevenue: number
 }): BusinessHealth {
+  const economicGrossGoodsCost = roundMoney(
+    Math.max(goodsCost + economicGoodsCostAdjustment, 0),
+  )
   const inventorySaleValue = roundMoney(
     Math.max(theoreticalRevenue - real, 0),
   )
   const estimatedInventoryCost = roundMoney(
-    Math.min(goodsCost, inventorySaleValue / 1.975),
+    Math.min(economicGrossGoodsCost, inventorySaleValue / 1.975),
   )
   const economicGoodsCost = roundMoney(
-    Math.max(goodsCost - estimatedInventoryCost, 0),
+    Math.max(economicGrossGoodsCost - estimatedInventoryCost, 0),
   )
   const expectedRevenue = roundMoney(economicGoodsCost * 1.975)
   const fiscalSoldPercentage =
@@ -387,6 +394,7 @@ function calculateBusinessHealth({
     cashCoverage,
     fiscalMarkup,
     grossGoodsCost: goodsCost,
+    economicGrossGoodsCost,
     inventorySaleValue,
     estimatedInventoryCost,
     economicGoodsCost,
@@ -498,6 +506,7 @@ function healthMetricDetails({
   realRows,
   officialRows,
   purchaseRows,
+  economicAdjustmentRows = [],
   unregisteredGoodsRows,
   fixedCostRows,
 }: {
@@ -505,11 +514,13 @@ function healthMetricDetails({
   realRows: MetricDetailRow[]
   officialRows: MetricDetailRow[]
   purchaseRows: MetricDetailRow[]
+  economicAdjustmentRows?: MetricDetailRow[]
   unregisteredGoodsRows: MetricDetailRow[]
   fixedCostRows: MetricDetailRow[]
 }): Record<HealthMetricKey, MetricDetailDefinition> {
   const goodsRows = [...purchaseRows, ...unregisteredGoodsRows]
-  const economicRows = [...realRows, ...goodsRows, ...fixedCostRows]
+  const economicGoodsRows = [...goodsRows, ...economicAdjustmentRows]
+  const economicRows = [...realRows, ...economicGoodsRows, ...fixedCostRows]
   const fiscalRows = [...officialRows, ...goodsRows]
   const fiscalStockRows: MetricDetailRow[] =
     health.estimatedFiscalInventoryCost > 0
@@ -577,10 +588,11 @@ function healthMetricDetails({
           operation: 'Numeratore',
         },
         {
-          label: 'Costo merce acquistata',
-          value: health.grossGoodsCost,
+          label: 'Costo merce statistico',
+          value: health.economicGrossGoodsCost,
           kind: 'money',
-          reference: 'Fatture fornitori più merce acquistata senza fattura.',
+          reference:
+            'Fatture e merce senza fattura, corrette dalla quota separata del Venit trasferito.',
         },
         {
           label: 'Valore vendita dello stock residuo',
@@ -639,7 +651,7 @@ function healthMetricDetails({
           operation: 'Poi diviso per questo valore',
         },
       ],
-      rows: [...realRows, ...goodsRows],
+      rows: [...realRows, ...economicGoodsRows],
     },
     'health-margin': {
       title: 'Margine netto',
@@ -1154,6 +1166,77 @@ export function ReportsPage() {
         .filter((allocation) => allocation.distributor.id === sellerId)
         .reduce((sum, allocation) => sum + allocation.vat, 0),
     )
+  const statisticalTransferCostAllocations = source.sellers.flatMap(
+    (sourceSeller) => {
+      const transfers = supplierSellerRevenueTransfers.filter(
+        (transfer) => transfer.fromSellerId === sourceSeller.id,
+      )
+      const sourceInvoices = data.invoices.filter(
+        (invoice) => invoice.sellerId === sourceSeller.id,
+      )
+      const sourceVenit = roundMoney(
+        sourceInvoices.reduce(
+          (sum, invoice) => sum + invoice.theoreticalRevenue,
+          0,
+        ),
+      )
+      const sourceCost = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+      )
+      const transferredVenit = roundMoney(
+        transfers.reduce((sum, transfer) => sum + transfer.amount, 0),
+      )
+      if (
+        transfers.length === 0 ||
+        sourceVenit <= 0 ||
+        sourceCost <= 0 ||
+        transferredVenit <= 0
+      ) {
+        return []
+      }
+      const allocatedTotal = roundMoney(
+        sourceCost * Math.min(transferredVenit / sourceVenit, 1),
+      )
+      let allocatedCost = 0
+      return transfers.map((transfer, index) => {
+        const cost =
+          index === transfers.length - 1
+            ? roundMoney(allocatedTotal - allocatedCost)
+            : roundMoney(
+                allocatedTotal * (transfer.amount / transferredVenit),
+              )
+        allocatedCost = roundMoney(allocatedCost + cost)
+        return {
+          ...transfer,
+          sourceSeller,
+          recipientSeller: source.sellers.find(
+            (seller) => seller.id === transfer.toSellerId,
+          ),
+          sourceCost,
+          sourceVenit,
+          transferredVenit,
+          cost,
+        }
+      })
+    },
+  )
+  const statisticalTransferCostReceived = (sellerId: string) =>
+    roundMoney(
+      statisticalTransferCostAllocations
+        .filter((allocation) => allocation.toSellerId === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0),
+    )
+  const statisticalTransferCostCeded = (sellerId: string) =>
+    roundMoney(
+      statisticalTransferCostAllocations
+        .filter((allocation) => allocation.fromSellerId === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0),
+    )
+  const netStatisticalTransferCost = (sellerId: string) =>
+    roundMoney(
+      statisticalTransferCostReceived(sellerId) -
+        statisticalTransferCostCeded(sellerId),
+    )
 
   const sellerStats = source.sellers.map((seller) => {
     const takings = data.takings.filter((item) => item.sellerId === seller.id)
@@ -1185,6 +1268,7 @@ export function ReportsPage() {
       (sum, item) => sum + item.unregisteredGoods,
       0,
     )
+    const statisticalTransferCost = netStatisticalTransferCost(seller.id)
     const costs = sellerCostBreakdown(seller)
     const official = takings.reduce(
       (sum, item) => sum + officialTaking(item),
@@ -1194,6 +1278,7 @@ export function ReportsPage() {
       official,
       real,
       goodsCost: invoiceTotal + unregisteredGoods,
+      economicGoodsCostAdjustment: statisticalTransferCost,
       fixedCosts: costs.total,
       theoreticalRevenue: totalVenit,
     })
@@ -1202,6 +1287,7 @@ export function ReportsPage() {
       name: seller.name,
       pointOfSaleSeller: seller.pointOfSaleSeller,
       productionCostShare,
+      statisticalTransferCost,
       official,
       invoiceTotal,
       invoiceRemaining: invoices.reduce(
@@ -1921,6 +2007,9 @@ export function ReportsPage() {
     const effectiveInvoiceTotal = roundMoney(
       invoiceTotal + productionCostShare - productionCostDistributed,
     )
+    const statisticalTransferCost = netStatisticalTransferCost(
+      selectedSeller.id,
+    )
     const unregisteredGoods = sellerInvoices.reduce(
       (sum, invoice) => sum + invoice.unregisteredGoods,
       0,
@@ -1953,6 +2042,18 @@ export function ReportsPage() {
         },
         { Voce: 'Costi fatture complessivi', Importo: effectiveInvoiceTotal },
         { Voce: 'Merce senza fattura', Importo: unregisteredGoods },
+        {
+          Voce: 'Quota costo Venit trasferito (solo salute statistica)',
+          Importo: statisticalTransferCost,
+        },
+        {
+          Voce: 'Costo merce statistico usato nella salute',
+          Importo: roundMoney(
+            effectiveInvoiceTotal +
+              unregisteredGoods +
+              statisticalTransferCost,
+          ),
+        },
         { Voce: 'Quota affitto', Importo: costs.rent },
         { Voce: 'Quota tasse', Importo: costs.taxes },
         { Voce: 'Quota contabile', Importo: costs.accounting },
@@ -1999,6 +2100,33 @@ export function ReportsPage() {
           })),
       ),
       'Quote produzione',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        statisticalTransferCostAllocations
+          .filter(
+            (allocation) =>
+              allocation.toSellerId === selectedSeller.id ||
+              allocation.fromSellerId === selectedSeller.id,
+          )
+          .map((allocation) => ({
+            Data: allocation.date,
+            Cedente: allocation.sourceSeller.name,
+            Destinatario:
+              allocation.recipientSeller?.name ?? 'Venditore non trovato',
+            Fattura: allocation.invoiceNumber,
+            'Venit trasferito': allocation.amount,
+            'Costo origine': allocation.sourceCost,
+            'Venit lordo origine': allocation.sourceVenit,
+            Percentuale:
+              allocation.sourceVenit > 0
+                ? allocation.amount / allocation.sourceVenit
+                : 0,
+            'Quota costo statistica': allocation.cost,
+          })),
+      ),
+      'Costo Venit trasferito',
     )
     XLSX.utils.book_append_sheet(
       workbook,
@@ -2113,6 +2241,14 @@ export function ReportsPage() {
       (sum, item) => sum + item.unregisteredGoods,
       0,
     )
+    const sellerStatisticalTransferCostReceived =
+      statisticalTransferCostReceived(selectedSeller.id)
+    const sellerStatisticalTransferCostCeded =
+      statisticalTransferCostCeded(selectedSeller.id)
+    const sellerStatisticalTransferCost = roundMoney(
+      sellerStatisticalTransferCostReceived -
+        sellerStatisticalTransferCostCeded,
+    )
     const sellerCosts = sellerCostBreakdown(selectedSeller)
     const sellerOperatingCosts = sellerInvoiceTotal + sellerCosts.total
     const sellerRealOperatingCosts =
@@ -2150,6 +2286,7 @@ export function ReportsPage() {
         official: sellerOfficial,
         real: sellerReal,
         goodsCost: sellerInvoiceTotal + sellerUnregisteredGoods,
+        economicGoodsCostAdjustment: sellerStatisticalTransferCost,
         fixedCosts: sellerCosts.total,
         theoreticalRevenue: sellerTheoretical,
       })
@@ -2215,6 +2352,31 @@ export function ReportsPage() {
         reference: item.number || 'Senza numero',
         amount: item.unregisteredGoods,
       }))
+    const sellerStatisticalTransferRows: MetricDetailRow[] = [
+      ...statisticalTransferCostAllocations
+        .filter(
+          (allocation) => allocation.toSellerId === selectedSeller.id,
+        )
+        .map((allocation) => ({
+          date: allocation.date,
+          category: 'Costo statistico Venit ricevuto',
+          description: allocation.sourceSeller.name,
+          reference: `${money(allocation.sourceCost)} × ${roundMoney((allocation.amount / allocation.sourceVenit) * 100)}% · Venit ${money(allocation.amount)} · fattura ${allocation.invoiceNumber || 'senza numero'}`,
+          amount: allocation.cost,
+        })),
+      ...statisticalTransferCostAllocations
+        .filter(
+          (allocation) => allocation.fromSellerId === selectedSeller.id,
+        )
+        .map((allocation) => ({
+          date: allocation.date,
+          category: 'Costo statistico Venit ceduto',
+          description:
+            allocation.recipientSeller?.name ?? 'Venditore non trovato',
+          reference: `${money(allocation.sourceCost)} × ${roundMoney((allocation.amount / allocation.sourceVenit) * 100)}% · Venit ${money(allocation.amount)} · fattura ${allocation.invoiceNumber || 'senza numero'}`,
+          amount: -allocation.cost,
+        })),
+    ]
     const sellerCostRows: MetricDetailRow[] = [
       ...companyRentalCosts
         .map(({ item, amount }) => {
@@ -2420,6 +2582,42 @@ export function ReportsPage() {
           },
         ],
         rows: sellerPurchaseRows,
+      },
+      'statistical-transfer-cost': {
+        title: 'Quota costo Venit trasferito',
+        note: 'Riallocazione separata usata esclusivamente dall’indice salute personale. Non modifica fatture, contabilità, pagamenti, IVA o alert fiscali.',
+        value: sellerStatisticalTransferCost,
+        kind: 'money',
+        tone: 'violet',
+        formula:
+          'Costo merce del cedente × Venit trasferito ÷ Venit lordo del cedente',
+        steps: [
+          {
+            label: 'Costo statistico ricevuto',
+            value: sellerStatisticalTransferCostReceived,
+            kind: 'money',
+            reference:
+              'Quota aggiunta al costo merce solo per valutare la salute personale.',
+            operation: 'Più',
+          },
+          {
+            label: 'Costo statistico ceduto',
+            value: sellerStatisticalTransferCostCeded,
+            kind: 'money',
+            reference:
+              'Quota sottratta al costo merce solo per valutare la salute personale.',
+            operation: 'Meno',
+          },
+          {
+            label: 'Quota netta usata nella salute',
+            value: sellerStatisticalTransferCost,
+            kind: 'money',
+            reference:
+              'Valore positivo se ricevuto, negativo se ceduto; i dati contabili restano invariati.',
+            operation: 'Risultato',
+          },
+        ],
+        rows: sellerStatisticalTransferRows,
       },
       'unregistered-goods': {
         title: 'Merce senza fattura personale',
@@ -2719,6 +2917,7 @@ export function ReportsPage() {
       realRows: sellerRealRows,
       officialRows: sellerOfficialRows,
       purchaseRows: sellerPurchaseRows,
+      economicAdjustmentRows: sellerStatisticalTransferRows,
       unregisteredGoodsRows: sellerUnregisteredRows,
       fixedCostRows: sellerCostRows,
     })
@@ -2767,10 +2966,10 @@ export function ReportsPage() {
           setSelected={setSelected}
         />
         {selectedSeller.pointOfSaleSeller && (
-          <HealthOverview
-            health={sellerHealth}
-            title={`Controllo del punto ${selectedSeller.name}`}
-            note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati dall'azienda.`}
+            <HealthOverview
+              health={sellerHealth}
+              title={`Controllo del punto ${selectedSeller.name}`}
+              note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati dall'azienda. La quota costo del Venit trasferito è applicata solo alla salute statistica.`}
             onSelect={(metric) =>
               setCalculation({
                 scope: 'seller',
@@ -2814,6 +3013,18 @@ export function ReportsPage() {
                 scope: 'seller',
                 sellerId: selectedSeller.id,
                 metric: 'purchases',
+              })
+            }
+          />
+          <ReportCard
+            label="Quota costo Venit trasferito"
+            value={sellerStatisticalTransferCost}
+            tone="violet"
+            onClick={() =>
+              setCalculation({
+                scope: 'seller',
+                sellerId: selectedSeller.id,
+                metric: 'statistical-transfer-cost',
               })
             }
           />
