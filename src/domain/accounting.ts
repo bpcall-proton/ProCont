@@ -185,6 +185,89 @@ export function allocatedExpense(
   return allocated
 }
 
+export function workedDatesForPeriod(
+  takings: Array<{ date: string }>,
+  rangeStart: string,
+  rangeEnd: string,
+) {
+  return new Set(
+    takings
+      .filter(
+        (taking) =>
+          taking.date >= rangeStart && taking.date <= rangeEnd,
+      )
+      .map((taking) => taking.date),
+  )
+}
+
+export function monthlyCostsForWorkedDates<
+  T extends { id: string; date: string; total: number },
+>(
+  items: T[],
+  workedDates: Set<string>,
+  costKey: (item: T) => string,
+) {
+  const costs = new Map<string, { item: T; amount: number }>()
+  const orderedItems = [...items].sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) || left.id.localeCompare(right.id),
+  )
+  const sortedWorkedDates = [...workedDates].sort()
+  sortedWorkedDates.forEach((date) => {
+    const activeItems = new Map<string, T>()
+    orderedItems.forEach((item) => {
+      if (item.date.slice(0, 7) <= date.slice(0, 7)) {
+        activeItems.set(costKey(item), item)
+      }
+    })
+    activeItems.forEach((item) => {
+      const cursor = new Date(`${date}T00:00:00Z`)
+      const daysInMonth = new Date(
+        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+      ).getUTCDate()
+      const current = costs.get(item.id)
+      costs.set(item.id, {
+        item,
+        amount: (current?.amount ?? 0) + item.total / daysInMonth,
+      })
+    })
+  })
+  return [...costs.values()].map(({ item, amount }) => ({
+    item,
+    amount: roundMoney(amount),
+  }))
+}
+
+export function expenseForWorkedDates(
+  expense: AccountingExpense,
+  rangeStart: string,
+  rangeEnd: string,
+  workedDates: Set<string>,
+) {
+  if (expense.recurrence !== 'monthly') {
+    return expense.date >= rangeStart && expense.date <= rangeEnd
+      ? expense.amount
+      : 0
+  }
+  return roundMoney(
+    [...workedDates].reduce((sum, date) => {
+      if (
+        date < rangeStart ||
+        date > rangeEnd ||
+        date.slice(0, 7) < expense.date.slice(0, 7) ||
+        (expense.recurrenceEndDate && date > expense.recurrenceEndDate)
+      ) {
+        return sum
+      }
+      const cursor = new Date(`${date}T00:00:00Z`)
+      const daysInMonth = new Date(
+        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+      ).getUTCDate()
+      return sum + expense.amount / daysInMonth
+    }, 0),
+  )
+}
+
 export function activeAccounting(state: AccountingState) {
   const company =
     state.companies.find((item) => item.id === state.activeCompanyId) ??

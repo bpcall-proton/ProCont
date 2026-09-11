@@ -3,11 +3,15 @@ import { StatCard } from '../components/StatCard'
 import {
   activeAccounting,
   bestContactNameMatch,
+  expenseForWorkedDates,
   invoiceRemaining,
   money,
+  monthlyCostsForWorkedDates,
   officialTaking,
   realTaking,
   roundMoney,
+  today,
+  workedDatesForPeriod,
 } from '../domain/accounting'
 import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
@@ -30,6 +34,7 @@ type DashboardMetricKey =
   | 'stock'
   | 'costs'
   | 'real-result'
+  | 'annual-real-balance'
 
 type SellerMetricKey =
   | 'invoices'
@@ -195,6 +200,113 @@ export function DashboardPage() {
     rents +
     accountantCosts +
     otherExpenses
+  const currentYear = today().slice(0, 4)
+  const currentYearStart = `${currentYear}-01-01`
+  const currentYearEnd = today()
+  const annualInvoices = accounting.invoices.filter(
+    (invoice) =>
+      invoice.date >= currentYearStart && invoice.date <= currentYearEnd,
+  )
+  const annualTakings = accounting.takings.filter(
+    (taking) =>
+      taking.date >= currentYearStart && taking.date <= currentYearEnd,
+  )
+  const annualWorkedDates = workedDatesForPeriod(
+    annualTakings,
+    currentYearStart,
+    currentYearEnd,
+  )
+  const annualRentalCosts = monthlyCostsForWorkedDates(
+    accounting.rentals,
+    annualWorkedDates,
+    (rental) => rental.property.trim().toLocaleLowerCase() || rental.id,
+  )
+  const annualAccountantCosts = monthlyCostsForWorkedDates(
+    accounting.accountantInvoices,
+    annualWorkedDates,
+    (invoice) =>
+      invoice.description.trim().toLocaleLowerCase() || invoice.id,
+  )
+  const annualExpenseCosts = accounting.expenses
+    .map((expense) => ({
+      expense,
+      amount: expenseForWorkedDates(
+        expense,
+        currentYearStart,
+        currentYearEnd,
+        annualWorkedDates,
+      ),
+    }))
+    .filter(({ amount }) => amount !== 0)
+  const annualReal = roundMoney(
+    annualTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
+  )
+  const knownAnnualSellerIds = new Set(
+    accounting.sellers.map((seller) => seller.id),
+  )
+  const annualTransferredVenit = annualInvoices.reduce((sum, invoice) => {
+    if (
+      !invoice.sellerId ||
+      invoice.taxableAmount !== 0 ||
+      invoice.theoreticalRevenue <= 0
+    ) {
+      return sum
+    }
+    const supplier = accounting.suppliers.find(
+      (item) => item.id === invoice.supplierId,
+    )
+    if (!supplier?.sellerRevenueTransferEnabled) return sum
+    const linkedSellerId =
+      bestContactNameMatch(
+        invoice.supplierName || supplier.name,
+        accounting.sellers,
+      )?.id ?? supplier.linkedSellerId
+    return linkedSellerId &&
+      linkedSellerId !== invoice.sellerId &&
+      knownAnnualSellerIds.has(linkedSellerId) &&
+      knownAnnualSellerIds.has(invoice.sellerId)
+      ? sum + invoice.theoreticalRevenue
+      : sum
+  }, 0)
+  const annualTheoretical = roundMoney(
+    annualInvoices.reduce(
+      (sum, invoice) => sum + invoice.theoreticalRevenue,
+      0,
+    ) - annualTransferredVenit,
+  )
+  const annualStock = roundMoney(
+    Math.max(annualTheoretical - annualReal, 0),
+  )
+  const annualPurchaseCosts = roundMoney(
+    annualInvoices.reduce(
+      (sum, invoice) =>
+        sum + invoice.total + invoice.unregisteredGoods,
+      0,
+    ),
+  )
+  const annualFixedCosts = roundMoney(
+    annualRentalCosts.reduce((sum, cost) => sum + cost.amount, 0) +
+      annualAccountantCosts.reduce((sum, cost) => sum + cost.amount, 0) +
+      annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0),
+  )
+  const annualRealBalance = roundMoney(
+    annualReal - annualPurchaseCosts - annualFixedCosts,
+  )
+  const annualPotentialBalance = roundMoney(
+    annualRealBalance + annualStock,
+  )
+  const annualBalanceTone =
+    annualRealBalance >= 0
+      ? 'green'
+      : annualPotentialBalance >= 0
+        ? 'amber'
+        : 'red'
+  const annualBalanceStatus =
+    annualRealBalance >= 0
+      ? 'Positivo'
+      : annualPotentialBalance >= 0
+        ? 'Negativo oggi, recuperabile vendendo lo stock'
+        : 'Negativo anche vendendo tutto lo stock'
   const invoiceRows: DashboardDetailRow[] = accounting.invoices.map(
     (invoice) => ({
       date: invoice.date,
@@ -399,6 +511,59 @@ export function DashboardPage() {
     ...row,
     amount: -row.amount,
   }))
+  const annualBalanceRows: DashboardDetailRow[] = [
+    ...annualTakings
+      .map((taking) => ({
+        date: taking.date,
+        category: 'Incasso reale annuale',
+        description: taking.sellerName || 'Venditore non indicato',
+        reference: 'Valore effettivamente incassato',
+        amount: realTaking(taking),
+      }))
+      .filter((row) => row.amount !== 0),
+    ...annualInvoices.map((invoice) => ({
+      date: invoice.date,
+      category: 'Acquisto annuale',
+      description: invoice.supplierName || 'Fornitore non indicato',
+      reference: `Fattura ${invoice.number || 'senza numero'} · include merce senza fattura`,
+      amount: -(invoice.total + invoice.unregisteredGoods),
+    })),
+    ...annualRentalCosts.map(({ item, amount }) => ({
+      date: item.date,
+      category: 'Affitto maturato',
+      description: item.property || item.tenant || 'Affitto',
+      reference: `Quota su ${annualWorkedDates.size} giorni lavorati`,
+      amount: -amount,
+    })),
+    ...annualAccountantCosts.map(({ item, amount }) => ({
+      date: item.date,
+      category: 'Contabile maturato',
+      description: item.description || 'Fattura contabile',
+      reference: `Quota su ${annualWorkedDates.size} giorni lavorati`,
+      amount: -amount,
+    })),
+    ...annualExpenseCosts.map(({ expense, amount }) => ({
+      date: expense.date,
+      category: 'Spesa annuale',
+      description: expense.description || expense.type,
+      reference:
+        expense.recurrence === 'monthly'
+          ? `Quota su ${annualWorkedDates.size} giorni lavorati`
+          : expense.notes || 'Spesa effettiva',
+      amount: -amount,
+    })),
+    ...(annualStock > 0
+      ? [
+          {
+            date: currentYearEnd,
+            category: 'Scenario vendita stock',
+            description: 'Venit stock ancora vendibile',
+            reference: `Bilancio potenziale ${money(annualPotentialBalance)}`,
+            amount: annualStock,
+          },
+        ]
+      : []),
+  ]
   const metrics: Record<DashboardMetricKey, DashboardMetric> = {
     invoices: {
       title: 'Fatture ricevute',
@@ -529,6 +694,13 @@ export function DashboardPage() {
       value: real - totalCosts,
       tone: real - totalCosts >= 0 ? 'green' : 'red',
       rows: [...realRows, ...negativeCostRows],
+    },
+    'annual-real-balance': {
+      title: `Bilancio reale annuale ${currentYear}`,
+      note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − spese maturate sui giorni lavorati. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
+      value: annualRealBalance,
+      tone: annualBalanceTone,
+      rows: annualBalanceRows,
     },
   }
   const sellerInvoices = accounting.invoices.filter(
@@ -1506,6 +1678,13 @@ export function DashboardPage() {
           onClick={() => setDetail('real-result')}
           tone={real - totalCosts >= 0 ? 'green' : 'red'}
           value={money(real - totalCosts)}
+        />
+        <StatCard
+          detail={`${annualBalanceStatus} · potenziale con stock ${money(annualPotentialBalance)}`}
+          label={`Bilancio reale annuale ${currentYear}`}
+          onClick={() => setDetail('annual-real-balance')}
+          tone={annualBalanceTone}
+          value={money(annualRealBalance)}
         />
       </section>
 
