@@ -3878,6 +3878,55 @@ select {
   font-size: 1.08rem;
 }
 
+.health-overview .panel-heading p {
+  max-width: 920px;
+}
+
+.health-card {
+  min-height: 116px;
+}
+
+.health-card em {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.health-card.report-green,
+.health-inline.health-green {
+  border-color: rgba(45, 212, 191, 0.48);
+}
+
+.health-card.report-amber,
+.health-inline.health-amber {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.health-card.report-red,
+.health-inline.health-red {
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+.health-inline {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-weight: 800;
+}
+
+.health-inline.health-green {
+  color: var(--success) !important;
+}
+
+.health-inline.health-amber {
+  color: var(--warning) !important;
+}
+
+.health-inline.health-red {
+  color: var(--error) !important;
+}
+
 .report-card-button {
   width: 100%;
   color: var(--text);
