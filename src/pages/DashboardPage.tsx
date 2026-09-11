@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { StatCard } from '../components/StatCard'
+import { TrafficLight } from '../components/TrafficLight'
 import {
   activeAccounting,
   bestContactNameMatch,
@@ -1542,9 +1543,22 @@ export function DashboardPage() {
             {activeCompany?.name ?? "dell'azienda selezionata"}.
           </p>
         </div>
-        <button className="button button-primary" type="button">
-          Apri documenti in arrivo
-        </button>
+        <div className="dashboard-heading-actions">
+          <button
+            className="dashboard-annual-traffic"
+            onClick={() => setDetail('annual-real-balance')}
+            type="button"
+          >
+            <TrafficLight size="large" tone={annualBalanceTone} />
+            <span>
+              Bilancio annuale
+              <strong>{annualBalanceStatus}</strong>
+            </span>
+          </button>
+          <button className="button button-primary" type="button">
+            Apri documenti in arrivo
+          </button>
+        </div>
       </header>
 
       <section className="stats-grid dashboard-stats-grid">
@@ -1684,7 +1698,6 @@ export function DashboardPage() {
           label={`Bilancio reale annuale ${currentYear}`}
           onClick={() => setDetail('annual-real-balance')}
           tone={annualBalanceTone}
-          trafficLightTone={annualBalanceTone}
           value={money(annualRealBalance)}
         />
       </section>
