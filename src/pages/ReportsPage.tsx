@@ -211,9 +211,10 @@ export function ReportsPage() {
       ),
   }
   const allSellerIds = source.sellers.map((seller) => seller.id)
+  const knownSellerIds = new Set(allSellerIds)
   const allocationTargets = (item: { allocationSellerIds: string[] }) => {
     const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
-      allSellerIds.includes(sellerId),
+      knownSellerIds.has(sellerId),
     )
     return validSellerIds.length > 0 ? validSellerIds : allSellerIds
   }
@@ -255,13 +256,17 @@ export function ReportsPage() {
       ) + allocatedExpenseType('contabile')
     const other = allocatedExpenseType('altra')
     const salaryPaid = data.expenses
-      .filter(
-        (item) =>
-          item.type === 'stipendio' &&
-          item.sellerId === seller.id &&
-          item.settled &&
-          inRange(item.date, range.start, range.end),
-      )
+      .filter((item) => {
+        if (item.type !== 'stipendio') return false
+        const salarySellerId =
+          item.sellerId && knownSellerIds.has(item.sellerId)
+            ? item.sellerId
+            : bestContactNameMatch(item.sellerName, source.sellers)?.id
+        return (
+          salarySellerId === seller.id &&
+          inRange(item.date, range.start, range.end)
+        )
+      })
       .reduce((sum, item) => sum + item.amount, 0)
     return {
       rent,
@@ -281,7 +286,6 @@ export function ReportsPage() {
     (sum, item) => sum + item.theoreticalRevenue,
     0,
   )
-  const knownSellerIds = new Set(source.sellers.map((seller) => seller.id))
   const supplierSellerRevenueTransfers = data.invoices.flatMap((invoice) => {
     if (
       !invoice.sellerId ||
