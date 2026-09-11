@@ -182,6 +182,7 @@ export interface AccountingSeller {
   phone: string
   city: string
   notes: string
+  pointOfSaleSeller: boolean
   autoSelect: boolean
   overviewPriority: number
 }

@@ -1933,6 +1933,7 @@ function ContactsPanel() {
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null)
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
+  const [sellerPointOfSale, setSellerPointOfSale] = useState(false)
   const [sellerAutoSelect, setSellerAutoSelect] = useState(false)
   const [sellerOverviewPriority, setSellerOverviewPriority] = useState('')
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(
@@ -1977,6 +1978,7 @@ function ContactsPanel() {
                       ...seller,
                       name,
                       phone,
+                      pointOfSaleSeller: sellerPointOfSale,
                       autoSelect: sellerAutoSelect,
                       overviewPriority,
                     }
@@ -1991,6 +1993,7 @@ function ContactsPanel() {
                   phone,
                   city: '',
                   notes: '',
+                  pointOfSaleSeller: sellerPointOfSale,
                   autoSelect: sellerAutoSelect,
                   overviewPriority,
                 },
@@ -2023,6 +2026,7 @@ function ContactsPanel() {
     setEditingSellerId(null)
     setSellerName('')
     setSellerPhone('')
+    setSellerPointOfSale(false)
     setSellerAutoSelect(false)
     setSellerOverviewPriority('')
   }
@@ -2031,6 +2035,7 @@ function ContactsPanel() {
     setEditingSellerId(seller.id)
     setSellerName(seller.name)
     setSellerPhone(seller.phone)
+    setSellerPointOfSale(seller.pointOfSaleSeller)
     setSellerAutoSelect(seller.autoSelect)
     setSellerOverviewPriority(
       seller.overviewPriority > 0 ? String(seller.overviewPriority) : '',
@@ -2041,6 +2046,7 @@ function ContactsPanel() {
     setEditingSellerId(null)
     setSellerName('')
     setSellerPhone('')
+    setSellerPointOfSale(false)
     setSellerAutoSelect(false)
     setSellerOverviewPriority('')
   }
@@ -2167,6 +2173,10 @@ function ContactsPanel() {
             <input min="1" placeholder="Esempio: 1" type="number" value={sellerOverviewPriority} onChange={(event) => setSellerOverviewPriority(event.target.value)} />
           </label>
           <label className="contact-checkbox-field">
+            <input checked={sellerPointOfSale} onChange={(event) => setSellerPointOfSale(event.target.checked)} type="checkbox" />
+            Venditrice reale del punto vendita
+          </label>
+          <label className="contact-checkbox-field">
             <input checked={sellerAutoSelect} onChange={(event) => setSellerAutoSelect(event.target.checked)} type="checkbox" />
             Selezione automatica in fatture e incassi
           </label>
@@ -2178,7 +2188,7 @@ function ContactsPanel() {
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.pointOfSaleSeller ? 'Venditrice reale del punto vendita' : 'Personale produzione / altro'} · {seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
         })}</div>
       </article>
       <article className="panel">
@@ -2403,14 +2413,19 @@ function ExpensesPanel() {
         <form className="inline-create-form vertical-form" onSubmit={addExpense}>
           <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as AccountingExpense['type'])}><option value="tassa">Tassa</option><option value="stipendio">Stipendio</option><option value="contabile">Costo contabile</option><option value="altra">Altra spesa</option></select>
           {expenseType === 'stipendio' && (
-            <select value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
+            <select required value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
               <option value="">Dipendente / venditrice</option>
               {data.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
             </select>
           )}
           <input placeholder="Descrizione" required value={expenseDescription} onChange={(event) => setExpenseDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Importo" required value={expenseAmount} onChange={(event) => setExpenseAmount(event.target.value)} />
-          <input aria-label="Data spesa o inizio ricorrenza" type="date" required value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+          <label>
+            {expenseType === 'stipendio'
+              ? 'Data pagamento effettivo'
+              : 'Data spesa o inizio ricorrenza'}
+            <input aria-label={expenseType === 'stipendio' ? 'Data pagamento effettivo' : 'Data spesa o inizio ricorrenza'} type="date" required value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+          </label>
           <select value={expenseRecurrence} onChange={(event) => setExpenseRecurrence(event.target.value as AccountingExpense['recurrence'])}>
             <option value="once">Spesa singola</option>
             <option value="monthly">Spesa fissa mensile</option>
