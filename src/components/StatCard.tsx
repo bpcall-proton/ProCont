@@ -1,9 +1,15 @@
+import {
+  TrafficLight,
+  type TrafficLightTone,
+} from './TrafficLight'
+
 interface StatCardProps {
   label: string
   value: string
   detail: string
   tone: 'cyan' | 'violet' | 'green' | 'amber' | 'red'
   onClick?: () => void
+  trafficLightTone?: TrafficLightTone
 }
 
 export function StatCard({
@@ -12,6 +18,7 @@ export function StatCard({
   detail,
   tone,
   onClick,
+  trafficLightTone,
 }: StatCardProps) {
   if (onClick) {
     return (
@@ -21,6 +28,7 @@ export function StatCard({
         type="button"
       >
         <div className="stat-glow" />
+        {trafficLightTone && <TrafficLight tone={trafficLightTone} />}
         <span className="stat-label">{label}</span>
         <strong>{value}</strong>
         <span className="stat-detail">{detail}</span>
@@ -32,6 +40,7 @@ export function StatCard({
   return (
     <article className={`stat-card stat-${tone}`}>
       <div className="stat-glow" />
+      {trafficLightTone && <TrafficLight tone={trafficLightTone} />}
       <span className="stat-label">{label}</span>
       <strong>{value}</strong>
       <span className="stat-detail">{detail}</span>
