@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
 import {
+  TrafficLight,
+  type TrafficLightTone,
+} from '../components/TrafficLight'
+import {
   activeAccounting,
   addDays,
   allocatedExpense,
@@ -393,7 +397,7 @@ function fiscalMarkupTone(value: number | null): HealthTone {
 function realBalanceTone(
   realBalance: number,
   potentialRealBalance: number,
-): HealthTone {
+): TrafficLightTone {
   if (realBalance >= 0) return 'green'
   if (potentialRealBalance >= 0) return 'amber'
   return 'red'
@@ -4221,6 +4225,10 @@ function HealthOverview({
             health.realBalance,
             health.potentialRealBalance,
           )}
+          trafficLightTone={realBalanceTone(
+            health.realBalance,
+            health.potentialRealBalance,
+          )}
           onClick={() => onSelect('health-real-balance')}
         />
         <HealthCard
@@ -4280,12 +4288,14 @@ function HealthCard({
   value,
   status,
   tone,
+  trafficLightTone,
   onClick,
 }: {
   label: string
   value: string
   status: string
   tone: HealthTone
+  trafficLightTone?: TrafficLightTone
   onClick: () => void
 }) {
   return (
@@ -4294,6 +4304,7 @@ function HealthCard({
       onClick={onClick}
       type="button"
     >
+      {trafficLightTone && <TrafficLight tone={trafficLightTone} />}
       <span>{label}</span>
       <strong>{value}</strong>
       <span className={`health-status health-status-${tone}`}>

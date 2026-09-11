@@ -1684,6 +1684,7 @@ export function DashboardPage() {
           label={`Bilancio reale annuale ${currentYear}`}
           onClick={() => setDetail('annual-real-balance')}
           tone={annualBalanceTone}
+          trafficLightTone={annualBalanceTone}
           value={money(annualRealBalance)}
         />
       </section>

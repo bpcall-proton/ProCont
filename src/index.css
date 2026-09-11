@@ -791,6 +791,55 @@ select {
   background: var(--card-background);
 }
 
+.traffic-light {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  gap: 5px;
+  padding: 5px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  background: rgba(8, 15, 29, 0.72);
+}
+
+.traffic-light-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0.2;
+}
+
+.traffic-light-red {
+  background: var(--red);
+}
+
+.traffic-light-amber {
+  background: var(--amber);
+}
+
+.traffic-light-green {
+  background: var(--green);
+}
+
+.traffic-light-dot.is-active {
+  opacity: 1;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.traffic-light-red.is-active {
+  color: var(--red);
+}
+
+.traffic-light-amber.is-active {
+  color: var(--amber);
+}
+
+.traffic-light-green.is-active {
+  color: var(--green);
+}
+
 .stat-card .stat-glow {
   position: absolute;
   top: -65px;
@@ -3860,6 +3909,7 @@ select {
 }
 
 .report-card {
+  position: relative;
   display: grid;
   gap: 8px;
   min-height: 104px;
