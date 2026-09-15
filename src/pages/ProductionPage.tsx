@@ -8,6 +8,7 @@ import {
 } from '../domain/accounting'
 import { createId } from '../domain/defaults'
 import type {
+  ProductionEntry,
   ProductionEntryPeriod,
   ProductionReportPeriod,
 } from '../domain/types'
@@ -45,6 +46,23 @@ function configuredIds(value: string[] | undefined) {
 function numberValue(value: string) {
   const parsed = Number(value.replace(',', '.'))
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+}
+
+function quantityExpressionValue(value: string) {
+  const parts = value.split('+').map((part) => part.trim())
+  if (
+    parts.length === 0 ||
+    parts.some(
+      (part) => !part || !/^\d+(?:[.,]\d+)?$/.test(part),
+    )
+  ) {
+    return null
+  }
+  const total = parts.reduce(
+    (sum, part) => sum + Number(part.replace(',', '.')),
+    0,
+  )
+  return Number.isFinite(total) ? total : null
 }
 
 function durationHours(startTime: string, endTime: string) {
@@ -123,6 +141,13 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T12:00:00Z`))
 }
 
+function formatProductionDate(value: string) {
+  const weekday = new Intl.DateTimeFormat('it-IT', {
+    weekday: 'long',
+  }).format(new Date(`${value}T12:00:00Z`))
+  return `${formatDate(value)} - ${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}`
+}
+
 interface ProductionPageProps {
   onOpenWages: () => void
 }
@@ -163,6 +188,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   )
   const selectedDate = productionFilters.selectedDate
   const [formError, setFormError] = useState('')
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [detailCard, setDetailCard] = useState<DetailCard>('costs')
   const range = rangeFor(reportPeriod, selectedDate)
   const showingAllProducts =
@@ -428,12 +454,14 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setSelectedProductId(productId)
     setSettingsForm(settingsFormFor(product))
     setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
     setFormError('')
   }
 
   function selectAllProducts() {
     setSelectedProductId('all')
     setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
     setFormError('')
   }
 
@@ -441,6 +469,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setSelectedProductId(null)
     setSettingsForm(settingsFormFor(null))
     setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
     setFormError('')
   }
 
@@ -535,9 +564,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       setFormError('Salva prima le impostazioni del prodotto.')
       return
     }
-    const quantity = numberValue(entryForm.quantity)
-    if (quantity <= 0) {
-      setFormError('Inserisci una quantità prodotta maggiore di zero.')
+    const quantity = quantityExpressionValue(entryForm.quantity)
+    if (quantity === null || quantity <= 0) {
+      setFormError(
+        'Inserisci una quantità valida o una somma come 100+200+300.',
+      )
       return
     }
     const date =
@@ -549,15 +580,18 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     const companyEntries = data.productionEntries.filter(
       (entry) => entry.productId === savedSettings.id,
     )
+    const otherEntries = companyEntries.filter(
+      (entry) => entry.id !== editingEntryId,
+    )
     const hasConflict =
       entryForm.period === 'week'
-        ? companyEntries.some(
+        ? otherEntries.some(
             (entry) =>
               entry.period === 'day' &&
               entry.date >= weekStart &&
               entry.date <= weekEnd,
           )
-        : companyEntries.some(
+        : otherEntries.some(
             (entry) =>
               entry.period === 'week' &&
               entry.date === startOfWeek(entryForm.date),
@@ -568,12 +602,30 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       )
       return
     }
-    const existing = companyEntries.find(
+    const existing = otherEntries.find(
       (entry) => entry.period === entryForm.period && entry.date === date,
     )
+    if (editingEntryId && existing) {
+      setFormError(
+        'Esiste già una quantità registrata per questo periodo e questa data.',
+      )
+      return
+    }
     updateAccounting((current) => ({
       ...current,
-      productionEntries: existing
+      productionEntries: editingEntryId
+        ? current.productionEntries.map((entry) =>
+            entry.id === editingEntryId
+              ? {
+                  ...entry,
+                  productId: savedSettings.id,
+                  period: entryForm.period,
+                  date,
+                  quantity,
+                }
+              : entry,
+          )
+        : existing
         ? current.productionEntries.map((entry) =>
             entry.id === existing.id ? { ...entry, quantity } : entry,
           )
@@ -590,6 +642,33 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           ],
     }))
     setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
+    setFormError('')
+  }
+
+  function editEntry(entry: ProductionEntry) {
+    const product =
+      data.productionSettings.find(
+        (settings) => settings.id === entry.productId,
+      ) ?? null
+    if (!product) return
+    setSelectedProductId(product.id)
+    setSettingsForm(settingsFormFor(product))
+    setEntryForm({
+      period: entry.period,
+      date: entry.date,
+      quantity: String(entry.quantity),
+    })
+    setEditingEntryId(entry.id)
+    setFormError('')
+    document
+      .getElementById('production-entry-form')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function cancelEntryEdit() {
+    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
     setFormError('')
   }
 
@@ -601,6 +680,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         (entry) => entry.id !== id,
       ),
     }))
+    if (editingEntryId === id) cancelEntryEdit()
   }
 
   function removeProduct() {
@@ -628,6 +708,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setSelectedProductId(nextProduct?.id ?? null)
     setSettingsForm(settingsFormFor(nextProduct))
     setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEditingEntryId(null)
     setFormError('')
   }
 
@@ -717,6 +798,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       expense.type !== 'stipendio' &&
       expense.recurrence === 'monthly',
   )
+  const quantityTotal = quantityExpressionValue(entryForm.quantity)
 
   return (
     <div className="page-stack">
@@ -904,8 +986,8 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                     <strong>{productName}</strong>
                     <small>
                       {entry.period === 'day'
-                        ? formatDate(entry.date)
-                        : `Settimana dal ${formatDate(entry.date)}`}
+                        ? formatProductionDate(entry.date)
+                        : `Settimana dal ${formatProductionDate(entry.date)}`}
                     </small>
                   </span>
                   <strong>
@@ -1191,12 +1273,17 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
 
         <form
           className="panel accounting-form production-entry-panel"
+          id="production-entry-form"
           onSubmit={saveEntry}
         >
           <div className="panel-heading">
             <div>
               <span className="eyebrow">QUANTITÀ PRODOTTA</span>
-              <h2>Registra la produzione</h2>
+              <h2>
+                {editingEntryId
+                  ? 'Modifica la produzione'
+                  : 'Registra la produzione'}
+              </h2>
             </div>
           </div>
           <div className="production-entry-fields">
@@ -1231,31 +1318,49 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               Numero pezzi
               <input
                 inputMode="decimal"
-                min="0"
                 onChange={(event) =>
                   setEntryForm({
                     ...entryForm,
                     quantity: event.target.value,
                   })
                 }
+                placeholder="Es. 100+200+300"
                 required
-                step="1"
-                type="number"
+                type="text"
                 value={entryForm.quantity}
               />
             </label>
           </div>
           <p className="production-help">
             Un totale settimanale sostituisce gli inserimenti giornalieri della
-            stessa settimana ed è visibile nei filtri settimana e mese.
+            stessa settimana ed è visibile nei filtri settimana e mese. Puoi
+            sommare più quantità usando il simbolo +.
+            {entryForm.quantity.includes('+') && quantityTotal !== null && (
+              <>
+                {' '}
+                Totale calcolato:{' '}
+                <strong>{quantityTotal.toLocaleString('it-IT')} pezzi</strong>.
+              </>
+            )}
           </p>
-          <button
-            className="button button-primary"
-            disabled={!savedSettings}
-            type="submit"
-          >
-            Registra quantità
-          </button>
+          <div className="form-actions">
+            {editingEntryId && (
+              <button
+                className="button button-secondary"
+                onClick={cancelEntryEdit}
+                type="button"
+              >
+                Annulla modifica
+              </button>
+            )}
+            <button
+              className="button button-primary"
+              disabled={!savedSettings}
+              type="submit"
+            >
+              {editingEntryId ? 'Salva modifica' : 'Registra quantità'}
+            </button>
+          </div>
         </form>
         </>
       )}
@@ -1318,8 +1423,8 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 <span>
                   <strong>
                     {entry.period === 'day'
-                      ? formatDate(entry.date)
-                      : `Settimana dal ${formatDate(entry.date)}`}
+                      ? formatProductionDate(entry.date)
+                      : `Settimana dal ${formatProductionDate(entry.date)}`}
                   </strong>
                   <small>
                     {entry.period === 'day'
@@ -1331,6 +1436,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 </span>
                 <span>
                   <strong>{entry.quantity.toLocaleString('it-IT')} pezzi</strong>
+                  <button onClick={() => editEntry(entry)} type="button">
+                    Modifica
+                  </button>
                   <button
                     className="danger-text"
                     onClick={() => removeEntry(entry.id)}
