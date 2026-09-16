@@ -95,7 +95,20 @@ function addDays(value: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  if (Number(value.slice(0, 4)) < 2000) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return (
+    !Number.isNaN(date.valueOf()) &&
+    date.toISOString().slice(0, 10) === value
+  )
+}
+
 function rangeFor(period: ProductionReportPeriod, selected: string) {
+  if (!isValidDate(selected)) {
+    return rangeFor(period, today())
+  }
   if (period === 'day') return { start: selected, end: selected }
   if (period === 'week') {
     const start = startOfWeek(selected)
@@ -182,11 +195,22 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     data.productionViewSettings?.reportPeriod ?? 'month',
   )
   const productionFilterDefaults = { selectedDate: today() }
+  const productionFilterKey = `production-filters:${companyId ?? 'none'}`
   const [productionFilters, setProductionFilters] = useStoredFilters(
-    `production-filters:${companyId ?? 'none'}`,
+    productionFilterKey,
     productionFilterDefaults,
   )
-  const selectedDate = productionFilters.selectedDate
+  const selectedDate = isValidDate(productionFilters.selectedDate)
+    ? productionFilters.selectedDate
+    : productionFilterDefaults.selectedDate
+  const [selectedDateDraft, setSelectedDateDraft] = useState({
+    key: productionFilterKey,
+    value: selectedDate,
+  })
+  const selectedDateInput =
+    selectedDateDraft.key === productionFilterKey
+      ? selectedDateDraft.value
+      : selectedDate
   const [formError, setFormError] = useState('')
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [detailCard, setDetailCard] = useState<DetailCard>('costs')
@@ -877,17 +901,37 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         <label>
           Data di riferimento
           <input
-            onChange={(event) =>
-              setProductionFilters({ selectedDate: event.target.value })
-            }
+            onBlur={(event) => {
+              if (!isValidDate(event.currentTarget.value)) {
+                setSelectedDateDraft({
+                  key: productionFilterKey,
+                  value: selectedDate,
+                })
+              }
+            }}
+            onChange={(event) => {
+              const value = event.target.value
+              setSelectedDateDraft({
+                key: productionFilterKey,
+                value,
+              })
+              if (isValidDate(value)) {
+                setProductionFilters({ selectedDate: value })
+              }
+            }}
+            min="2000-01-01"
             type="date"
-            value={selectedDate}
+            value={selectedDateInput}
           />
         </label>
         <button
           className="button button-secondary"
           onClick={() => {
             changeReportPeriod('month')
+            setSelectedDateDraft({
+              key: productionFilterKey,
+              value: productionFilterDefaults.selectedDate,
+            })
             setProductionFilters(productionFilterDefaults)
           }}
           type="button"
