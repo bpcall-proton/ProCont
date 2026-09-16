@@ -16,6 +16,7 @@ interface Window {
     selectDriveDataFolder: () => Promise<string | null>
     openDriveDataFolder: () => Promise<string | null>
     loadDriveState: (storageId: string) => Promise<string | null>
+    listDriveStates: () => Promise<string[]>
     saveDriveState: (storageId: string, content: string) => Promise<void>
     selectDriveBackupFolder: () => Promise<string | null>
     saveDriveBackup: (

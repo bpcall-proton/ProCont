@@ -13,6 +13,22 @@ import {
 const HANDLE_DATABASE = 'fatture-incassi-pro-drive-folder'
 const HANDLE_STORE = 'handles'
 const HANDLE_KEY = 'primary'
+const DEVICE_ID_KEY = 'fip:drive-device-id'
+const SNAPSHOT_FORMAT = 'fip-drive-snapshot-v1'
+
+type RevisionClock = Record<string, number>
+
+interface DriveSnapshot {
+  format: typeof SNAPSHOT_FORMAT
+  deviceId: string
+  clock: RevisionClock
+  state: AppState
+}
+
+interface SnapshotCandidate {
+  state: AppState
+  clock: RevisionClock
+}
 
 function workspaceStorageId() {
   return 'workspace'
@@ -20,6 +36,22 @@ function workspaceStorageId() {
 
 function companyStorageId(companyId: string) {
   return `company-${companyId}`
+}
+
+function driveDeviceId() {
+  const stored = localStorage.getItem(DEVICE_ID_KEY)
+  if (stored && /^[a-zA-Z0-9_-]{1,80}$/.test(stored)) return stored
+  const created = crypto.randomUUID().replace(/-/g, '')
+  localStorage.setItem(DEVICE_ID_KEY, created)
+  return created
+}
+
+function deviceStorageId(deviceId: string) {
+  return `device-${deviceId}`
+}
+
+function validDeviceStorageId(storageId: string) {
+  return /^device-[a-zA-Z0-9_-]{1,80}$/.test(storageId)
 }
 
 export const DRIVE_WORKSPACE_FILENAME = `${workspaceStorageId()}.json`
@@ -111,6 +143,20 @@ async function readBrowserState(storageId: string) {
   }
 }
 
+async function listBrowserStates() {
+  const directory = await requireBrowserDriveHandle()
+  const storageIds: string[] = []
+  for await (const [filename, handle] of directory.entries()) {
+    if (
+      handle.kind === 'file' &&
+      /^[a-zA-Z0-9_-]{1,160}\.json$/.test(filename)
+    ) {
+      storageIds.push(filename.replace(/\.json$/, ''))
+    }
+  }
+  return storageIds
+}
+
 async function saveBrowserState(storageId: string, content: string) {
   const directory = await requireBrowserDriveHandle()
   const handle = await directory.getFileHandle(
@@ -147,10 +193,61 @@ export async function openDriveDataFolder() {
   return window.desktopApp.openDriveDataFolder()
 }
 
+function normalizedClock(value: unknown): RevisionClock | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const clock: RevisionClock = {}
+  for (const [deviceId, revision] of Object.entries(value)) {
+    if (
+      !/^[a-zA-Z0-9_-]{1,80}$/.test(deviceId) ||
+      typeof revision !== 'number' ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0
+    ) {
+      return null
+    }
+    clock[deviceId] = revision
+  }
+  return clock
+}
+
+function dominates(left: RevisionClock, right: RevisionClock) {
+  const deviceIds = new Set([...Object.keys(left), ...Object.keys(right)])
+  let isNewer = false
+  for (const deviceId of deviceIds) {
+    const leftRevision = left[deviceId] ?? 0
+    const rightRevision = right[deviceId] ?? 0
+    if (leftRevision < rightRevision) return false
+    if (leftRevision > rightRevision) isNewer = true
+  }
+  return isNewer
+}
+
+function mergeClocks(clocks: RevisionClock[]) {
+  const merged: RevisionClock = {}
+  clocks.forEach((clock) => {
+    Object.entries(clock).forEach(([deviceId, revision]) => {
+      merged[deviceId] = Math.max(merged[deviceId] ?? 0, revision)
+    })
+  })
+  return merged
+}
+
+function stateFingerprint(state: AppState) {
+  const content = JSON.stringify(state)
+  let hash = 2166136261
+  for (let index = 0; index < content.length; index += 1) {
+    hash ^= content.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${state.updatedAt}:${(hash >>> 0).toString(16)}`
+}
+
 export class DriveFolderRepository implements AppRepository {
   readonly mode = 'cloud' as const
   private latestKnownRevision: string | null = null
+  private latestKnownClock: RevisionClock = {}
   private operationQueue: Promise<void> = Promise.resolve()
+  private readonly deviceId = driveDeviceId()
 
   constructor(private readonly accountId: string) {}
 
@@ -170,8 +267,12 @@ export class DriveFolderRepository implements AppRepository {
     return readBrowserState(storageId)
   }
 
-  private async saveRaw(storageId: string, state: AppState) {
-    const content = JSON.stringify(state)
+  private async listStorageIds() {
+    if (window.desktopApp) return window.desktopApp.listDriveStates()
+    return listBrowserStates()
+  }
+
+  private async saveRaw(storageId: string, content: string) {
     if (window.desktopApp) {
       await window.desktopApp.saveDriveState(
         validStorageId(storageId),
@@ -193,11 +294,9 @@ export class DriveFolderRepository implements AppRepository {
     }
   }
 
-  private async loadSnapshot() {
+  private async loadCanonicalState() {
     const workspace = await this.loadState(workspaceStorageId())
-    if (!workspace) {
-      return { state: null, revision: null }
-    }
+    if (!workspace) return null
     const companyStates = await Promise.all(
       workspace.accounting.companies.map((company) =>
         this.loadState(companyStorageId(company.id), company.id),
@@ -224,15 +323,91 @@ export class DriveFolderRepository implements AppRepository {
         'Google Drive sta ancora allineando i file tra i PC. Attendi e ricarica i dati.',
       )
     }
-    return {
-      state: mergeCompanyStates(workspace, loadedCompanyStates),
-      revision: [
-        `workspace:${workspace.updatedAt}`,
-        ...workspace.accounting.companies.map(
-          (company, index) =>
-            `${company.id}:${loadedCompanyStates[index].updatedAt}`,
+    return mergeCompanyStates(workspace, loadedCompanyStates)
+  }
+
+  private async loadDeviceSnapshot(storageId: string) {
+    const raw = await this.loadRaw(storageId)
+    if (!raw) return null
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed) ||
+        !('format' in parsed) ||
+        parsed.format !== SNAPSHOT_FORMAT ||
+        !('deviceId' in parsed) ||
+        typeof parsed.deviceId !== 'string' ||
+        !validDeviceStorageId(deviceStorageId(parsed.deviceId)) ||
+        !('clock' in parsed) ||
+        !('state' in parsed)
+      ) {
+        return null
+      }
+      const clock = normalizedClock(parsed.clock)
+      const state = normalizeStoredState(parsed.state, this.accountId)
+      if (!clock || !state) return null
+      return { state, clock } satisfies SnapshotCandidate
+    } catch {
+      return null
+    }
+  }
+
+  private async loadSnapshot() {
+    const storageIds = await this.listStorageIds()
+    const deviceCandidates = (
+      await Promise.all(
+        storageIds
+          .filter(validDeviceStorageId)
+          .map((storageId) => this.loadDeviceSnapshot(storageId)),
+      )
+    ).filter(
+      (candidate): candidate is SnapshotCandidate => candidate !== null,
+    )
+    let canonicalState: AppState | null = null
+    let canonicalError: unknown = null
+    try {
+      canonicalState = await this.loadCanonicalState()
+    } catch (error) {
+      canonicalError = error
+    }
+    const candidates: SnapshotCandidate[] = [
+      ...deviceCandidates,
+      ...(canonicalState ? [{ state: canonicalState, clock: {} }] : []),
+    ]
+    if (candidates.length === 0) {
+      if (canonicalError) throw canonicalError
+      return { state: null, revision: null, clock: {} }
+    }
+    const currentCandidates = candidates.filter(
+      (candidate) =>
+        !candidates.some(
+          (other) =>
+            other !== candidate && dominates(other.clock, candidate.clock),
         ),
-      ].join('|'),
+    )
+    const candidatesByState = new Map<string, SnapshotCandidate[]>()
+    currentCandidates.forEach((candidate) => {
+      const fingerprint = stateFingerprint(candidate.state)
+      const matching = candidatesByState.get(fingerprint) ?? []
+      matching.push(candidate)
+      candidatesByState.set(fingerprint, matching)
+    })
+    if (candidatesByState.size > 1) {
+      throw new RepositoryUnavailableError(
+        'Sono state rilevate modifiche contemporanee da più PC. Nessun dato è stato sovrascritto: chiudi l’altro PC e scegli quale archivio mantenere.',
+      )
+    }
+    const [matchingCandidates] = candidatesByState.values()
+    const state = matchingCandidates[0].state
+    const clock = mergeClocks(
+      matchingCandidates.map((candidate) => candidate.clock),
+    )
+    return {
+      state,
+      revision: stateFingerprint(state),
+      clock,
     }
   }
 
@@ -250,38 +425,70 @@ export class DriveFolderRepository implements AppRepository {
     return this.runExclusive(async () => {
       const snapshot = await this.loadSnapshot()
       this.latestKnownRevision = snapshot.revision
+      this.latestKnownClock = snapshot.clock
       return snapshot.state
     })
+  }
+
+  private async saveDeviceSnapshot(state: AppState) {
+    const clock = {
+      ...this.latestKnownClock,
+      [this.deviceId]: (this.latestKnownClock[this.deviceId] ?? 0) + 1,
+    }
+    const snapshot: DriveSnapshot = {
+      format: SNAPSHOT_FORMAT,
+      deviceId: this.deviceId,
+      clock,
+      state,
+    }
+    await this.saveRaw(
+      deviceStorageId(this.deviceId),
+      JSON.stringify(snapshot),
+    )
+    this.latestKnownClock = clock
+    this.latestKnownRevision = stateFingerprint(state)
   }
 
   async save(state: AppState) {
     await this.runExclusive(async () => {
       await this.ensureCurrentVersion()
+      await this.saveDeviceSnapshot(state)
       const activeCompanyId = state.accounting.activeCompanyId
       if (activeCompanyId) {
         await this.saveRaw(
           companyStorageId(activeCompanyId),
-          createCompanyState(state, activeCompanyId),
+          JSON.stringify(createCompanyState(state, activeCompanyId)),
         )
       }
-      await this.saveRaw(workspaceStorageId(), createWorkspaceState(state))
-      this.latestKnownRevision = (await this.loadSnapshot()).revision
+      await this.saveRaw(
+        workspaceStorageId(),
+        JSON.stringify(createWorkspaceState(state)),
+      )
+      const snapshot = await this.loadSnapshot()
+      this.latestKnownRevision = snapshot.revision
+      this.latestKnownClock = snapshot.clock
     })
   }
 
   async saveAll(state: AppState) {
     await this.runExclusive(async () => {
       await this.ensureCurrentVersion()
+      await this.saveDeviceSnapshot(state)
       await Promise.all(
         state.accounting.companies.map((company) =>
           this.saveRaw(
             companyStorageId(company.id),
-            createCompanyState(state, company.id),
+            JSON.stringify(createCompanyState(state, company.id)),
           ),
         ),
       )
-      await this.saveRaw(workspaceStorageId(), createWorkspaceState(state))
-      this.latestKnownRevision = (await this.loadSnapshot()).revision
+      await this.saveRaw(
+        workspaceStorageId(),
+        JSON.stringify(createWorkspaceState(state)),
+      )
+      const snapshot = await this.loadSnapshot()
+      this.latestKnownRevision = snapshot.revision
+      this.latestKnownClock = snapshot.clock
     })
   }
 
@@ -301,10 +508,12 @@ export class DriveFolderRepository implements AppRepository {
         ) {
           lastRevision = snapshot.revision
           this.latestKnownRevision = snapshot.revision
+          this.latestKnownClock = snapshot.clock
           listener(snapshot.state)
         } else if (snapshot.state) {
           lastRevision = snapshot.revision
           this.latestKnownRevision = snapshot.revision
+          this.latestKnownClock = snapshot.clock
         }
       } catch {
         return
