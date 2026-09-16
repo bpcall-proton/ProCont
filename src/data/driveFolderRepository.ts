@@ -149,7 +149,7 @@ export async function openDriveDataFolder() {
 
 export class DriveFolderRepository implements AppRepository {
   readonly mode = 'cloud' as const
-  private latestKnownUpdatedAt: string | null = null
+  private latestKnownRevision: string | null = null
   private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly accountId: string) {}
@@ -193,9 +193,11 @@ export class DriveFolderRepository implements AppRepository {
     }
   }
 
-  private async loadAll() {
+  private async loadSnapshot() {
     const workspace = await this.loadState(workspaceStorageId())
-    if (!workspace) return null
+    if (!workspace) {
+      return { state: null, revision: null }
+    }
     const companyStates = await Promise.all(
       workspace.accounting.companies.map((company) =>
         this.loadState(companyStorageId(company.id), company.id),
@@ -210,16 +212,34 @@ export class DriveFolderRepository implements AppRepository {
         `Manca company-${company.id}.json per ${company.name}. Nessun archivio locale è stato usato al suo posto.`,
       )
     }
-    return mergeCompanyStates(workspace, companyStates as AppState[])
+    const loadedCompanyStates = companyStates as AppState[]
+    const activeCompanyIndex = workspace.accounting.companies.findIndex(
+      (company) => company.id === workspace.accounting.activeCompanyId,
+    )
+    if (
+      activeCompanyIndex !== -1 &&
+      loadedCompanyStates[activeCompanyIndex].updatedAt !== workspace.updatedAt
+    ) {
+      throw new RepositoryUnavailableError(
+        'Google Drive sta ancora allineando i file tra i PC. Attendi e ricarica i dati.',
+      )
+    }
+    return {
+      state: mergeCompanyStates(workspace, loadedCompanyStates),
+      revision: [
+        `workspace:${workspace.updatedAt}`,
+        ...workspace.accounting.companies.map(
+          (company, index) =>
+            `${company.id}:${loadedCompanyStates[index].updatedAt}`,
+        ),
+      ].join('|'),
+    }
   }
 
   private async ensureCurrentVersion() {
-    if (this.latestKnownUpdatedAt === null) return
-    const workspace = await this.loadState(workspaceStorageId())
-    if (
-      workspace &&
-      workspace.updatedAt !== this.latestKnownUpdatedAt
-    ) {
+    if (this.latestKnownRevision === null) return
+    const snapshot = await this.loadSnapshot()
+    if (snapshot.revision !== this.latestKnownRevision) {
       throw new Error(
         'I dati sono stati modificati da un altro PC. Ricarica prima di salvare.',
       )
@@ -228,9 +248,9 @@ export class DriveFolderRepository implements AppRepository {
 
   async load() {
     return this.runExclusive(async () => {
-      const state = await this.loadAll()
-      this.latestKnownUpdatedAt = state?.updatedAt ?? null
-      return state
+      const snapshot = await this.loadSnapshot()
+      this.latestKnownRevision = snapshot.revision
+      return snapshot.state
     })
   }
 
@@ -245,7 +265,7 @@ export class DriveFolderRepository implements AppRepository {
         )
       }
       await this.saveRaw(workspaceStorageId(), createWorkspaceState(state))
-      this.latestKnownUpdatedAt = state.updatedAt
+      this.latestKnownRevision = (await this.loadSnapshot()).revision
     })
   }
 
@@ -261,24 +281,30 @@ export class DriveFolderRepository implements AppRepository {
         ),
       )
       await this.saveRaw(workspaceStorageId(), createWorkspaceState(state))
-      this.latestKnownUpdatedAt = state.updatedAt
+      this.latestKnownRevision = (await this.loadSnapshot()).revision
     })
   }
 
   subscribe(listener: (state: AppState) => void) {
     let cancelled = false
     let loading = false
-    let lastUpdatedAt = this.latestKnownUpdatedAt
+    let lastRevision = this.latestKnownRevision
     const refresh = async () => {
       if (cancelled || loading) return
       loading = true
       try {
-        const state = await this.load()
-        if (state && lastUpdatedAt !== null && state.updatedAt !== lastUpdatedAt) {
-          lastUpdatedAt = state.updatedAt
-          listener(state)
-        } else if (state) {
-          lastUpdatedAt = state.updatedAt
+        const snapshot = await this.runExclusive(() => this.loadSnapshot())
+        if (
+          snapshot.state &&
+          lastRevision !== null &&
+          snapshot.revision !== lastRevision
+        ) {
+          lastRevision = snapshot.revision
+          this.latestKnownRevision = snapshot.revision
+          listener(snapshot.state)
+        } else if (snapshot.state) {
+          lastRevision = snapshot.revision
+          this.latestKnownRevision = snapshot.revision
         }
       } catch {
         return
@@ -286,10 +312,17 @@ export class DriveFolderRepository implements AppRepository {
         loading = false
       }
     }
-    const timer = window.setInterval(() => void refresh(), 30_000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    const timer = window.setInterval(() => void refresh(), 5_000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }
 }

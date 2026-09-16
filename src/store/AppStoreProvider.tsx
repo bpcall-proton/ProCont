@@ -103,13 +103,13 @@ function withTimestamp(state: AppState): AppState {
   }
 }
 
-function isNewerState(candidate: AppState, current: AppState) {
+function isOlderState(candidate: AppState, current: AppState) {
   const candidateTime = Date.parse(candidate.updatedAt)
   const currentTime = Date.parse(current.updatedAt)
   if (Number.isFinite(candidateTime) && Number.isFinite(currentTime)) {
-    return candidateTime > currentTime
+    return candidateTime < currentTime
   }
-  return candidate.updatedAt > current.updatedAt
+  return candidate.updatedAt < current.updatedAt
 }
 
 function modePreferenceKey(companyId: string) {
@@ -377,7 +377,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         saveQueue.current = saveQueue.current.then(async () => {
           if (
             activeRepository.current !== repository ||
-            !isNewerState(next, stateRef.current)
+            isOlderState(next, stateRef.current)
           ) {
             return
           }
@@ -914,7 +914,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         })
       },
       setDataMode: async (mode: DataMode) => {
-        if (mode === state.dataSettings.mode) return
+        if (mode === state.dataSettings.mode && mode !== 'cloud') return
         if (
           mode === 'cloud' &&
           driveFolderLocation === null
@@ -934,11 +934,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           await saveQueue.current
           const stored = await destination.load()
           if (stored) {
-            migrated = withTimestamp({
+            migrated = {
               ...stored,
               dataSettings: { ...stored.dataSettings, mode },
-            })
-            if (mode === 'cloud') {
+            }
+            if (mode === 'cloud' && mode !== state.dataSettings.mode) {
               if (window.desktopApp) {
                 await window.desktopApp.backupLocalStates()
               }
@@ -965,7 +965,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           writeCloudRecovery(companyId, false)
           applyState(migrated)
           setSyncState('saved')
-          setSyncMessage('Modalità dati aggiornata')
+          setSyncMessage(
+            mode === state.dataSettings.mode
+              ? 'Dati Google Drive ricaricati'
+              : 'Modalità dati aggiornata',
+          )
         } catch (error) {
           syncRecovery.current = 'retry-save'
           writeCloudRecovery(companyId, false)
