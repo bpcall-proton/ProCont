@@ -243,7 +243,7 @@ export function SettingsPage() {
         ? 'Pronto, modalità locale'
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
-          : 'Sincronizzato'
+          : 'File Drive locale aggiornato'
 
   async function runLocalBackup() {
     if (!window.desktopApp) return
@@ -906,7 +906,9 @@ export function SettingsPage() {
                 <CloudIcon size={26} />
               </span>
               <strong>Google Drive</strong>
-              <span>Usa direttamente i JSON nella cartella sincronizzata.</span>
+              <span>
+                Usa i JSON nella cartella sincronizzata. Clicca per ricaricarli.
+              </span>
             </button>
           </div>
           {!cloudAvailable && (
@@ -1015,7 +1017,9 @@ export function SettingsPage() {
                   <strong>{company.name}</strong>
                   <small>
                     {company.id === state.accounting.activeCompanyId
-                      ? 'Azienda attiva'
+                      ? `Azienda attiva · dati ${new Date(
+                          state.updatedAt,
+                        ).toLocaleString('it-IT')}`
                       : 'Archivio azienda'}
                   </small>
                 </span>

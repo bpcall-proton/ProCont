@@ -11,9 +11,11 @@ export function DataModeBadge({ mode }: { mode: DataMode }) {
 }
 
 export function SyncBadge({
+  mode,
   state,
   message,
 }: {
+  mode: DataMode
   state: SyncState
   message: string | null
 }) {
@@ -27,7 +29,7 @@ export function SyncBadge({
   const label = {
     idle: 'Pronto',
     saving: 'Salvataggio',
-    saved: 'Sincronizzato',
+    saved: mode === 'cloud' ? 'Drive aggiornato' : 'Salvato',
     error: errorLabel,
   }[state]
   return (

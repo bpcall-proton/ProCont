@@ -336,7 +336,11 @@ function Workspace() {
             </span>
           </div>
           <div className="topbar-status">
-            <SyncBadge message={syncMessage} state={syncState} />
+            <SyncBadge
+              message={syncMessage}
+              mode={state.dataSettings.mode}
+              state={syncState}
+            />
             {syncState === 'error' && (
               <button
                 className="sync-retry-button"
