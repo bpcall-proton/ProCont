@@ -416,7 +416,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 11
+  schemaVersion: 12
   company: Company
   stores: Store[]
   sellers: Seller[]

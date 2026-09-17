@@ -1940,6 +1940,9 @@ function ContactsPanel() {
     useState(false)
   const [sellerAutoSelect, setSellerAutoSelect] = useState(false)
   const [sellerOverviewPriority, setSellerOverviewPriority] = useState('')
+  const [sellerDeleteError, setSellerDeleteError] = useState<string | null>(
+    null,
+  )
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(
     null,
   )
@@ -1959,6 +1962,7 @@ function ContactsPanel() {
 
   function addSeller(event: FormEvent) {
     event.preventDefault()
+    setSellerDeleteError(null)
     const name = sellerName.trim()
     const phone = sellerPhone.trim()
     const overviewPriority = Math.max(
@@ -2064,6 +2068,7 @@ function ContactsPanel() {
   }
 
   function editSeller(seller: AccountingSeller) {
+    setSellerDeleteError(null)
     setEditingSellerId(seller.id)
     setSellerName(seller.name)
     setSellerPhone(seller.phone)
@@ -2085,6 +2090,36 @@ function ContactsPanel() {
     setSellerProductionCostRecipient(false)
     setSellerAutoSelect(false)
     setSellerOverviewPriority('')
+  }
+
+  function deleteSeller(seller: AccountingSeller) {
+    const linkedProducts = data.productionSettings.filter(
+      (settings) =>
+        settings.workerIds.includes(seller.id) ||
+        settings.sellerIds.includes(seller.id),
+    ).length
+    const linkedRates = data.productionWorkerRates.filter(
+      (rate) => rate.sellerId === seller.id,
+    ).length
+    const linkedWorkEntries = data.productionWorkEntries.filter(
+      (entry) => entry.sellerId === seller.id,
+    ).length
+    if (linkedProducts || linkedRates || linkedWorkEntries) {
+      setSellerDeleteError(
+        `${seller.name} non è stata eliminata: è collegata a ${linkedProducts} prodotti, ${linkedRates} tariffe e ${linkedWorkEntries} registrazioni di lavoro. Riassegna prima questi dati in Costo prodotto e Stipendi produzione.`,
+      )
+      return
+    }
+    setSellerDeleteError(null)
+    updateAccounting((current) => ({
+      ...current,
+      sellers: current.sellers.filter((item) => item.id !== seller.id),
+      suppliers: current.suppliers.map((supplier) =>
+        supplier.linkedSellerId === seller.id
+          ? { ...supplier, linkedSellerId: null }
+          : supplier,
+      ),
+    }))
   }
 
   function addSupplier(event: FormEvent) {
@@ -2243,10 +2278,13 @@ function ContactsPanel() {
             {editingSellerId ? <button type="button" onClick={cancelSellerEdit}>Annulla</button> : null}
           </div>
         </form>
+        {sellerDeleteError && (
+          <p className="form-error">{sellerDeleteError}</p>
+        )}
         <div className="record-list">{data.sellers.map((seller) => {
           const takings = data.takings.filter((item) => item.sellerId === seller.id)
           const total = takings.reduce((sum, item) => sum + realTaking(item), 0)
-          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.pointOfSaleSeller ? 'Venditrice reale del punto vendita' : 'Personale produzione / altro'} · {seller.productionCostDistributor ? 'Distributore costi produzione' : seller.productionCostRecipient ? 'Riceve quota costi produzione' : 'Nessuna quota produzione'} · {seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, sellers: current.sellers.filter((item) => item.id !== seller.id), suppliers: current.suppliers.map((supplier) => supplier.linkedSellerId === seller.id ? { ...supplier, linkedSellerId: null } : supplier) }))} /></span></div>
+          return <div className="record-card" key={seller.id}><span><strong>{seller.name}</strong><small>{seller.phone || 'Nessun telefono'} · {takings.length} incassi</small><small>{seller.pointOfSaleSeller ? 'Venditrice reale del punto vendita' : 'Personale produzione / altro'} · {seller.productionCostDistributor ? 'Distributore costi produzione' : seller.productionCostRecipient ? 'Riceve quota costi produzione' : 'Nessuna quota produzione'} · {seller.overviewPriority > 0 ? `Priorità panoramica: ${seller.overviewPriority}` : 'Nessuna priorità'}{seller.autoSelect ? ' · selezione automatica' : ''}</small></span><span><strong>{money(total)}</strong><button type="button" onClick={() => editSeller(seller)}>Modifica</button><RowDeleteButton onConfirm={() => deleteSeller(seller)} /></span></div>
         })}</div>
       </article>
       <article className="panel">

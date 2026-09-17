@@ -92,6 +92,37 @@ function isGeneratedStoreSeller(seller: AccountingSeller) {
   )
 }
 
+const legacyProductionWorkerNames = new Map([
+  [
+    'accounting-seller-02a2ddcb-8884-4885-b17e-17eb2259834c',
+    'DANIELA',
+  ],
+  [
+    'accounting-seller-98ef4d91-c5fe-4a5b-87eb-bc7f0597c4ce',
+    'ANA',
+  ],
+])
+
+function normalizedName(value: string) {
+  return value.trim().toLocaleLowerCase()
+}
+
+function productionWorkerSellerId(
+  sellerId: string,
+  companyId: string,
+  sellers: AccountingSeller[],
+) {
+  if (sellers.some((seller) => seller.id === sellerId)) return sellerId
+  const legacyName = legacyProductionWorkerNames.get(sellerId)
+  if (!legacyName) return sellerId
+  const matches = sellers.filter(
+    (seller) =>
+      seller.companyId === companyId &&
+      normalizedName(seller.name) === normalizedName(legacyName),
+  )
+  return matches.length === 1 ? matches[0].id : sellerId
+}
+
 function mapPayment(value: JsonRecord): InvoicePayment {
   return {
     id: text(value.id, crypto.randomUUID()),
@@ -532,7 +563,8 @@ export function normalizeStoredState(
       value.schemaVersion === 8 ||
       value.schemaVersion === 9 ||
       value.schemaVersion === 10 ||
-      value.schemaVersion === 11) &&
+      value.schemaVersion === 11 ||
+      value.schemaVersion === 12) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -649,11 +681,20 @@ export function normalizeStoredState(
         .map((expense) => expense.sellerId)
         .filter((sellerId): sellerId is string => Boolean(sellerId)),
       ...records(accounting.productionSettings).flatMap((settings) =>
-        Array.isArray(settings.sellerIds)
-          ? settings.sellerIds.filter(
-              (sellerId): sellerId is string => typeof sellerId === 'string',
-            )
-          : [],
+        [
+          ...(Array.isArray(settings.sellerIds)
+            ? settings.sellerIds.filter(
+                (sellerId): sellerId is string =>
+                  typeof sellerId === 'string',
+              )
+            : []),
+          ...(Array.isArray(settings.workerIds)
+            ? settings.workerIds.filter(
+                (sellerId): sellerId is string =>
+                  typeof sellerId === 'string',
+              )
+            : []),
+        ],
       ),
       ...records(accounting.productionWorkerRates)
         .map((settings) => settings.sellerId)
@@ -672,9 +713,76 @@ export function normalizeStoredState(
         activeAccountingSellerIds.has(seller.id) ||
         referencedAccountingSellerIds.has(seller.id),
     )
+    const normalizedAccountingSellers = retainedAccountingSellers.map(
+      (seller) => ({
+        ...seller,
+        companyId: seller.companyId || fallbackCompanyId,
+        pointOfSaleSeller:
+          seller.pointOfSaleSeller ??
+          activeAccountingSellerIds.has(seller.id),
+        productionCostDistributor:
+          seller.productionCostDistributor ?? false,
+        productionCostRecipient:
+          seller.productionCostRecipient ?? false,
+        autoSelect: seller.autoSelect ?? false,
+        overviewPriority: positiveInteger(seller.overviewPriority, 0),
+      }),
+    )
+    const productionSettings = records(accounting.productionSettings).map(
+      (settings) => {
+        const normalized = mapProductionSettings(
+          settings,
+          fallbackCompanyId,
+          expenses,
+        )
+        return {
+          ...normalized,
+          workerIds: [
+            ...new Set(
+              normalized.workerIds.map((sellerId) =>
+                productionWorkerSellerId(
+                  sellerId,
+                  normalized.companyId,
+                  normalizedAccountingSellers,
+                ),
+              ),
+            ),
+          ],
+        }
+      },
+    )
+    const productionWorkerRates = records(
+      accounting.productionWorkerRates,
+    ).map((settings) => {
+      const normalized = mapProductionWorkerRate(
+        settings,
+        fallbackCompanyId,
+      )
+      return {
+        ...normalized,
+        sellerId: productionWorkerSellerId(
+          normalized.sellerId,
+          normalized.companyId,
+          normalizedAccountingSellers,
+        ),
+      }
+    })
+    const productionWorkEntries = records(
+      accounting.productionWorkEntries,
+    ).map((entry) => {
+      const normalized = mapProductionWorkEntry(entry, fallbackCompanyId)
+      return {
+        ...normalized,
+        sellerId: productionWorkerSellerId(
+          normalized.sellerId,
+          normalized.companyId,
+          normalizedAccountingSellers,
+        ),
+      }
+    })
     return {
       ...state,
-      schemaVersion: 11,
+      schemaVersion: 12,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -726,19 +834,7 @@ export function normalizeStoredState(
           ? accounting.activeCompanyId
           : accounting.companies[0]?.id ?? fallbackCompanyId,
         invoices,
-        sellers: retainedAccountingSellers.map((seller) => ({
-          ...seller,
-          companyId: seller.companyId || fallbackCompanyId,
-          pointOfSaleSeller:
-            seller.pointOfSaleSeller ??
-            activeAccountingSellerIds.has(seller.id),
-          productionCostDistributor:
-            seller.productionCostDistributor ?? false,
-          productionCostRecipient:
-            seller.productionCostRecipient ?? false,
-          autoSelect: seller.autoSelect ?? false,
-          overviewPriority: positiveInteger(seller.overviewPriority, 0),
-        })),
+        sellers: normalizedAccountingSellers,
         suppliers: (accounting.suppliers ?? []).map((supplier) => ({
           ...supplier,
           companyId: supplier.companyId || fallbackCompanyId,
@@ -768,10 +864,7 @@ export function normalizeStoredState(
           notes: product.notes ?? '',
         })),
         expenses,
-        productionSettings: records(accounting.productionSettings).map(
-          (settings) =>
-            mapProductionSettings(settings, fallbackCompanyId, expenses),
-        ),
+        productionSettings,
         productionEntries: records(accounting.productionEntries).map(
           (entry) => mapProductionEntry(entry, fallbackCompanyId),
         ),
@@ -780,16 +873,8 @@ export function normalizeStoredState(
         ).map((settings) =>
           mapProductionViewSettings(settings, fallbackCompanyId),
         ),
-        productionWorkerRates: records(
-          accounting.productionWorkerRates,
-        ).map((settings) =>
-          mapProductionWorkerRate(settings, fallbackCompanyId),
-        ),
-        productionWorkEntries: records(
-          accounting.productionWorkEntries,
-        ).map((entry) =>
-          mapProductionWorkEntry(entry, fallbackCompanyId),
-        ),
+        productionWorkerRates,
+        productionWorkEntries,
         verificationSettings: records(accounting.verificationSettings).map(
           (settings) => ({
             companyId: text(settings.companyId, fallbackCompanyId),
