@@ -190,9 +190,12 @@ export function maturedDatesForPeriod(
   rangeEnd: string,
 ) {
   const boundedEnd = rangeEnd > today() ? today() : rangeEnd
-  if (rangeStart > boundedEnd) return new Set<string>()
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(rangeStart)
+    ? rangeStart
+    : boundedEnd
+  if (start > boundedEnd) return new Set<string>()
   const dates = new Set<string>()
-  const cursor = new Date(`${rangeStart}T00:00:00Z`)
+  const cursor = new Date(`${start}T00:00:00Z`)
   const last = new Date(`${boundedEnd}T00:00:00Z`)
   while (cursor <= last) {
     dates.add(cursor.toISOString().slice(0, 10))

@@ -863,7 +863,21 @@ export function ReportsPage() {
     (sum, item) => sum + item.unregisteredGoods,
     0,
   )
-  const companyMaturedDates = maturedDatesForPeriod(range.start, range.end)
+  const companyCostStart =
+    range.start ||
+    [
+      ...source.rentals,
+      ...source.accountantInvoices,
+      ...source.expenses,
+    ]
+      .map((item) => item.date)
+      .filter(Boolean)
+      .sort()[0] ||
+    today()
+  const companyMaturedDates = maturedDatesForPeriod(
+    companyCostStart,
+    range.end,
+  )
   const companyRentalCosts = monthlyCostsForMaturedDates(
     source.rentals,
     companyMaturedDates,
