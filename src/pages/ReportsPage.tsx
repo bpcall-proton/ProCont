@@ -8,17 +8,17 @@ import {
   addDays,
   allocatedExpense,
   bestContactNameMatch,
-  expenseForWorkedDates,
+  expenseForMaturedDates,
   invoiceDueState,
   invoiceRemaining,
   money,
-  monthlyCostsForWorkedDates,
+  monthlyCostsForMaturedDates,
   officialTaking,
   realTaking,
   roundMoney,
   sellerColorClass,
   today,
-  workedDatesForPeriod,
+  maturedDatesForPeriod,
 } from '../domain/accounting'
 import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
@@ -684,7 +684,7 @@ function healthMetricDetails({
     },
     'health-margin': {
       title: 'Margine netto',
-      note: 'Mostra quanto resta dell’incasso reale dopo merce venduta e costi fissi maturati sui giorni lavorati.',
+      note: 'Mostra quanto resta dell’incasso reale dopo merce venduta e costi fissi maturati sui giorni trascorsi.',
       value: health.netMargin,
       kind: 'percentage',
       tone: metricTone(minimumHealthTone(health.netMargin, 10, 0)),
@@ -863,19 +863,15 @@ export function ReportsPage() {
     (sum, item) => sum + item.unregisteredGoods,
     0,
   )
-  const companyWorkedDates = workedDatesForPeriod(
-    data.takings,
-    range.start,
-    range.end,
-  )
-  const companyRentalCosts = monthlyCostsForWorkedDates(
+  const companyMaturedDates = maturedDatesForPeriod(range.start, range.end)
+  const companyRentalCosts = monthlyCostsForMaturedDates(
     source.rentals,
-    companyWorkedDates,
+    companyMaturedDates,
     (item) => item.property.trim().toLocaleLowerCase() || item.id,
   )
-  const companyAccountantCosts = monthlyCostsForWorkedDates(
+  const companyAccountantCosts = monthlyCostsForMaturedDates(
     source.accountantInvoices,
-    companyWorkedDates,
+    companyMaturedDates,
     (item) => item.description.trim().toLocaleLowerCase() || item.id,
   )
   const rents = companyRentalCosts.reduce(
@@ -889,11 +885,11 @@ export function ReportsPage() {
   const expenseCosts = data.expenses.reduce(
     (sum, item) =>
       sum +
-      expenseForWorkedDates(
+      expenseForMaturedDates(
         item,
         range.start,
         range.end,
-        companyWorkedDates,
+        companyMaturedDates,
       ),
     0,
   )
@@ -906,11 +902,11 @@ export function ReportsPage() {
       .reduce(
         (sum, item) =>
           sum +
-          expenseForWorkedDates(
+          expenseForMaturedDates(
             item,
             range.start,
             range.end,
-            companyWorkedDates,
+            companyMaturedDates,
           ),
         0,
       ),
@@ -919,11 +915,11 @@ export function ReportsPage() {
       .reduce(
         (sum, item) =>
           sum +
-          expenseForWorkedDates(
+          expenseForMaturedDates(
             item,
             range.start,
             range.end,
-            companyWorkedDates,
+            companyMaturedDates,
           ),
         0,
       ),
@@ -932,11 +928,11 @@ export function ReportsPage() {
       .reduce(
         (sum, item) =>
           sum +
-          expenseForWorkedDates(
+          expenseForMaturedDates(
             item,
             range.start,
             range.end,
-            companyWorkedDates,
+            companyMaturedDates,
           ),
         0,
       ),
@@ -945,11 +941,11 @@ export function ReportsPage() {
       .reduce(
         (sum, item) =>
           sum +
-          expenseForWorkedDates(
+          expenseForMaturedDates(
             item,
             range.start,
             range.end,
-            companyWorkedDates,
+            companyMaturedDates,
           ),
         0,
       ),
@@ -960,7 +956,9 @@ export function ReportsPage() {
     const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
       knownSellerIds.has(sellerId),
     )
-    return validSellerIds.length > 0 ? validSellerIds : allSellerIds
+    return item.allocationSellerIds.length > 0
+      ? validSellerIds
+      : allSellerIds
   }
   const allocatedSellerCost = (
     value: number,
@@ -990,11 +988,11 @@ export function ReportsPage() {
           (sum, item) =>
             sum +
             allocatedSellerCost(
-              expenseForWorkedDates(
+              expenseForMaturedDates(
                 item,
                 range.start,
                 range.end,
-                companyWorkedDates,
+                companyMaturedDates,
               ),
               item,
               seller.id,
@@ -1021,12 +1019,19 @@ export function ReportsPage() {
           item.sellerId && knownSellerIds.has(item.sellerId)
             ? item.sellerId
             : bestContactNameMatch(item.sellerName, source.sellers)?.id
-        return (
-          salarySellerId === seller.id &&
-          inRange(item.date, range.start, range.end)
-        )
+        return salarySellerId === seller.id
       })
-      .reduce((sum, item) => sum + item.amount, 0)
+      .reduce(
+        (sum, item) =>
+          sum +
+          expenseForMaturedDates(
+            item,
+            range.start,
+            range.end,
+            companyMaturedDates,
+          ),
+        0,
+      )
     return {
       rent,
       taxes,
@@ -1523,24 +1528,24 @@ export function ReportsPage() {
       date: item.date,
       category: 'Affitto',
       description: item.property || item.tenant || 'Affitto',
-      reference: `${item.period || 'Periodo non indicato'} · quota sui giorni lavorati`,
+      reference: `${item.period || 'Periodo non indicato'} · quota sui giorni maturati`,
       amount,
     })),
     ...companyAccountantCosts.map(({ item, amount }) => ({
       date: item.date,
       category: 'Contabile',
       description: item.description || 'Fattura contabile',
-      reference: `${item.number || 'Senza numero'} · quota sui giorni lavorati`,
+      reference: `${item.number || 'Senza numero'} · quota sui giorni maturati`,
       amount,
     })),
     ...data.expenses
       .map((item) => ({
         item,
-        allocated: expenseForWorkedDates(
+        allocated: expenseForMaturedDates(
           item,
           range.start,
           range.end,
-          companyWorkedDates,
+          companyMaturedDates,
         ),
       }))
       .filter(({ allocated }) => allocated !== 0)
@@ -1555,7 +1560,7 @@ export function ReportsPage() {
         description: item.description || item.sellerName || 'Spesa',
         reference:
           item.recurrence === 'monthly'
-            ? 'Importo mensile ripartito sui giorni lavorati'
+            ? 'Importo mensile ripartito sui giorni maturati'
             : item.notes || 'Spesa del periodo',
         amount: allocated,
       })),
@@ -1684,14 +1689,14 @@ export function ReportsPage() {
           label: 'Affitti maturati',
           value: rents,
           kind: 'money',
-          reference: `Importi mensili ripartiti su ${companyWorkedDates.size} giorni con incassi.`,
+          reference: `Importi mensili ripartiti su ${companyMaturedDates.size} giorni maturati.`,
           operation: 'Somma',
         },
         {
           label: 'Fatture contabile maturate',
           value: accountant,
           kind: 'money',
-          reference: `Quote mensili riferite ai ${companyWorkedDates.size} giorni lavorati.`,
+          reference: `Quote mensili riferite ai ${companyMaturedDates.size} giorni maturati.`,
           operation: 'Somma',
         },
         {
@@ -2426,7 +2431,7 @@ export function ReportsPage() {
             date: item.date,
             category: 'Quota affitto',
             description: item.property || item.tenant || 'Affitto',
-            reference: `${money(item.total)} mensili · ${companyWorkedDates.size} giorni lavorati aziendali · ripartito tra ${allocationTargets(item).length} venditori`,
+            reference: `${money(item.total)} mensili · ${companyMaturedDates.size} giorni maturati · ripartito tra ${allocationTargets(item).length} venditori`,
             amount: allocated,
           }
         })
@@ -2437,7 +2442,7 @@ export function ReportsPage() {
             date: item.date,
             category: 'Quota contabile',
             description: item.description || 'Fattura contabile',
-            reference: `${money(item.total)} mensili · ${companyWorkedDates.size} giorni lavorati aziendali · ripartito tra ${allocationTargets(item).length} venditori`,
+            reference: `${money(item.total)} mensili · ${companyMaturedDates.size} giorni maturati · ripartito tra ${allocationTargets(item).length} venditori`,
             amount: allocatedSellerCost(
               amount,
               item,
@@ -2454,18 +2459,22 @@ export function ReportsPage() {
               : bestContactNameMatch(item.sellerName, source.sellers)?.id
           const isSalary =
             item.type === 'stipendio' &&
-            salarySellerId === selectedSeller.id &&
-            inRange(item.date, range.start, range.end)
+            salarySellerId === selectedSeller.id
           const allocated = isSalary
-            ? item.amount
+            ? expenseForMaturedDates(
+                item,
+                range.start,
+                range.end,
+                companyMaturedDates,
+              )
             : item.type === 'stipendio'
               ? 0
               : allocatedSellerCost(
-                  expenseForWorkedDates(
+                  expenseForMaturedDates(
                     item,
                     range.start,
                     range.end,
-                    companyWorkedDates,
+                    companyMaturedDates,
                   ),
                   item,
                   selectedSeller.id,
@@ -2686,7 +2695,7 @@ export function ReportsPage() {
             label: 'Quota affitto',
             value: sellerCosts.rent,
             kind: 'money',
-            reference: `${companyWorkedDates.size} giorni lavorati aziendali.`,
+            reference: `${companyMaturedDates.size} giorni maturati nel periodo.`,
             operation: 'Somma',
           },
           {
@@ -3041,7 +3050,7 @@ export function ReportsPage() {
               }
               health={sellerHealth}
               title={`Controllo del punto ${selectedSeller.name}`}
-              note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati dall'azienda. La quota costo del Venit trasferito è applicata solo alla salute statistica.`}
+              note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyMaturedDates.size} giorni trascorsi nel periodo. La quota costo del Venit trasferito è applicata solo alla salute statistica.`}
             onSelect={(metric) =>
               setCalculation({
                 scope: 'seller',
@@ -3704,7 +3713,7 @@ export function ReportsPage() {
         }
         health={companyHealth}
         title="Indice salute aziendale"
-        note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyWorkedDates.size} giorni effettivamente lavorati. Cash e POS generano soltanto alert fiscali.`}
+        note={`La valutazione economica usa incasso reale, acquisti e costi maturati su ${companyMaturedDates.size} giorni trascorsi nel periodo. Cash e POS generano soltanto alert fiscali.`}
         onSelect={(metric) =>
           setCalculation({ scope: 'company', metric })
         }

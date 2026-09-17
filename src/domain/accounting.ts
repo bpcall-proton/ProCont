@@ -185,26 +185,27 @@ export function allocatedExpense(
   return allocated
 }
 
-export function workedDatesForPeriod(
-  takings: Array<{ date: string }>,
+export function maturedDatesForPeriod(
   rangeStart: string,
   rangeEnd: string,
 ) {
-  return new Set(
-    takings
-      .filter(
-        (taking) =>
-          taking.date >= rangeStart && taking.date <= rangeEnd,
-      )
-      .map((taking) => taking.date),
-  )
+  const boundedEnd = rangeEnd > today() ? today() : rangeEnd
+  if (rangeStart > boundedEnd) return new Set<string>()
+  const dates = new Set<string>()
+  const cursor = new Date(`${rangeStart}T00:00:00Z`)
+  const last = new Date(`${boundedEnd}T00:00:00Z`)
+  while (cursor <= last) {
+    dates.add(cursor.toISOString().slice(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return dates
 }
 
-export function monthlyCostsForWorkedDates<
+export function monthlyCostsForMaturedDates<
   T extends { id: string; date: string; total: number },
 >(
   items: T[],
-  workedDates: Set<string>,
+  maturedDates: Set<string>,
   costKey: (item: T) => string,
 ) {
   const costs = new Map<string, { item: T; amount: number }>()
@@ -212,8 +213,8 @@ export function monthlyCostsForWorkedDates<
     (left, right) =>
       left.date.localeCompare(right.date) || left.id.localeCompare(right.id),
   )
-  const sortedWorkedDates = [...workedDates].sort()
-  sortedWorkedDates.forEach((date) => {
+  const sortedMaturedDates = [...maturedDates].sort()
+  sortedMaturedDates.forEach((date) => {
     const activeItems = new Map<string, T>()
     orderedItems.forEach((item) => {
       if (item.date.slice(0, 7) <= date.slice(0, 7)) {
@@ -238,11 +239,11 @@ export function monthlyCostsForWorkedDates<
   }))
 }
 
-export function expenseForWorkedDates(
+export function expenseForMaturedDates(
   expense: AccountingExpense,
   rangeStart: string,
   rangeEnd: string,
-  workedDates: Set<string>,
+  maturedDates: Set<string>,
 ) {
   if (expense.recurrence !== 'monthly') {
     return expense.date >= rangeStart && expense.date <= rangeEnd
@@ -250,7 +251,7 @@ export function expenseForWorkedDates(
       : 0
   }
   return roundMoney(
-    [...workedDates].reduce((sum, date) => {
+    [...maturedDates].reduce((sum, date) => {
       if (
         date < rangeStart ||
         date > rangeEnd ||

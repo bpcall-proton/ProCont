@@ -222,6 +222,35 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
 
   const results = (() => {
     const inRange = (date: string) => date >= range.start && date <= range.end
+    const productionRecipients = (product: {
+      sellerIds: string[]
+      workerIds: string[]
+    }) =>
+      new Set([
+        ...configuredIds(product.sellerIds),
+        ...configuredIds(product.workerIds),
+      ])
+    const productsForRental = (rental: {
+      allocationSellerIds: string[]
+    }) => {
+      if (rental.allocationSellerIds.length === 0) {
+        return data.productionSettings
+      }
+      const matchingProducts = data.productionSettings.filter((product) => {
+        const recipients = productionRecipients(product)
+        return rental.allocationSellerIds.some((sellerId) =>
+          recipients.has(sellerId),
+        )
+      })
+      if (matchingProducts.length > 0) return matchingProducts
+      const allocatedSellers = data.sellers.filter((seller) =>
+        rental.allocationSellerIds.includes(seller.id),
+      )
+      return allocatedSellers.length > 0 &&
+        allocatedSellers.every((seller) => !seller.pointOfSaleSeller)
+        ? data.productionSettings
+        : []
+    }
     const products = showingAllProducts
         ? data.productionSettings
         : data.productionSettings.filter(
@@ -344,6 +373,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         ]
       })
       const rentals = data.rentals
+        .filter((rental) =>
+          productsForRental(rental).some(
+            (configuredProduct) => configuredProduct.id === product.id,
+          ),
+        )
         .map((rental) => ({
           rental,
           amount: roundMoney(
@@ -352,7 +386,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               rental.date,
               range.start,
               range.end,
-            ) / Math.max(1, data.productionSettings.length),
+            ) / Math.max(1, productsForRental(rental).length),
           ),
         }))
         .filter((item) => item.amount > 0)
@@ -414,6 +448,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         ),
     )
     const uniqueRentals = data.rentals
+      .filter((rental) =>
+        productsForRental(rental).some((product) =>
+          products.some((selectedProduct) => selectedProduct.id === product.id),
+        ),
+      )
       .map((rental) => ({
         rental,
         amount: allocatedMonthlyCost(
