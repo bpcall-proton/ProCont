@@ -4,15 +4,15 @@ import { TrafficLight } from '../components/TrafficLight'
 import {
   activeAccounting,
   bestContactNameMatch,
-  expenseForWorkedDates,
+  expenseForMaturedDates,
   invoiceRemaining,
   money,
-  monthlyCostsForWorkedDates,
+  monthlyCostsForMaturedDates,
   officialTaking,
   realTaking,
   roundMoney,
   today,
-  workedDatesForPeriod,
+  maturedDatesForPeriod,
 } from '../domain/accounting'
 import { useStoredFilters } from '../hooks/useStoredFilters'
 import { useAppStore } from '../store/AppStoreContext'
@@ -50,6 +50,7 @@ type SellerMetricKey =
   | 'cash-residual'
   | 'revenue-acquired'
   | 'revenue-ceded'
+  | 'real-result'
   | 'stock-residual'
 
 interface SellerMetricDetail {
@@ -212,30 +213,29 @@ export function DashboardPage() {
     (taking) =>
       taking.date >= currentYearStart && taking.date <= currentYearEnd,
   )
-  const annualWorkedDates = workedDatesForPeriod(
-    annualTakings,
+  const annualMaturedDates = maturedDatesForPeriod(
     currentYearStart,
     currentYearEnd,
   )
-  const annualRentalCosts = monthlyCostsForWorkedDates(
+  const annualRentalCosts = monthlyCostsForMaturedDates(
     accounting.rentals,
-    annualWorkedDates,
+    annualMaturedDates,
     (rental) => rental.property.trim().toLocaleLowerCase() || rental.id,
   )
-  const annualAccountantCosts = monthlyCostsForWorkedDates(
+  const annualAccountantCosts = monthlyCostsForMaturedDates(
     accounting.accountantInvoices,
-    annualWorkedDates,
+    annualMaturedDates,
     (invoice) =>
       invoice.description.trim().toLocaleLowerCase() || invoice.id,
   )
   const annualExpenseCosts = accounting.expenses
     .map((expense) => ({
       expense,
-      amount: expenseForWorkedDates(
+      amount: expenseForMaturedDates(
         expense,
         currentYearStart,
         currentYearEnd,
-        annualWorkedDates,
+        annualMaturedDates,
       ),
     }))
     .filter(({ amount }) => amount !== 0)
@@ -533,14 +533,14 @@ export function DashboardPage() {
       date: item.date,
       category: 'Affitto maturato',
       description: item.property || item.tenant || 'Affitto',
-      reference: `Quota su ${annualWorkedDates.size} giorni lavorati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
       amount: -amount,
     })),
     ...annualAccountantCosts.map(({ item, amount }) => ({
       date: item.date,
       category: 'Contabile maturato',
       description: item.description || 'Fattura contabile',
-      reference: `Quota su ${annualWorkedDates.size} giorni lavorati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
       amount: -amount,
     })),
     ...annualExpenseCosts.map(({ expense, amount }) => ({
@@ -549,7 +549,7 @@ export function DashboardPage() {
       description: expense.description || expense.type,
       reference:
         expense.recurrence === 'monthly'
-          ? `Quota su ${annualWorkedDates.size} giorni lavorati`
+          ? `Quota su ${annualMaturedDates.size} giorni maturati`
           : expense.notes || 'Spesa effettiva',
       amount: -amount,
     })),
@@ -698,7 +698,7 @@ export function DashboardPage() {
     },
     'annual-real-balance': {
       title: `Bilancio reale annuale ${currentYear}`,
-      note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − spese maturate sui giorni lavorati. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
+      note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − spese maturate sui giorni trascorsi. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
       value: annualRealBalance,
       tone: annualBalanceTone,
       rows: annualBalanceRows,
@@ -748,6 +748,278 @@ export function DashboardPage() {
       },
     ]
   })
+  const sellerResultEnd = sellerAsOfDate || today()
+  const sellerResultStart = `${sellerResultEnd.slice(0, 7)}-01`
+  const sellerResultInvoices = sellerInvoices.filter(
+    (invoice) =>
+      invoice.date >= sellerResultStart && invoice.date <= sellerResultEnd,
+  )
+  const sellerResultTakings = sellerTakings.filter(
+    (taking) =>
+      taking.date >= sellerResultStart && taking.date <= sellerResultEnd,
+  )
+  const sellerResultTransfers = supplierSellerRevenueTransfers.filter(
+    (transfer) =>
+      transfer.date >= sellerResultStart && transfer.date <= sellerResultEnd,
+  )
+  const sellerResultMaturedDates = maturedDatesForPeriod(
+    sellerResultStart,
+    sellerResultEnd,
+  )
+  const sellerResultRentalCosts = monthlyCostsForMaturedDates(
+    accounting.rentals,
+    sellerResultMaturedDates,
+    (rental) => rental.property.trim().toLocaleLowerCase() || rental.id,
+  )
+  const sellerResultAccountantCosts = monthlyCostsForMaturedDates(
+    accounting.accountantInvoices,
+    sellerResultMaturedDates,
+    (invoice) => invoice.description.trim().toLocaleLowerCase() || invoice.id,
+  )
+  const allSellerIds = accounting.sellers.map((seller) => seller.id)
+  const allocationTargets = (item: { allocationSellerIds: string[] }) => {
+    const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
+      knownSellerIds.has(sellerId),
+    )
+    return item.allocationSellerIds.length > 0
+      ? validSellerIds
+      : allSellerIds
+  }
+  const allocatedSellerCost = (
+    value: number,
+    item: { allocationSellerIds: string[] },
+    sellerId: string,
+  ) => {
+    const sellerIds = allocationTargets(item)
+    return sellerIds.includes(sellerId) && sellerIds.length > 0
+      ? roundMoney(value / sellerIds.length)
+      : 0
+  }
+  const productionCostRecipients = accounting.sellers.filter(
+    (seller) => seller.productionCostRecipient,
+  )
+  const productionCostAllocations = accounting.sellers
+    .filter((seller) => seller.productionCostDistributor)
+    .flatMap((distributor) => {
+      const sourceInvoices = sellerResultInvoices.filter(
+        (invoice) => invoice.sellerId === distributor.id,
+      )
+      const sourceCost = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+      )
+      const recipients = productionCostRecipients
+        .filter((recipient) => recipient.id !== distributor.id)
+        .map((recipient) => {
+          const deliveryInvoices = sellerResultInvoices.filter((invoice) => {
+            if (
+              invoice.sellerId !== recipient.id ||
+              invoice.theoreticalRevenue <= 0
+            ) {
+              return false
+            }
+            const supplier = accounting.suppliers.find(
+              (item) => item.id === invoice.supplierId,
+            )
+            return (
+              supplier?.linkedSellerId === distributor.id ||
+              bestContactNameMatch(
+                invoice.supplierName || supplier?.name || '',
+                [distributor],
+              )?.id === distributor.id
+            )
+          })
+          return {
+            recipient,
+            venit: roundMoney(
+              deliveryInvoices.reduce(
+                (sum, invoice) => sum + invoice.theoreticalRevenue,
+                0,
+              ),
+            ),
+          }
+        })
+        .filter((recipient) => recipient.venit > 0)
+      const totalVenit = roundMoney(
+        recipients.reduce((sum, recipient) => sum + recipient.venit, 0),
+      )
+      if (sourceCost <= 0 || totalVenit <= 0) return []
+      let allocatedCost = 0
+      return recipients.map((recipient, index) => {
+        const cost =
+          index === recipients.length - 1
+            ? roundMoney(sourceCost - allocatedCost)
+            : roundMoney(sourceCost * (recipient.venit / totalVenit))
+        allocatedCost = roundMoney(allocatedCost + cost)
+        return {
+          distributor,
+          recipient: recipient.recipient,
+          cost,
+        }
+      })
+    })
+  const statisticalTransferCostAllocations = accounting.sellers.flatMap(
+    (sourceSeller) => {
+      const transfers = sellerResultTransfers.filter(
+        (transfer) => transfer.fromSellerId === sourceSeller.id,
+      )
+      const sourceInvoices = sellerResultInvoices.filter(
+        (invoice) => invoice.sellerId === sourceSeller.id,
+      )
+      const sourceVenit = roundMoney(
+        sourceInvoices.reduce(
+          (sum, invoice) => sum + invoice.theoreticalRevenue,
+          0,
+        ),
+      )
+      const sourceCost = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+      )
+      const transferredVenit = roundMoney(
+        transfers.reduce((sum, transfer) => sum + transfer.amount, 0),
+      )
+      if (
+        transfers.length === 0 ||
+        sourceVenit <= 0 ||
+        sourceCost <= 0 ||
+        transferredVenit <= 0
+      ) {
+        return []
+      }
+      const allocatedTotal = roundMoney(
+        sourceCost * Math.min(transferredVenit / sourceVenit, 1),
+      )
+      let allocatedCost = 0
+      return transfers.map((transfer, index) => {
+        const cost =
+          index === transfers.length - 1
+            ? roundMoney(allocatedTotal - allocatedCost)
+            : roundMoney(
+                allocatedTotal * (transfer.amount / transferredVenit),
+              )
+        allocatedCost = roundMoney(allocatedCost + cost)
+        return { ...transfer, cost }
+      })
+    },
+  )
+  const sellerRealResult = (sellerId: string) => {
+    const invoices = sellerResultInvoices.filter(
+      (invoice) => invoice.sellerId === sellerId,
+    )
+    const real = sellerResultTakings
+      .filter((taking) => taking.sellerId === sellerId)
+      .reduce((sum, taking) => sum + realTaking(taking), 0)
+    const directInvoiceCost = invoices.reduce(
+      (sum, invoice) => sum + invoice.total,
+      0,
+    )
+    const unregisteredGoods = invoices.reduce(
+      (sum, invoice) => sum + invoice.unregisteredGoods,
+      0,
+    )
+    const productionReceived = productionCostAllocations
+      .filter((allocation) => allocation.recipient.id === sellerId)
+      .reduce((sum, allocation) => sum + allocation.cost, 0)
+    const productionDistributed = productionCostAllocations
+      .filter((allocation) => allocation.distributor.id === sellerId)
+      .reduce((sum, allocation) => sum + allocation.cost, 0)
+    const transferCost =
+      statisticalTransferCostAllocations
+        .filter((allocation) => allocation.toSellerId === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0) -
+      statisticalTransferCostAllocations
+        .filter((allocation) => allocation.fromSellerId === sellerId)
+        .reduce((sum, allocation) => sum + allocation.cost, 0)
+    const rent = sellerResultRentalCosts.reduce(
+      (sum, cost) =>
+        sum + allocatedSellerCost(cost.amount, cost.item, sellerId),
+      0,
+    )
+    const accountant = sellerResultAccountantCosts.reduce(
+      (sum, cost) =>
+        sum + allocatedSellerCost(cost.amount, cost.item, sellerId),
+      0,
+    )
+    const expenses = accounting.expenses.reduce((sum, expense) => {
+      const amount = expenseForMaturedDates(
+        expense,
+        sellerResultStart,
+        sellerResultEnd,
+        sellerResultMaturedDates,
+      )
+      if (expense.type === 'stipendio') {
+        const salarySellerId =
+          expense.sellerId && knownSellerIds.has(expense.sellerId)
+            ? expense.sellerId
+            : bestContactNameMatch(
+                expense.sellerName,
+                accounting.sellers,
+              )?.id
+        return salarySellerId === sellerId ? sum + amount : sum
+      }
+      return sum + allocatedSellerCost(amount, expense, sellerId)
+    }, 0)
+    const goodsCost = roundMoney(
+      directInvoiceCost +
+        unregisteredGoods +
+        productionReceived -
+        productionDistributed +
+        transferCost,
+    )
+    const fixedCosts = roundMoney(rent + accountant + expenses)
+    const value = roundMoney(real - goodsCost - fixedCosts)
+    const rows: DashboardDetailRow[] = [
+      {
+        date: sellerResultEnd,
+        category: 'Incasso reale',
+        description: 'Totale del mese',
+        reference: `${sellerResultStart} – ${sellerResultEnd}`,
+        amount: real,
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Costo merce',
+        description: 'Fatture e merce senza fattura',
+        reference: 'Costo diretto',
+        amount: -(directInvoiceCost + unregisteredGoods),
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Quota costi PRODUCT',
+        description: 'Ripartizione in base al Venit',
+        reference: 'Quota ricevuta meno quota distribuita',
+        amount: -(productionReceived - productionDistributed),
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Quota costo Venit trasferito',
+        description: 'Solo calcolo statistico personale',
+        reference: 'Quota ricevuta meno quota ceduta',
+        amount: -transferCost,
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Affitti maturati',
+        description: 'Quota personale',
+        reference: `${sellerResultMaturedDates.size} giorni maturati`,
+        amount: -rent,
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Contabile maturato',
+        description: 'Quota personale',
+        reference: `${sellerResultMaturedDates.size} giorni maturati`,
+        amount: -accountant,
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Tasse, spese e stipendi',
+        description: 'Quota personale maturata',
+        reference: `${sellerResultMaturedDates.size} giorni maturati`,
+        amount: -expenses,
+      },
+    ].filter((row) => row.amount !== 0)
+    return { value, rows }
+  }
   const sellerSummaries = accounting.sellers.map((seller) => {
     const invoices = sellerInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
@@ -797,6 +1069,7 @@ export function DashboardPage() {
     const sellerTheoretical = roundMoney(
       sellerBaseTheoretical - revenueCeded,
     )
+    const realResult = sellerRealResult(seller.id)
     return {
       id: seller.id,
       name: seller.name,
@@ -827,6 +1100,8 @@ export function DashboardPage() {
       revenueCeded,
       revenueAcquiredTransfers,
       revenueCededTransfers,
+      realResult: realResult.value,
+      realResultRows: realResult.rows,
       stockResidual: sellerTheoretical - sellerReal,
     }
   })
@@ -906,6 +1181,8 @@ export function DashboardPage() {
       revenueCeded: 0,
       revenueAcquiredTransfers: [],
       revenueCededTransfers: [],
+      realResult: 0,
+      realResultRows: [],
       stockResidual: unassignedTheoretical - unassignedReal,
     })
   }
@@ -1205,6 +1482,13 @@ export function DashboardPage() {
               value: -selectedSeller.revenueCeded,
               tone: 'red',
               rows: revenueCededRows,
+            },
+            'real-result': {
+              title: `Risultato reale · ${selectedSeller.name}`,
+              note: `Incasso reale del mese meno costo merce, quote PRODUCT, costo Venit trasferito e spese maturate fino al giorno selezionato.`,
+              value: selectedSeller.realResult,
+              tone: selectedSeller.realResult >= 0 ? 'green' : 'red',
+              rows: selectedSeller.realResultRows,
             },
             'stock-residual': {
               title: `Stock residuo · ${selectedSeller.name}`,
@@ -1882,6 +2166,24 @@ export function DashboardPage() {
                     <span>Venit ceduto all'altro</span>
                     <strong>{money(-seller.revenueCeded)}</strong>
                     <em>Tolto dallo Stock residuo</em>
+                  </button>
+                  <button
+                    className={
+                      seller.realResult >= 0
+                        ? 'seller-real-result metric-positive'
+                        : 'seller-real-result metric-negative'
+                    }
+                    onClick={() =>
+                      setSellerDetail({
+                        sellerId: seller.id,
+                        metric: 'real-result',
+                      })
+                    }
+                    type="button"
+                  >
+                    <span>Risultato reale</span>
+                    <strong>{money(seller.realResult)}</strong>
+                    <em>Costi maturati del mese</em>
                   </button>
                   <button
                     className="seller-cash-metric seller-cash-withdrawn seller-final-cash"

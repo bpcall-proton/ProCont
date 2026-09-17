@@ -1202,6 +1202,26 @@ select {
   color: var(--red);
 }
 
+.dashboard-seller-metrics .seller-real-result.metric-positive {
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  background: color-mix(in srgb, var(--green) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-real-result.metric-positive span,
+.dashboard-seller-metrics .seller-real-result.metric-positive strong {
+  color: var(--green);
+}
+
+.dashboard-seller-metrics .seller-real-result.metric-negative {
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  background: color-mix(in srgb, var(--red) 15%, rgba(19, 27, 46, 0.78));
+}
+
+.dashboard-seller-metrics .seller-real-result.metric-negative span,
+.dashboard-seller-metrics .seller-real-result.metric-negative strong {
+  color: var(--red);
+}
+
 .settings-grid {
   align-items: start;
 }
