@@ -133,6 +133,94 @@ export function realTaking(taking: AccountingTaking) {
   return Math.max(0, taking.realTotal)
 }
 
+export interface ProductionSalaryCost {
+  date: string
+  sellerId: string
+  productId: string | null
+  payMode: 'hourly' | 'per-piece'
+  quantity: number
+  rate: number
+  amount: number
+}
+
+function productionWorkHours(startTime: string, endTime: string) {
+  const [startHours, startMinutes] = startTime.split(':').map(Number)
+  const [endHours, endMinutes] = endTime.split(':').map(Number)
+  if (
+    !Number.isFinite(startHours) ||
+    !Number.isFinite(startMinutes) ||
+    !Number.isFinite(endHours) ||
+    !Number.isFinite(endMinutes)
+  ) {
+    return 0
+  }
+  const start = startHours * 60 + startMinutes
+  let end = endHours * 60 + endMinutes
+  if (end < start) end += 24 * 60
+  return (end - start) / 60
+}
+
+export function productionSalaryCostsForPeriod(
+  state: Pick<
+    AccountingState,
+    | 'productionWorkEntries'
+    | 'productionWorkerRates'
+    | 'productionSettings'
+    | 'productionEntries'
+  >,
+  rangeStart = '',
+  rangeEnd = '9999-12-31',
+) {
+  const inRange = (date: string) =>
+    (!rangeStart || date >= rangeStart) && date <= rangeEnd
+  const hourlyCosts: ProductionSalaryCost[] = state.productionWorkEntries
+    .filter((entry) => entry.payMode === 'hourly' && inRange(entry.date))
+    .map((entry) => {
+      const quantity = productionWorkHours(entry.startTime, entry.endTime)
+      return {
+        date: entry.date,
+        sellerId: entry.sellerId,
+        productId: entry.productId,
+        payMode: entry.payMode,
+        quantity,
+        rate: entry.rate,
+        amount: roundMoney(quantity * entry.rate),
+      }
+    })
+    .filter((cost) => cost.amount !== 0)
+  const ratesBySeller = new Map(
+    state.productionWorkerRates
+      .filter((rate) => rate.mode === 'per-piece')
+      .map((rate) => [rate.sellerId, rate]),
+  )
+  const settingsByProduct = new Map(
+    state.productionSettings.map((settings) => [settings.id, settings]),
+  )
+  const pieceCosts: ProductionSalaryCost[] = state.productionEntries
+    .filter((entry) => inRange(entry.date))
+    .flatMap((entry) => {
+      const settings = settingsByProduct.get(entry.productId)
+      if (!settings) return []
+      return settings.workerIds.flatMap((sellerId) => {
+        const rate = ratesBySeller.get(sellerId)
+        if (!rate) return []
+        return [
+          {
+            date: entry.date,
+            sellerId,
+            productId: entry.productId,
+            payMode: rate.mode,
+            quantity: entry.quantity,
+            rate: rate.rate,
+            amount: roundMoney(entry.quantity * rate.rate),
+          },
+        ]
+      })
+    })
+    .filter((cost) => cost.amount !== 0)
+  return [...hourlyCosts, ...pieceCosts]
+}
+
 export function invoiceRemaining(invoice: AccountingInvoice) {
   return roundMoney(
     Math.max(0, invoice.total - (invoice.settled ? invoice.total : invoice.paidAmount)),

@@ -9,6 +9,7 @@ import {
   money,
   monthlyCostsForMaturedDates,
   officialTaking,
+  productionSalaryCostsForPeriod,
   realTaking,
   roundMoney,
   today,
@@ -196,12 +197,18 @@ export function DashboardPage() {
     (sum, expense) => sum + expense.amount,
     0,
   )
+  const productionSalaryCosts = productionSalaryCostsForPeriod(accounting)
+  const productionSalaries = productionSalaryCosts.reduce(
+    (sum, cost) => sum + cost.amount,
+    0,
+  )
   const totalCosts =
     invoiceValue +
     unregisteredGoods +
     rents +
     accountantCosts +
-    otherExpenses
+    otherExpenses +
+    productionSalaries
   const currentYear = today().slice(0, 4)
   const currentYearStart = `${currentYear}-01-01`
   const currentYearEnd = today()
@@ -239,6 +246,11 @@ export function DashboardPage() {
       ),
     }))
     .filter(({ amount }) => amount !== 0)
+  const annualProductionSalaryCosts = productionSalaryCostsForPeriod(
+    accounting,
+    currentYearStart,
+    currentYearEnd,
+  )
   const annualReal = roundMoney(
     annualTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
   )
@@ -288,7 +300,11 @@ export function DashboardPage() {
   const annualFixedCosts = roundMoney(
     annualRentalCosts.reduce((sum, cost) => sum + cost.amount, 0) +
       annualAccountantCosts.reduce((sum, cost) => sum + cost.amount, 0) +
-      annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0),
+      annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0) +
+      annualProductionSalaryCosts.reduce(
+        (sum, cost) => sum + cost.amount,
+        0,
+      ),
   )
   const annualRealBalance = roundMoney(
     annualReal - annualPurchaseCosts - annualFixedCosts,
@@ -501,12 +517,34 @@ export function DashboardPage() {
       amount: expense.amount,
     }),
   )
+  const productionSalaryRows: DashboardDetailRow[] =
+    productionSalaryCosts.map((cost) => {
+      const seller = accounting.sellers.find(
+        (item) => item.id === cost.sellerId,
+      )
+      const product = cost.productId
+        ? accounting.productionSettings.find(
+            (item) => item.id === cost.productId,
+          )
+        : undefined
+      return {
+        date: cost.date,
+        category: 'Stipendio produzione',
+        description: seller?.name ?? 'Lavoratrice non disponibile',
+        reference:
+          cost.payMode === 'hourly'
+            ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
+            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}${product ? ` · ${product.productName}` : ''}`,
+        amount: cost.amount,
+      }
+    })
   const costRows = [
     ...invoiceRows,
     ...unregisteredGoodsRows,
     ...rentalRows,
     ...accountantRows,
     ...expenseRows,
+    ...productionSalaryRows,
   ]
   const negativeCostRows = costRows.map((row) => ({
     ...row,
@@ -553,6 +591,21 @@ export function DashboardPage() {
           : expense.notes || 'Spesa effettiva',
       amount: -amount,
     })),
+    ...annualProductionSalaryCosts.map((cost) => {
+      const seller = accounting.sellers.find(
+        (item) => item.id === cost.sellerId,
+      )
+      return {
+        date: cost.date,
+        category: 'Stipendio produzione',
+        description: seller?.name ?? 'Lavoratrice non disponibile',
+        reference:
+          cost.payMode === 'hourly'
+            ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
+            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}`,
+        amount: -cost.amount,
+      }
+    }),
     ...(annualStock > 0
       ? [
           {
@@ -684,7 +737,8 @@ export function DashboardPage() {
     },
     costs: {
       title: 'Costi complessivi',
-      note: 'Fatture, merce senza fattura, affitti, contabile e altre spese.',
+      note:
+        'Fatture, merce senza fattura, affitti, contabile, stipendi produzione e altre spese.',
       value: totalCosts,
       tone: 'amber',
       rows: costRows,
