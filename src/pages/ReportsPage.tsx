@@ -14,6 +14,7 @@ import {
   money,
   monthlyCostsForMaturedDates,
   officialTaking,
+  productionSalaryCostsForPeriod,
   realTaking,
   roundMoney,
   sellerColorClass,
@@ -907,7 +908,17 @@ export function ReportsPage() {
       ),
     0,
   )
-  const fixedCosts = rents + accountant + expenseCosts
+  const productionSalaryCosts = productionSalaryCostsForPeriod(
+    source,
+    range.start,
+    range.end,
+  )
+  const productionSalaries = productionSalaryCosts.reduce(
+    (sum, cost) => sum + cost.amount,
+    0,
+  )
+  const fixedCosts =
+    rents + accountant + expenseCosts + productionSalaries
   const operatingCosts = purchases + fixedCosts
   const realOperatingCosts = operatingCosts + unregisteredGoods
   const expenseByType = {
@@ -963,9 +974,13 @@ export function ReportsPage() {
           ),
         0,
       ),
+    produzione: productionSalaries,
   }
   const allSellerIds = source.sellers.map((seller) => seller.id)
   const knownSellerIds = new Set(allSellerIds)
+  const productionSalarySellerIds = source.sellers
+    .filter((seller) => seller.pointOfSaleSeller)
+    .map((seller) => seller.id)
   const allocationTargets = (item: { allocationSellerIds: string[] }) => {
     const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
       knownSellerIds.has(sellerId),
@@ -983,6 +998,22 @@ export function ReportsPage() {
     return sellerIds.includes(sellerId) && sellerIds.length > 0
       ? roundMoney(value / sellerIds.length)
       : 0
+  }
+  const allocatedProductionSalaryCost = (
+    value: number,
+    sellerId: string,
+  ) => {
+    const sellerIndex = productionSalarySellerIds.indexOf(sellerId)
+    if (sellerIndex < 0) return 0
+    const equalShare = roundMoney(
+      value / productionSalarySellerIds.length,
+    )
+    return sellerIndex === productionSalarySellerIds.length - 1
+      ? roundMoney(
+          value -
+            equalShare * (productionSalarySellerIds.length - 1),
+        )
+      : equalShare
   }
   const sellerCostBreakdown = (seller: { id: string }) => {
     const rent = companyRentalCosts.reduce(
@@ -1046,13 +1077,26 @@ export function ReportsPage() {
           ),
         0,
       )
+    const productionSalary = productionSalaryCosts.reduce(
+      (sum, cost) =>
+        sum + allocatedProductionSalaryCost(cost.amount, seller.id),
+      0,
+    )
     return {
       rent,
       taxes,
       accounting,
       other,
       salaryPaid,
-      total: roundMoney(rent + taxes + accounting + other + salaryPaid),
+      productionSalary,
+      total: roundMoney(
+        rent +
+          taxes +
+          accounting +
+          other +
+          salaryPaid +
+          productionSalary,
+      ),
     }
   }
   const inputVat =
@@ -1346,6 +1390,7 @@ export function ReportsPage() {
       theoretical: totalVenit,
       stockResidual: totalVenit - real,
       salaryPaid: costs.salaryPaid,
+      productionSalary: costs.productionSalary,
       allocatedCosts: costs.total,
       realProfit: roundMoney(
         real -
@@ -1428,6 +1473,9 @@ export function ReportsPage() {
     source.accountantInvoices.forEach((item) => {
       ensure(month(item.date)).costs += item.total
     })
+    productionSalaryCostsForPeriod(source).forEach((cost) => {
+      ensure(month(cost.date)).costs += cost.amount
+    })
     grouped.forEach((values, key) => {
       const monthStart = `${key}-01`
       const date = new Date(`${monthStart}T00:00:00Z`)
@@ -1444,13 +1492,7 @@ export function ReportsPage() {
     return [...grouped.entries()]
       .sort(([left], [right]) => right.localeCompare(left))
       .slice(0, 12)
-  }, [
-    source.accountantInvoices,
-    source.expenses,
-    source.invoices,
-    source.rentals,
-    source.takings,
-  ])
+  }, [source])
 
   const maxChart = Math.max(
     1,
@@ -1491,7 +1533,12 @@ export function ReportsPage() {
     source.expenses.reduce(
       (sum, item) => sum + allocatedExpense(item, currentYearStart, today()),
       0,
-    )
+    ) +
+    productionSalaryCostsForPeriod(
+      source,
+      currentYearStart,
+      today(),
+    ).reduce((sum, cost) => sum + cost.amount, 0)
   const futureFixedCosts =
     seasonEnd >= today()
       ? source.expenses
@@ -1578,6 +1625,26 @@ export function ReportsPage() {
             : item.notes || 'Spesa del periodo',
         amount: allocated,
       })),
+    ...productionSalaryCosts.map((cost) => {
+      const seller = source.sellers.find(
+        (item) => item.id === cost.sellerId,
+      )
+      const product = cost.productId
+        ? source.productionSettings.find(
+            (item) => item.id === cost.productId,
+          )
+        : undefined
+      return {
+        date: cost.date,
+        category: 'Stipendio produzione',
+        description: seller?.name ?? 'Lavoratrice non disponibile',
+        reference:
+          cost.payMode === 'hourly'
+            ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
+            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}${product ? ` · ${product.productName}` : ''}`,
+        amount: cost.amount,
+      }
+    }),
   ]
   const inputVatRows: MetricDetailRow[] = [
     ...data.invoices.map((item) => ({
@@ -1697,7 +1764,7 @@ export function ReportsPage() {
       value: fixedCosts,
       kind: 'money',
       formula:
-        'Quote affitto + quote contabile + stipendi + tasse + altre spese maturate',
+        'Quote affitto + quote contabile + stipendi + stipendi produzione + tasse + altre spese maturate',
       steps: [
         {
           label: 'Affitti maturati',
@@ -1718,6 +1785,14 @@ export function ReportsPage() {
           value: expenseByType.stipendi,
           kind: 'money',
           reference: 'Spese stipendio attribuite alla data di pagamento.',
+          operation: 'Somma',
+        },
+        {
+          label: 'Stipendi produzione',
+          value: expenseByType.produzione,
+          kind: 'money',
+          reference:
+            'Ore e pezzi prodotti nel periodo: costo generale aziendale ripartito anche sulle venditrici.',
           operation: 'Somma',
         },
         {
@@ -2111,6 +2186,10 @@ export function ReportsPage() {
         { Voce: 'Quota contabile', Importo: costs.accounting },
         { Voce: 'Quota altre spese', Importo: costs.other },
         { Voce: 'Stipendio corrisposto', Importo: costs.salaryPaid },
+        {
+          Voce: 'Quota stipendi produzione',
+          Importo: costs.productionSalary,
+        },
         {
           Voce: 'Utile fiscale personale',
           Importo: roundMoney(
@@ -2509,6 +2588,24 @@ export function ReportsPage() {
           }
         })
         .filter((row) => row.amount !== 0),
+      ...productionSalaryCosts
+        .map((cost) => {
+          const allocated = allocatedProductionSalaryCost(
+            cost.amount,
+            selectedSeller.id,
+          )
+          const worker = source.sellers.find(
+            (seller) => seller.id === cost.sellerId,
+          )
+          return {
+            date: cost.date,
+            category: 'Quota stipendio produzione',
+            description: worker?.name ?? 'Lavoratrice non disponibile',
+            reference: `${cost.payMode === 'hourly' ? `${cost.quantity.toLocaleString('it-IT')} ore` : `${cost.quantity.toLocaleString('it-IT')} pezzi`} · ripartita tra ${productionSalarySellerIds.length} venditrici`,
+            amount: allocated,
+          }
+        })
+        .filter((row) => row.amount !== 0),
     ]
     const sellerInputVatRows: MetricDetailRow[] = [
       ...sellerInvoices.map((item) => ({
@@ -2703,7 +2800,7 @@ export function ReportsPage() {
         kind: 'money',
         tone: 'amber',
         formula:
-          'Quota affitto + quota tasse + quota contabile + altre quote + stipendio corrisposto',
+          'Quota affitto + quota tasse + quota contabile + altre quote + stipendio corrisposto + quota stipendi produzione',
         steps: [
           {
             label: 'Quota affitto',
@@ -2738,6 +2835,13 @@ export function ReportsPage() {
             value: sellerCosts.salaryPaid,
             kind: 'money',
             reference: 'Pagamento registrato nel periodo per questo venditore.',
+            operation: 'Somma',
+          },
+          {
+            label: 'Quota stipendi produzione',
+            value: sellerCosts.productionSalary,
+            kind: 'money',
+            reference: `Ripartita in parti uguali tra ${productionSalarySellerIds.length} venditrici punto vendita.`,
             operation: 'Somma',
           },
         ],
@@ -3885,6 +3989,9 @@ export function ReportsPage() {
                 </span>
                 <span>
                   Stipendio corrisposto {money(seller.salaryPaid)}
+                </span>
+                <span>
+                  Quota stipendi produzione {money(seller.productionSalary)}
                 </span>
                 <span>Risultato reale {money(seller.realProfit)}</span>
                 <span
