@@ -830,7 +830,16 @@ export function DashboardPage() {
     sellerResultMaturedDates,
     (invoice) => invoice.description.trim().toLocaleLowerCase() || invoice.id,
   )
+  const sellerResultProductionSalaryCosts =
+    productionSalaryCostsForPeriod(
+      accounting,
+      sellerResultStart,
+      sellerResultEnd,
+    )
   const allSellerIds = accounting.sellers.map((seller) => seller.id)
+  const productionSalarySellerIds = accounting.sellers
+    .filter((seller) => seller.pointOfSaleSeller)
+    .map((seller) => seller.id)
   const allocationTargets = (item: { allocationSellerIds: string[] }) => {
     const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
       knownSellerIds.has(sellerId),
@@ -848,6 +857,22 @@ export function DashboardPage() {
     return sellerIds.includes(sellerId) && sellerIds.length > 0
       ? roundMoney(value / sellerIds.length)
       : 0
+  }
+  const allocatedProductionSalaryCost = (
+    value: number,
+    sellerId: string,
+  ) => {
+    const sellerIndex = productionSalarySellerIds.indexOf(sellerId)
+    if (sellerIndex < 0) return 0
+    const equalShare = roundMoney(
+      value / productionSalarySellerIds.length,
+    )
+    return sellerIndex === productionSalarySellerIds.length - 1
+      ? roundMoney(
+          value -
+            equalShare * (productionSalarySellerIds.length - 1),
+        )
+      : equalShare
   }
   const productionCostRecipients = accounting.sellers.filter(
     (seller) => seller.productionCostRecipient,
@@ -1012,6 +1037,11 @@ export function DashboardPage() {
       }
       return sum + allocatedSellerCost(amount, expense, sellerId)
     }, 0)
+    const productionSalary = sellerResultProductionSalaryCosts.reduce(
+      (sum, cost) =>
+        sum + allocatedProductionSalaryCost(cost.amount, sellerId),
+      0,
+    )
     const goodsCost = roundMoney(
       directInvoiceCost +
         unregisteredGoods +
@@ -1019,7 +1049,9 @@ export function DashboardPage() {
         productionDistributed +
         transferCost,
     )
-    const fixedCosts = roundMoney(rent + accountant + expenses)
+    const fixedCosts = roundMoney(
+      rent + accountant + expenses + productionSalary,
+    )
     const value = roundMoney(real - goodsCost - fixedCosts)
     const rows: DashboardDetailRow[] = [
       {
@@ -1070,6 +1102,13 @@ export function DashboardPage() {
         description: 'Quota personale maturata',
         reference: `${sellerResultMaturedDates.size} giorni maturati`,
         amount: -expenses,
+      },
+      {
+        date: sellerResultEnd,
+        category: 'Stipendi produzione',
+        description: 'Quota ripartita tra le venditrici',
+        reference: `${productionSalarySellerIds.length} venditrici punto vendita`,
+        amount: -productionSalary,
       },
     ].filter((row) => row.amount !== 0)
     return { value, rows }
