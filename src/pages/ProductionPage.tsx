@@ -161,6 +161,24 @@ function formatProductionDate(value: string) {
   return `${formatDate(value)} - ${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}`
 }
 
+function safeWorksheetName(value: string, usedNames: Set<string>) {
+  const base =
+    value
+      .replace(/[\\/?*[\]:]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 31) || 'Lavoratrice'
+  let candidate = base
+  let sequence = 2
+  while (usedNames.has(candidate)) {
+    const suffix = ` ${sequence}`
+    candidate = `${base.slice(0, 31 - suffix.length)}${suffix}`
+    sequence += 1
+  }
+  usedNames.add(candidate)
+  return candidate
+}
+
 interface ProductionPageProps {
   onOpenWages: () => void
 }
@@ -862,6 +880,244 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       expense.recurrence === 'monthly',
   )
   const quantityTotal = quantityExpressionValue(entryForm.quantity)
+  const wageExportRows = (() => {
+    const inRange = (date: string) =>
+      date >= range.start && date <= range.end
+    const exportProducts = results.products.map((item) => item.product)
+    const workerIds = new Set(
+      exportProducts.flatMap((product) =>
+        configuredIds(product.workerIds),
+      ),
+    )
+    const productsByWorker = new Map<string, string[]>()
+    for (const product of exportProducts) {
+      for (const workerId of configuredIds(product.workerIds)) {
+        productsByWorker.set(workerId, [
+          ...(productsByWorker.get(workerId) ?? []),
+          product.productName || 'Prodotto senza nome',
+        ])
+      }
+    }
+    const sellerNamesById = new Map(
+      data.sellers.map((seller) => [seller.id, seller.name]),
+    )
+    const hourlyRows = data.productionWorkEntries
+      .filter(
+        (entry) =>
+          entry.payMode === 'hourly' &&
+          inRange(entry.date) &&
+          (showingAllProducts || workerIds.has(entry.sellerId)),
+      )
+      .map((entry) => {
+        const hours = durationHours(entry.startTime, entry.endTime)
+        return {
+          sellerId: entry.sellerId,
+          sellerName:
+            sellerNamesById.get(entry.sellerId) ?? 'Lavoratrice rimossa',
+          date: entry.date,
+          product:
+            entry.productId === null
+              ? (productsByWorker.get(entry.sellerId) ?? [
+                  'Produzione generale',
+                ]).join(', ')
+              : (productNames.get(entry.productId) ?? 'Prodotto rimosso'),
+          mode: 'All’ora',
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          hours,
+          pieces: 0,
+          rate: entry.rate,
+          amount: roundMoney(hours * entry.rate),
+        }
+      })
+    const ratesBySeller = new Map(
+      data.productionWorkerRates
+        .filter((rate) => rate.mode === 'per-piece')
+        .map((rate) => [rate.sellerId, rate.rate]),
+    )
+    const pieceRows = results.products.flatMap(({ product }) =>
+      data.productionEntries
+        .filter(
+          (entry) =>
+            entry.productId === product.id && inRange(entry.date),
+        )
+        .flatMap((entry) =>
+          configuredIds(product.workerIds).flatMap((sellerId) => {
+            const rate = ratesBySeller.get(sellerId)
+            if (rate === undefined) return []
+            return [
+              {
+                sellerId,
+                sellerName:
+                  sellerNamesById.get(sellerId) ?? 'Lavoratrice rimossa',
+                date: entry.date,
+                product: product.productName || 'Prodotto senza nome',
+                mode: 'A pezzo',
+                startTime: '',
+                endTime: '',
+                hours: 0,
+                pieces: entry.quantity,
+                rate,
+                amount: roundMoney(entry.quantity * rate),
+              },
+            ]
+          }),
+        ),
+    )
+    return [...hourlyRows, ...pieceRows].sort(
+      (left, right) =>
+        left.sellerName.localeCompare(right.sellerName, 'it') ||
+        left.date.localeCompare(right.date) ||
+        left.product.localeCompare(right.product, 'it'),
+    )
+  })()
+
+  async function exportProductionWagesExcel() {
+    if (!data.company || wageExportRows.length === 0) return
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    const periodLabel =
+      range.start === range.end
+        ? formatDate(range.start)
+        : `${formatDate(range.start)} - ${formatDate(range.end)}`
+    const productLabel = showingAllProducts
+      ? 'Tutti i prodotti'
+      : (savedSettings?.productName ?? 'Prodotto')
+    const workerRows = [...new Set(wageExportRows.map((row) => row.sellerId))]
+      .map((sellerId) => {
+        const rows = wageExportRows.filter(
+          (row) => row.sellerId === sellerId,
+        )
+        return {
+          sellerId,
+          sellerName: rows[0]?.sellerName ?? 'Lavoratrice rimossa',
+          mode: [...new Set(rows.map((row) => row.mode))].join(' + '),
+          hours: roundMoney(
+            rows.reduce((total, row) => total + row.hours, 0),
+          ),
+          pieces: rows.reduce((total, row) => total + row.pieces, 0),
+          amount: roundMoney(
+            rows.reduce((total, row) => total + row.amount, 0),
+          ),
+        }
+      })
+      .sort((left, right) =>
+        left.sellerName.localeCompare(right.sellerName, 'it'),
+      )
+    const totalHours = roundMoney(
+      workerRows.reduce((total, row) => total + row.hours, 0),
+    )
+    const totalPieces = workerRows.reduce(
+      (total, row) => total + row.pieces,
+      0,
+    )
+    const totalAmount = roundMoney(
+      workerRows.reduce((total, row) => total + row.amount, 0),
+    )
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['Azienda', data.company.name],
+      ['Periodo', periodLabel],
+      ['Prodotti', productLabel],
+      [],
+      [
+        'Lavoratrice',
+        'Tipo tariffa',
+        'Totale ore',
+        'Totale pezzi',
+        'Importo maturato',
+      ],
+      ...workerRows.map((row) => [
+        row.sellerName,
+        row.mode,
+        row.hours || '',
+        row.pieces || '',
+        row.amount,
+      ]),
+      ['TOTALE', '', totalHours, totalPieces, totalAmount],
+    ])
+    summarySheet['!cols'] = [
+      { wch: 26 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 20 },
+    ]
+    summarySheet['!autofilter'] = {
+      ref: `A5:E${workerRows.length + 6}`,
+    }
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Riepilogo')
+
+    const usedSheetNames = new Set(['Riepilogo'])
+    for (const worker of workerRows) {
+      const rows = wageExportRows.filter(
+        (row) => row.sellerId === worker.sellerId,
+      )
+      const detailSheet = XLSX.utils.aoa_to_sheet([
+        ['Lavoratrice', worker.sellerName],
+        ['Periodo', periodLabel],
+        ['Tipo tariffa', worker.mode],
+        ['Prodotti', productLabel],
+        [],
+        [
+          'Data',
+          'Prodotto',
+          'Tipo tariffa',
+          'Entrata',
+          'Uscita',
+          'Totale ore',
+          'Pezzi prodotti',
+          'Tariffa',
+          'Costo giornata / Importo maturato',
+        ],
+        ...rows.map((row) => [
+          formatProductionDate(row.date),
+          row.product,
+          row.mode,
+          row.startTime,
+          row.endTime,
+          row.hours || '',
+          row.pieces || '',
+          row.rate,
+          row.amount,
+        ]),
+        [
+          'TOTALE',
+          '',
+          '',
+          '',
+          '',
+          worker.hours,
+          worker.pieces,
+          '',
+          worker.amount,
+        ],
+      ])
+      detailSheet['!cols'] = [
+        { wch: 28 },
+        { wch: 28 },
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 34 },
+      ]
+      detailSheet['!autofilter'] = {
+        ref: `A6:I${rows.length + 7}`,
+      }
+      XLSX.utils.book_append_sheet(
+        workbook,
+        detailSheet,
+        safeWorksheetName(worker.sellerName, usedSheetNames),
+      )
+    }
+
+    XLSX.writeFile(
+      workbook,
+      `stipendi-produzione-${range.start}-${range.end}.xlsx`,
+    )
+  }
 
   return (
     <div className="page-stack">
@@ -875,6 +1131,14 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           </p>
         </div>
         <div className="production-heading-actions">
+          <button
+            className="button button-secondary"
+            disabled={wageExportRows.length === 0}
+            onClick={() => void exportProductionWagesExcel()}
+            type="button"
+          >
+            Esporta ore e stipendi Excel
+          </button>
           <button
             className="button button-secondary"
             onClick={onOpenWages}
