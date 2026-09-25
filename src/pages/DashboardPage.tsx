@@ -86,6 +86,18 @@ function filenamePart(value: string) {
   )
 }
 
+function startOfWeek(date: string) {
+  const value = new Date(`${date}T00:00:00Z`)
+  const daysFromMonday = (value.getUTCDay() + 6) % 7
+  value.setUTCDate(value.getUTCDate() - daysFromMonday)
+  return value.toISOString().slice(0, 10)
+}
+
+function formatDashboardDate(date: string) {
+  const [year, month, day] = date.split('-')
+  return year && month && day ? `${day}/${month}/${year}` : date
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
@@ -107,6 +119,15 @@ export function DashboardPage() {
   const withdrawalSellerFilter = withdrawalFilters.sellerId
   const withdrawalMonthFilter = withdrawalFilters.month
   const withdrawalYearFilter = withdrawalFilters.year
+  const currentDate = today()
+  const cashWithdrawalFilterDefaults = {
+    startDate: currentDate,
+    endDate: currentDate,
+  }
+  const [cashWithdrawalFilters, setCashWithdrawalFilters] = useStoredFilters(
+    `cash-withdrawal-overview-filters:${companyId ?? 'none'}`,
+    cashWithdrawalFilterDefaults,
+  )
   const activeCompany = state.accounting.companies.find(
     (company) => company.id === companyId,
   )
@@ -1298,6 +1319,64 @@ export function DashboardPage() {
     ? storeSummaries.find((summary) => summary.store.id === storeDetailId)
     : undefined
 
+  const cashWithdrawalTakings = accounting.takings.filter(
+    (taking) =>
+      taking.withdrawal !== 0 &&
+      (!cashWithdrawalFilters.startDate ||
+        taking.date >= cashWithdrawalFilters.startDate) &&
+      (!cashWithdrawalFilters.endDate ||
+        taking.date <= cashWithdrawalFilters.endDate),
+  )
+  const cashWithdrawalTotals = new Map<
+    string,
+    { id: string; name: string; total: number; entries: number }
+  >()
+  for (const seller of accounting.sellers) {
+    cashWithdrawalTotals.set(seller.id, {
+      id: seller.id,
+      name: seller.name,
+      total: 0,
+      entries: 0,
+    })
+  }
+  for (const taking of cashWithdrawalTakings) {
+    const seller =
+      accounting.sellers.find((item) => item.id === taking.sellerId) ??
+      bestContactNameMatch(taking.sellerName, accounting.sellers)
+    const fallbackName = taking.sellerName.trim() || 'Venditore non indicato'
+    const key =
+      seller?.id ?? `legacy:${fallbackName.toLocaleLowerCase()}`
+    const current = cashWithdrawalTotals.get(key) ?? {
+      id: key,
+      name: fallbackName,
+      total: 0,
+      entries: 0,
+    }
+    cashWithdrawalTotals.set(key, {
+      ...current,
+      total: roundMoney(current.total + taking.withdrawal),
+      entries: current.entries + 1,
+    })
+  }
+  const cashWithdrawalSellerTotals = [...cashWithdrawalTotals.values()]
+  const cashWithdrawalTotal = roundMoney(
+    cashWithdrawalTakings.reduce(
+      (sum, taking) => sum + taking.withdrawal,
+      0,
+    ),
+  )
+  const cashWithdrawalPeriodLabel =
+    cashWithdrawalFilters.startDate && cashWithdrawalFilters.endDate
+      ? cashWithdrawalFilters.startDate === cashWithdrawalFilters.endDate
+        ? formatDashboardDate(cashWithdrawalFilters.startDate)
+        : `${formatDashboardDate(cashWithdrawalFilters.startDate)} – ${formatDashboardDate(cashWithdrawalFilters.endDate)}`
+      : cashWithdrawalFilters.startDate
+        ? `dal ${formatDashboardDate(cashWithdrawalFilters.startDate)}`
+        : cashWithdrawalFilters.endDate
+          ? `fino al ${formatDashboardDate(cashWithdrawalFilters.endDate)}`
+          : 'Tutto lo storico'
+  const currentWeekStart = startOfWeek(currentDate)
+
   const withdrawalYears = [
     ...new Set(
       withdrawalRows
@@ -2077,6 +2156,145 @@ export function DashboardPage() {
           tone={annualBalanceTone}
           value={money(annualRealBalance)}
         />
+      </section>
+
+      <section className="panel cash-withdrawal-overview">
+        <div className="panel-heading cash-withdrawal-overview-heading">
+          <div>
+            <span className="eyebrow">CASH RITIRATO</span>
+            <h2>Riepilogo per giorno o periodo</h2>
+            <p>
+              Totale complessivo e importo ritirato da ogni venditore.
+            </p>
+          </div>
+          <div className="cash-withdrawal-overview-controls">
+            <div
+              aria-label="Seleziona un periodo rapido"
+              className="cash-withdrawal-period-buttons"
+              role="group"
+            >
+              <button
+                className={
+                  cashWithdrawalFilters.startDate === currentDate &&
+                  cashWithdrawalFilters.endDate === currentDate
+                    ? 'is-active'
+                    : ''
+                }
+                onClick={() =>
+                  setCashWithdrawalFilters({
+                    startDate: currentDate,
+                    endDate: currentDate,
+                  })
+                }
+                type="button"
+              >
+                Oggi
+              </button>
+              <button
+                className={
+                  cashWithdrawalFilters.startDate === currentWeekStart &&
+                  cashWithdrawalFilters.endDate === currentDate
+                    ? 'is-active'
+                    : ''
+                }
+                onClick={() =>
+                  setCashWithdrawalFilters({
+                    startDate: currentWeekStart,
+                    endDate: currentDate,
+                  })
+                }
+                type="button"
+              >
+                Questa settimana
+              </button>
+              <button
+                className={
+                  !cashWithdrawalFilters.startDate &&
+                  !cashWithdrawalFilters.endDate
+                    ? 'is-active'
+                    : ''
+                }
+                onClick={() =>
+                  setCashWithdrawalFilters({
+                    startDate: '',
+                    endDate: '',
+                  })
+                }
+                type="button"
+              >
+                Tutto
+              </button>
+            </div>
+            <div className="cash-withdrawal-date-range">
+              <label>
+                <span>Da</span>
+                <input
+                  aria-label="Data iniziale Cash ritirato"
+                  onChange={(event) => {
+                    const startDate = event.target.value
+                    setCashWithdrawalFilters((current) => ({
+                      startDate,
+                      endDate:
+                        startDate &&
+                        current.endDate &&
+                        current.endDate < startDate
+                          ? startDate
+                          : current.endDate,
+                    }))
+                  }}
+                  type="date"
+                  value={cashWithdrawalFilters.startDate}
+                />
+              </label>
+              <label>
+                <span>A</span>
+                <input
+                  aria-label="Data finale Cash ritirato"
+                  onChange={(event) => {
+                    const endDate = event.target.value
+                    setCashWithdrawalFilters((current) => ({
+                      startDate:
+                        endDate &&
+                        current.startDate &&
+                        current.startDate > endDate
+                          ? endDate
+                          : current.startDate,
+                      endDate,
+                    }))
+                  }}
+                  type="date"
+                  value={cashWithdrawalFilters.endDate}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+        <div className="cash-withdrawal-period-summary">
+          <span>Periodo: {cashWithdrawalPeriodLabel}</span>
+          <strong>
+            {cashWithdrawalTakings.length}{' '}
+            {cashWithdrawalTakings.length === 1 ? 'ritiro' : 'ritiri'}
+          </strong>
+        </div>
+        <div className="stats-grid cash-withdrawal-overview-grid">
+          <StatCard
+            detail={`Somma del periodo · ${cashWithdrawalTakings.length} movimenti`}
+            label="Totale Cash ritirato"
+            tone="violet"
+            value={money(cashWithdrawalTotal)}
+          />
+          {cashWithdrawalSellerTotals.map((seller) => (
+            <StatCard
+              detail={`${seller.entries} ${
+                seller.entries === 1 ? 'ritiro' : 'ritiri'
+              } nel periodo`}
+              key={seller.id}
+              label={seller.name}
+              tone="cyan"
+              value={money(seller.total)}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="panel">
