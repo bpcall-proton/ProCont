@@ -1222,6 +1222,101 @@ select {
   color: var(--red);
 }
 
+.cash-withdrawal-overview-heading {
+  align-items: flex-end;
+}
+
+.cash-withdrawal-overview-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.cash-withdrawal-overview-controls {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.cash-withdrawal-period-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.cash-withdrawal-period-buttons button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--subtle-background);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cash-withdrawal-period-buttons button:hover,
+.cash-withdrawal-period-buttons button:focus-visible,
+.cash-withdrawal-period-buttons button.is-active {
+  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--violet) 16%, var(--subtle-background));
+}
+
+.cash-withdrawal-date-range {
+  display: flex;
+  gap: 8px;
+}
+
+.cash-withdrawal-date-range label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.cash-withdrawal-date-range input {
+  width: 148px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 9px;
+  font-size: 0.74rem;
+}
+
+.cash-withdrawal-period-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -5px 0 12px;
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.cash-withdrawal-period-summary strong {
+  color: var(--violet);
+}
+
+.cash-withdrawal-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.cash-withdrawal-overview-grid .stat-card {
+  min-height: 105px;
+  padding: 13px 15px;
+  border-radius: 13px;
+}
+
+.cash-withdrawal-overview-grid .stat-card strong {
+  margin: 7px 0 5px;
+  font-size: clamp(1.05rem, 2vw, 1.4rem);
+}
+
 .settings-grid {
   align-items: start;
 }
@@ -2344,6 +2439,27 @@ select {
     flex-direction: column;
   }
 
+  .cash-withdrawal-overview-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cash-withdrawal-overview-controls {
+    justify-items: stretch;
+  }
+
+  .cash-withdrawal-period-buttons {
+    justify-content: flex-start;
+  }
+
+  .cash-withdrawal-date-range label {
+    flex: 1 1 0;
+  }
+
+  .cash-withdrawal-date-range input {
+    width: 100%;
+  }
+
   .dashboard-seller-heading-controls {
     align-items: center;
     flex-wrap: wrap;
@@ -2673,6 +2789,10 @@ select {
   gap: 18px;
 }
 
+.production-card-detail {
+  order: 5;
+}
+
 .production-card-detail .panel-heading {
   margin-bottom: 0;
 }
@@ -2726,7 +2846,7 @@ select {
 .production-breakdown {
   display: grid;
   gap: 18px;
-  order: 1;
+  order: 2;
 }
 
 .production-breakdown .panel-heading {
@@ -2734,15 +2854,15 @@ select {
 }
 
 .production-entry-panel {
-  order: 2;
-}
-
-.production-history-panel {
   order: 3;
 }
 
-.production-settings-panel {
+.production-history-panel {
   order: 4;
+}
+
+.production-settings-panel {
+  order: 1;
 }
 
 .production-heading-actions {
