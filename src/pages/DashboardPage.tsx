@@ -98,6 +98,10 @@ function formatDashboardDate(date: string) {
   return year && month && day ? `${day}/${month}/${year}` : date
 }
 
+function isCompleteDashboardDate(date: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number(date.slice(0, 4)) >= 1900
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
@@ -2230,18 +2234,24 @@ export function DashboardPage() {
                 <span>Da</span>
                 <input
                   aria-label="Data iniziale Cash ritirato"
-                  onChange={(event) => {
-                    const startDate = event.target.value
+                  onBlur={() =>
+                    setCashWithdrawalFilters((current) =>
+                      isCompleteDashboardDate(current.startDate) &&
+                      isCompleteDashboardDate(current.endDate) &&
+                      current.endDate < current.startDate
+                        ? {
+                            startDate: current.startDate,
+                            endDate: current.startDate,
+                          }
+                        : current,
+                    )
+                  }
+                  onChange={(event) =>
                     setCashWithdrawalFilters((current) => ({
-                      startDate,
-                      endDate:
-                        startDate &&
-                        current.endDate &&
-                        current.endDate < startDate
-                          ? startDate
-                          : current.endDate,
+                      ...current,
+                      startDate: event.target.value,
                     }))
-                  }}
+                  }
                   type="date"
                   value={cashWithdrawalFilters.startDate}
                 />
@@ -2250,18 +2260,24 @@ export function DashboardPage() {
                 <span>A</span>
                 <input
                   aria-label="Data finale Cash ritirato"
-                  onChange={(event) => {
-                    const endDate = event.target.value
+                  onBlur={() =>
+                    setCashWithdrawalFilters((current) =>
+                      isCompleteDashboardDate(current.startDate) &&
+                      isCompleteDashboardDate(current.endDate) &&
+                      current.startDate > current.endDate
+                        ? {
+                            startDate: current.endDate,
+                            endDate: current.endDate,
+                          }
+                        : current,
+                    )
+                  }
+                  onChange={(event) =>
                     setCashWithdrawalFilters((current) => ({
-                      startDate:
-                        endDate &&
-                        current.startDate &&
-                        current.startDate > endDate
-                          ? endDate
-                          : current.startDate,
-                      endDate,
+                      ...current,
+                      endDate: event.target.value,
                     }))
-                  }}
+                  }
                   type="date"
                   value={cashWithdrawalFilters.endDate}
                 />
@@ -2278,7 +2294,9 @@ export function DashboardPage() {
         </div>
         <div className="stats-grid cash-withdrawal-overview-grid">
           <StatCard
-            detail={`Somma del periodo · ${cashWithdrawalTakings.length} movimenti`}
+            detail={`Somma del periodo · ${cashWithdrawalTakings.length} ${
+              cashWithdrawalTakings.length === 1 ? 'movimento' : 'movimenti'
+            }`}
             label="Totale Cash ritirato"
             tone="violet"
             value={money(cashWithdrawalTotal)}
