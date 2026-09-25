@@ -209,6 +209,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     date: today(),
     quantity: '',
   })
+  const [entryProductId, setEntryProductId] = useState(
+    firstProduct?.id ?? '',
+  )
   const [reportPeriod, setReportPeriod] = useState<ProductionReportPeriod>(
     data.productionViewSettings?.reportPeriod ?? 'month',
   )
@@ -235,6 +238,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const range = rangeFor(reportPeriod, selectedDate)
   const showingAllProducts =
     selectedProductId === 'all' || selectedProductId === null
+  const entrySettings =
+    selectedProductId === 'all'
+      ? (data.productionSettings.find(
+          (settings) => settings.id === entryProductId,
+        ) ?? firstProduct)
+      : savedSettings
   const selectedSellerIds = configuredIds(savedSettings?.sellerIds)
   const selectedWorkerIds = configuredIds(savedSettings?.workerIds)
 
@@ -533,6 +542,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       data.productionSettings.find((settings) => settings.id === productId) ??
       null
     setSelectedProductId(productId)
+    setEntryProductId(productId)
     setSettingsForm(settingsFormFor(product))
     setEntryForm((current) => ({ ...current, quantity: '' }))
     setEditingEntryId(null)
@@ -540,6 +550,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   }
 
   function selectAllProducts() {
+    if (selectedProductId && selectedProductId !== 'all') {
+      setEntryProductId(selectedProductId)
+    }
     setSelectedProductId('all')
     setEntryForm((current) => ({ ...current, quantity: '' }))
     setEditingEntryId(null)
@@ -635,14 +648,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         : [...current.productionSettings, nextSettings],
     }))
     setSelectedProductId(productId)
+    setEntryProductId(productId)
     setFormError('')
   }
 
   function saveEntry(event: FormEvent) {
     event.preventDefault()
     if (!companyId) return
-    if (!savedSettings) {
-      setFormError('Salva prima le impostazioni del prodotto.')
+    if (!entrySettings) {
+      setFormError('Seleziona il prodotto da registrare.')
       return
     }
     const quantity = quantityExpressionValue(entryForm.quantity)
@@ -659,7 +673,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     const weekStart = startOfWeek(date)
     const weekEnd = addDays(weekStart, 6)
     const companyEntries = data.productionEntries.filter(
-      (entry) => entry.productId === savedSettings.id,
+      (entry) => entry.productId === entrySettings.id,
     )
     const otherEntries = companyEntries.filter(
       (entry) => entry.id !== editingEntryId,
@@ -699,7 +713,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             entry.id === editingEntryId
               ? {
                   ...entry,
-                  productId: savedSettings.id,
+                  productId: entrySettings.id,
                   period: entryForm.period,
                   date,
                   quantity,
@@ -714,7 +728,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             {
               id: createId('production'),
               companyId,
-              productId: savedSettings.id,
+              productId: entrySettings.id,
               period: entryForm.period,
               date,
               quantity,
@@ -733,8 +747,13 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         (settings) => settings.id === entry.productId,
       ) ?? null
     if (!product) return
-    setSelectedProductId(product.id)
-    setSettingsForm(settingsFormFor(product))
+    if (selectedProductId === 'all') {
+      setEntryProductId(product.id)
+    } else {
+      setSelectedProductId(product.id)
+      setEntryProductId(product.id)
+      setSettingsForm(settingsFormFor(product))
+    }
     setEntryForm({
       period: entry.period,
       date: entry.date,
@@ -787,6 +806,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     }))
     const nextProduct = remainingProducts[0] ?? null
     setSelectedProductId(nextProduct?.id ?? null)
+    setEntryProductId(nextProduct?.id ?? '')
     setSettingsForm(settingsFormFor(nextProduct))
     setEntryForm((current) => ({ ...current, quantity: '' }))
     setEditingEntryId(null)
@@ -1496,7 +1516,6 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       </section>
 
       {selectedProductId !== 'all' && (
-        <>
         <form
           className="panel accounting-form production-settings-panel"
           onSubmit={saveSettings}
@@ -1617,7 +1636,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             Salva impostazioni pagina
           </button>
         </form>
+      )}
 
+      {(selectedProductId === 'all' || savedSettings) && (
         <form
           className="panel accounting-form production-entry-panel"
           id="production-entry-form"
@@ -1634,6 +1655,29 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             </div>
           </div>
           <div className="production-entry-fields">
+            {selectedProductId === 'all' && (
+              <label>
+                Prodotto
+                <select
+                  onChange={(event) => {
+                    setEntryProductId(event.target.value)
+                    setEditingEntryId(null)
+                    setEntryForm((current) => ({
+                      ...current,
+                      quantity: '',
+                    }))
+                    setFormError('')
+                  }}
+                  value={entrySettings?.id ?? ''}
+                >
+                  {data.productionSettings.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.productName || 'Prodotto senza nome'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Inserimento
               <select
@@ -1702,14 +1746,13 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             )}
             <button
               className="button button-primary"
-              disabled={!savedSettings}
+              disabled={!entrySettings}
               type="submit"
             >
               {editingEntryId ? 'Salva modifica' : 'Registra quantità'}
             </button>
           </div>
         </form>
-        </>
       )}
 
       {formError && <p className="form-error">{formError}</p>}
