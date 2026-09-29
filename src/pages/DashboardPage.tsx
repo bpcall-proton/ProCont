@@ -102,6 +102,12 @@ function isCompleteDashboardDate(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number(date.slice(0, 4)) >= 1900
 }
 
+function monthEnd(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number)
+  if (!year || !monthNumber) return today()
+  return new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
@@ -124,6 +130,24 @@ export function DashboardPage() {
   const withdrawalMonthFilter = withdrawalFilters.month
   const withdrawalYearFilter = withdrawalFilters.year
   const currentDate = today()
+  const currentYear = currentDate.slice(0, 4)
+  const currentMonth = currentDate.slice(0, 7)
+  const economicFilterDefaults = {
+    mode: 'year',
+    month: currentMonth,
+    year: currentYear,
+  }
+  const [economicFilters, setEconomicFilters] = useStoredFilters(
+    `dashboard-economic-filters:${companyId ?? 'none'}`,
+    economicFilterDefaults,
+  )
+  const economicMode = economicFilters.mode === 'month' ? 'month' : 'year'
+  const economicMonth = /^\d{4}-\d{2}$/.test(economicFilters.month)
+    ? economicFilters.month
+    : currentMonth
+  const economicYear = /^\d{4}$/.test(economicFilters.year)
+    ? economicFilters.year
+    : currentYear
   const cashWithdrawalFilterDefaults = {
     startDate: currentDate,
     endDate: currentDate,
@@ -136,6 +160,40 @@ export function DashboardPage() {
     (company) => company.id === companyId,
   )
   const accounting = activeAccounting(state.accounting)
+  const economicRangeStart =
+    economicMode === 'month'
+      ? `${economicMonth}-01`
+      : `${economicYear}-01-01`
+  const unboundedEconomicRangeEnd =
+    economicMode === 'month'
+      ? monthEnd(economicMonth)
+      : `${economicYear}-12-31`
+  const economicRangeEnd =
+    unboundedEconomicRangeEnd > currentDate
+      ? currentDate
+      : unboundedEconomicRangeEnd
+  const economicPeriodLabel =
+    economicMode === 'month'
+      ? new Intl.DateTimeFormat('it-IT', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        }).format(new Date(`${economicRangeStart}T00:00:00Z`))
+      : `anno ${economicYear} maturato`
+  const economicYears = [
+    ...new Set([
+      currentYear,
+      ...accounting.invoices.map((invoice) => invoice.date.slice(0, 4)),
+      ...accounting.takings.map((taking) => taking.date.slice(0, 4)),
+      ...accounting.rentals.map((rental) => rental.date.slice(0, 4)),
+      ...accounting.accountantInvoices.map((invoice) =>
+        invoice.date.slice(0, 4),
+      ),
+      ...accounting.expenses.map((expense) => expense.date.slice(0, 4)),
+    ]),
+  ]
+    .filter((year) => /^\d{4}$/.test(year))
+    .sort((left, right) => right.localeCompare(left))
   const stores = state.stores.filter(
     (store) =>
       store.companyId === companyId &&
@@ -234,20 +292,19 @@ export function DashboardPage() {
     accountantCosts +
     otherExpenses +
     productionSalaries
-  const currentYear = today().slice(0, 4)
-  const currentYearStart = `${currentYear}-01-01`
-  const currentYearEnd = today()
   const annualInvoices = accounting.invoices.filter(
     (invoice) =>
-      invoice.date >= currentYearStart && invoice.date <= currentYearEnd,
+      invoice.date >= economicRangeStart &&
+      invoice.date <= economicRangeEnd,
   )
   const annualTakings = accounting.takings.filter(
     (taking) =>
-      taking.date >= currentYearStart && taking.date <= currentYearEnd,
+      taking.date >= economicRangeStart &&
+      taking.date <= economicRangeEnd,
   )
   const annualMaturedDates = maturedDatesForPeriod(
-    currentYearStart,
-    currentYearEnd,
+    economicRangeStart,
+    economicRangeEnd,
   )
   const annualRentalCosts = monthlyCostsForMaturedDates(
     accounting.rentals,
@@ -265,16 +322,16 @@ export function DashboardPage() {
       expense,
       amount: expenseForMaturedDates(
         expense,
-        currentYearStart,
-        currentYearEnd,
+        economicRangeStart,
+        economicRangeEnd,
         annualMaturedDates,
       ),
     }))
     .filter(({ amount }) => amount !== 0)
   const annualProductionSalaryCosts = productionSalaryCostsForPeriod(
     accounting,
-    currentYearStart,
-    currentYearEnd,
+    economicRangeStart,
+    economicRangeEnd,
   )
   const annualReal = roundMoney(
     annualTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
@@ -579,7 +636,7 @@ export function DashboardPage() {
     ...annualTakings
       .map((taking) => ({
         date: taking.date,
-        category: 'Incasso reale annuale',
+        category: 'Incasso reale del periodo',
         description: taking.sellerName || 'Venditore non indicato',
         reference: 'Valore effettivamente incassato',
         amount: realTaking(taking),
@@ -587,7 +644,7 @@ export function DashboardPage() {
       .filter((row) => row.amount !== 0),
     ...annualInvoices.map((invoice) => ({
       date: invoice.date,
-      category: 'Acquisto annuale',
+      category: 'Acquisto del periodo',
       description: invoice.supplierName || 'Fornitore non indicato',
       reference: `Fattura ${invoice.number || 'senza numero'} · include merce senza fattura`,
       amount: -(invoice.total + invoice.unregisteredGoods),
@@ -608,7 +665,7 @@ export function DashboardPage() {
     })),
     ...annualExpenseCosts.map(({ expense, amount }) => ({
       date: expense.date,
-      category: 'Spesa annuale',
+      category: 'Spesa del periodo',
       description: expense.description || expense.type,
       reference:
         expense.recurrence === 'monthly'
@@ -634,7 +691,7 @@ export function DashboardPage() {
     ...(annualStock > 0
       ? [
           {
-            date: currentYearEnd,
+            date: economicRangeEnd,
             category: 'Scenario vendita stock',
             description: 'Venit stock ancora vendibile',
             reference: `Bilancio potenziale ${money(annualPotentialBalance)}`,
@@ -776,7 +833,7 @@ export function DashboardPage() {
       rows: [...realRows, ...negativeCostRows],
     },
     'annual-real-balance': {
-      title: `Bilancio reale annuale ${currentYear}`,
+      title: `Bilancio reale · ${economicPeriodLabel}`,
       note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − spese maturate sui giorni trascorsi. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
       value: annualRealBalance,
       tone: annualBalanceTone,
@@ -2011,7 +2068,7 @@ export function DashboardPage() {
           >
             <TrafficLight size="large" tone={annualBalanceTone} />
             <span>
-              Bilancio annuale
+              Bilancio {economicMode === 'month' ? 'mensile' : 'annuale'}
               <strong>{annualBalanceStatus}</strong>
             </span>
           </button>
@@ -2020,6 +2077,116 @@ export function DashboardPage() {
           </button>
         </div>
       </header>
+
+      <section className="panel dashboard-economic-period">
+        <div className="dashboard-economic-period-heading">
+          <div>
+            <span className="eyebrow">SITUAZIONE ECONOMICA GENERALE</span>
+            <h2>{economicPeriodLabel}</h2>
+            <p>
+              Il mese mostra solo i movimenti e i costi maturati nel mese
+              scelto; l’anno mostra la situazione maturata fino a oggi.
+            </p>
+          </div>
+          <div className="dashboard-economic-period-controls">
+            <label>
+              Vista
+              <select
+                onChange={(event) =>
+                  setEconomicFilters((current) => ({
+                    ...current,
+                    mode: event.target.value,
+                  }))
+                }
+                value={economicMode}
+              >
+                <option value="year">Annuale maturata</option>
+                <option value="month">Singolo mese</option>
+              </select>
+            </label>
+            {economicMode === 'month' ? (
+              <label>
+                Mese
+                <input
+                  max={currentMonth}
+                  onChange={(event) =>
+                    setEconomicFilters((current) => ({
+                      ...current,
+                      month: event.target.value || currentMonth,
+                    }))
+                  }
+                  type="month"
+                  value={economicMonth}
+                />
+              </label>
+            ) : (
+              <label>
+                Anno
+                <select
+                  onChange={(event) =>
+                    setEconomicFilters((current) => ({
+                      ...current,
+                      year: event.target.value,
+                    }))
+                  }
+                  value={economicYear}
+                >
+                  {economicYears.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </div>
+        <div className="stats-grid dashboard-economic-summary-grid">
+          <StatCard
+            detail="Totale effettivamente incassato nel periodo"
+            label="Incasso reale"
+            tone="cyan"
+            value={money(annualReal)}
+          />
+          <StatCard
+            detail="Fatture e merce senza fattura del periodo"
+            label="Acquisti"
+            tone="red"
+            value={money(annualPurchaseCosts)}
+          />
+          <StatCard
+            detail={`Quote maturate su ${annualMaturedDates.size} giorni`}
+            label="Spese maturate"
+            tone="amber"
+            value={money(annualFixedCosts)}
+          />
+          <StatCard
+            detail="Vendita teorica degli acquisti del periodo"
+            label="Venit teorico"
+            tone="cyan"
+            value={money(annualTheoretical)}
+          />
+          <StatCard
+            detail="Venit teorico non ancora incassato"
+            label="Stock residuo"
+            tone="amber"
+            value={money(annualStock)}
+          />
+          <StatCard
+            detail={annualBalanceStatus}
+            label="Bilancio reale"
+            onClick={() => setDetail('annual-real-balance')}
+            tone={annualBalanceTone}
+            value={money(annualRealBalance)}
+          />
+          <StatCard
+            detail="Bilancio reale più stock ancora vendibile"
+            label="Bilancio potenziale"
+            tone={annualPotentialBalance >= 0 ? 'green' : 'red'}
+            value={money(annualPotentialBalance)}
+          />
+        </div>
+      </section>
 
       <section className="stats-grid dashboard-stats-grid">
         <StatCard
@@ -2152,13 +2319,6 @@ export function DashboardPage() {
           onClick={() => setDetail('real-result')}
           tone={real - totalCosts >= 0 ? 'green' : 'red'}
           value={money(real - totalCosts)}
-        />
-        <StatCard
-          detail={`${annualBalanceStatus} · potenziale con stock ${money(annualPotentialBalance)}`}
-          label={`Bilancio reale annuale ${currentYear}`}
-          onClick={() => setDetail('annual-real-balance')}
-          tone={annualBalanceTone}
-          value={money(annualRealBalance)}
         />
       </section>
 

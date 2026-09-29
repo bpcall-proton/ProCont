@@ -955,6 +955,52 @@ select {
   gap: 10px;
 }
 
+.dashboard-economic-period-heading,
+.dashboard-economic-period-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.dashboard-economic-period {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-economic-period-heading {
+  justify-content: space-between;
+}
+
+.dashboard-economic-period h2,
+.dashboard-economic-period p {
+  margin: 0;
+}
+
+.dashboard-economic-period p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.dashboard-economic-period-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.dashboard-economic-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 10px;
+}
+
+.dashboard-economic-summary-grid .stat-card {
+  min-height: 108px;
+  padding: 13px 15px;
+}
+
 .dashboard-heading-actions,
 .dashboard-annual-traffic {
   display: flex;
@@ -2463,6 +2509,20 @@ select {
   .dashboard-seller-heading-controls {
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  .dashboard-economic-period-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-economic-period-controls {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-economic-period-controls label {
+    flex: 1 1 180px;
   }
 
   .dashboard-seller-date-filter {
