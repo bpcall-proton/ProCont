@@ -2903,6 +2903,31 @@ select {
   line-height: 1.5;
 }
 
+.production-piece-tracking {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1fr) minmax(190px, 0.4fr);
+}
+
+.production-piece-toggle {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 12px 14px;
+}
+
+.production-piece-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.production-piece-toggle small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
 .production-breakdown {
   display: grid;
   gap: 18px;
@@ -2965,7 +2990,7 @@ select {
   align-items: end;
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
 }
 
 .production-work-form {
@@ -4664,7 +4689,8 @@ select {
 
   .production-wage-filter,
   .production-wage-form,
-  .production-work-form {
+  .production-work-form,
+  .production-piece-tracking {
     grid-template-columns: 1fr 1fr;
   }
 

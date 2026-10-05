@@ -173,8 +173,19 @@ export function productionSalaryCostsForPeriod(
 ) {
   const inRange = (date: string) =>
     (!rangeStart || date >= rangeStart) && date <= rangeEnd
+  const ratesBySeller = new Map(
+    state.productionWorkerRates.map((rate) => [rate.sellerId, rate]),
+  )
   const hourlyCosts: ProductionSalaryCost[] = state.productionWorkEntries
-    .filter((entry) => entry.payMode === 'hourly' && inRange(entry.date))
+    .filter((entry) => {
+      if (entry.payMode !== 'hourly' || !inRange(entry.date)) return false
+      const rate = ratesBySeller.get(entry.sellerId)
+      return !(
+        rate?.mode === 'per-piece' &&
+        rate.effectiveMonth &&
+        entry.date.slice(0, 7) >= rate.effectiveMonth
+      )
+    })
     .map((entry) => {
       const quantity = productionWorkHours(entry.startTime, entry.endTime)
       return {
@@ -188,11 +199,6 @@ export function productionSalaryCostsForPeriod(
       }
     })
     .filter((cost) => cost.amount !== 0)
-  const ratesBySeller = new Map(
-    state.productionWorkerRates
-      .filter((rate) => rate.mode === 'per-piece')
-      .map((rate) => [rate.sellerId, rate]),
-  )
   const settingsByProduct = new Map(
     state.productionSettings.map((settings) => [settings.id, settings]),
   )
@@ -201,9 +207,25 @@ export function productionSalaryCostsForPeriod(
     .flatMap((entry) => {
       const settings = settingsByProduct.get(entry.productId)
       if (!settings) return []
-      return settings.workerIds.flatMap((sellerId) => {
+      const trackedByWorker =
+        settings.workerPieceTrackingEnabled &&
+        Boolean(settings.workerPieceTrackingStartMonth) &&
+        entry.date.slice(0, 7) >= settings.workerPieceTrackingStartMonth
+      const workerIds = trackedByWorker
+        ? entry.workerId && settings.workerIds.includes(entry.workerId)
+          ? [entry.workerId]
+          : []
+        : settings.workerIds
+      return workerIds.flatMap((sellerId) => {
         const rate = ratesBySeller.get(sellerId)
-        if (!rate) return []
+        if (
+          !rate ||
+          rate.mode !== 'per-piece' ||
+          (rate.effectiveMonth &&
+            entry.date.slice(0, 7) < rate.effectiveMonth)
+        ) {
+          return []
+        }
         return [
           {
             date: entry.date,

@@ -3,6 +3,7 @@ import {
   activeAccounting,
   allocatedExpense,
   money,
+  productionSalaryCostsForPeriod,
   roundMoney,
   today,
 } from '../domain/accounting'
@@ -27,6 +28,8 @@ function settingsFormFor(
         sellerIds: string[]
         expenseIds?: string[]
         workerIds?: string[]
+        workerPieceTrackingEnabled?: boolean
+        workerPieceTrackingStartMonth?: string
       }
     | null,
 ) {
@@ -36,6 +39,10 @@ function settingsFormFor(
     sellerIds: settings?.sellerIds ?? [],
     expenseIds: settings?.expenseIds ?? [],
     workerIds: settings?.workerIds ?? [],
+    workerPieceTrackingEnabled:
+      settings?.workerPieceTrackingEnabled ?? false,
+    workerPieceTrackingStartMonth:
+      settings?.workerPieceTrackingStartMonth ?? today().slice(0, 7),
   }
 }
 
@@ -204,10 +211,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     period: ProductionEntryPeriod
     date: string
     quantity: string
+    workerId: string
   }>({
     period: 'day',
     date: today(),
     quantity: '',
+    workerId: firstProduct?.workerIds[0] ?? '',
   })
   const [entryProductId, setEntryProductId] = useState(
     firstProduct?.id ?? '',
@@ -246,6 +255,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       : savedSettings
   const selectedSellerIds = configuredIds(savedSettings?.sellerIds)
   const selectedWorkerIds = configuredIds(savedSettings?.workerIds)
+  const entryWorkerTrackingActive =
+    Boolean(entrySettings?.workerPieceTrackingEnabled) &&
+    Boolean(entrySettings?.workerPieceTrackingStartMonth) &&
+    entryForm.date.slice(0, 7) >=
+      (entrySettings?.workerPieceTrackingStartMonth ?? '')
 
   const results = (() => {
     const inRange = (date: string) => date >= range.start && date <= range.end
@@ -283,6 +297,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         : data.productionSettings.filter(
             (product) => product.id === selectedProductId,
           )
+    const periodSalaryCosts = productionSalaryCostsForPeriod(
+      data,
+      range.start,
+      range.end,
+    )
     const productsResults = products.map((product) => {
       const productSellerIds = configuredIds(product.sellerIds)
       const productExpenseIds = configuredIds(product.expenseIds)
@@ -341,41 +360,41 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             configuredIds(configuredProduct.workerIds).includes(workerId),
           ).length,
         )
-        const hourlyEntries = data.productionWorkEntries.filter(
-          (entry) =>
-            entry.sellerId === workerId &&
-            entry.payMode === 'hourly' &&
-            inRange(entry.date),
+        const hourlyCosts = periodSalaryCosts.filter(
+          (cost) =>
+            cost.sellerId === workerId &&
+            cost.payMode === 'hourly' &&
+            (cost.productId === null || cost.productId === product.id),
         )
-        const hours = hourlyEntries.reduce(
-          (total, entry) =>
-            total + durationHours(entry.startTime, entry.endTime),
+        const hours = hourlyCosts.reduce(
+          (total, cost) => total + cost.quantity,
           0,
         )
         const hourlyAmount = roundMoney(
-          hourlyEntries.reduce(
-            (total, entry) =>
+          hourlyCosts.reduce(
+            (total, cost) =>
               total +
-              durationHours(entry.startTime, entry.endTime) * entry.rate,
+              cost.amount /
+                (cost.productId === null ? assignedProducts : 1),
             0,
-          ) / assignedProducts,
+          ),
         )
-        const rate = data.productionWorkerRates.find(
-          (settings) => settings.sellerId === workerId,
+        const pieceCosts = periodSalaryCosts.filter(
+          (cost) =>
+            cost.payMode === 'per-piece' &&
+            cost.productId === product.id &&
+            cost.sellerId === workerId,
         )
-        const quantity =
-          rate?.mode === 'per-piece'
-            ? data.productionEntries
-                .filter(
-                  (entry) =>
-                    entry.productId === product.id && inRange(entry.date),
-                )
-                .reduce((total, entry) => total + entry.quantity, 0)
-            : 0
-        const pieceAmount =
-          rate?.mode === 'per-piece'
-            ? roundMoney(quantity * rate.rate)
-            : 0
+        const quantity = pieceCosts.reduce(
+          (total, cost) => total + cost.quantity,
+          0,
+        )
+        const pieceAmount = roundMoney(
+          pieceCosts.reduce((total, cost) => total + cost.amount, 0),
+        )
+        const pieceRates = [
+          ...new Set(pieceCosts.map((cost) => cost.rate)),
+        ]
         return [
           ...(hourlyAmount > 0
             ? [
@@ -387,12 +406,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 },
               ]
             : []),
-          ...(pieceAmount > 0 && rate
+          ...(pieceAmount > 0
             ? [
                 {
                   id: `piece-${workerId}`,
                   sellerName: seller?.name ?? 'Lavoratrice rimossa',
-                  description: `${quantity.toLocaleString('it-IT')} pezzi × ${money(rate.rate)}`,
+                  description:
+                    pieceRates.length === 1
+                      ? `${quantity.toLocaleString('it-IT')} pezzi × ${money(pieceRates[0])}`
+                      : `${quantity.toLocaleString('it-IT')} pezzi · tariffe del periodo`,
                   amount: pieceAmount,
                 },
               ]
@@ -544,7 +566,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setSelectedProductId(productId)
     setEntryProductId(productId)
     setSettingsForm(settingsFormFor(product))
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      workerId: product?.workerIds[0] ?? '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -554,7 +580,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       setEntryProductId(selectedProductId)
     }
     setSelectedProductId('all')
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    const product =
+      data.productionSettings.find(
+        (settings) => settings.id === selectedProductId,
+      ) ?? firstProduct
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      workerId: product?.workerIds[0] ?? '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -562,7 +596,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   function startAddingProduct() {
     setSelectedProductId(null)
     setSettingsForm(settingsFormFor(null))
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      workerId: '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -627,6 +665,24 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       setFormError('Seleziona almeno un venditore da includere nei costi.')
       return
     }
+    if (
+      settingsForm.workerPieceTrackingEnabled &&
+      settingsForm.workerIds.length === 0
+    ) {
+      setFormError(
+        'Seleziona almeno una lavoratrice per attribuire i panini prodotti.',
+      )
+      return
+    }
+    if (
+      settingsForm.workerPieceTrackingEnabled &&
+      !/^\d{4}-\d{2}$/.test(
+        settingsForm.workerPieceTrackingStartMonth,
+      )
+    ) {
+      setFormError('Seleziona il mese di decorrenza del calcolo a panino.')
+      return
+    }
     const productId = savedSettings?.id ?? createId('production-product')
     const nextSettings = {
       id: productId,
@@ -636,6 +692,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       sellerIds: settingsForm.sellerIds,
       expenseIds: settingsForm.expenseIds,
       workerIds: settingsForm.workerIds,
+      workerPieceTrackingEnabled:
+        settingsForm.workerPieceTrackingEnabled,
+      workerPieceTrackingStartMonth:
+        settingsForm.workerPieceTrackingEnabled
+          ? settingsForm.workerPieceTrackingStartMonth
+          : '',
     }
     updateAccounting((current) => ({
       ...current,
@@ -657,6 +719,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     if (!companyId) return
     if (!entrySettings) {
       setFormError('Seleziona il prodotto da registrare.')
+      return
+    }
+    if (
+      entryWorkerTrackingActive &&
+      !entrySettings.workerIds.includes(entryForm.workerId)
+    ) {
+      setFormError(
+        'Seleziona la lavoratrice che ha prodotto questi panini.',
+      )
       return
     }
     const quantity = quantityExpressionValue(entryForm.quantity)
@@ -714,6 +785,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               ? {
                   ...entry,
                   productId: entrySettings.id,
+                  workerId: entryWorkerTrackingActive
+                    ? entryForm.workerId
+                    : null,
                   period: entryForm.period,
                   date,
                   quantity,
@@ -722,13 +796,24 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           )
         : existing
         ? current.productionEntries.map((entry) =>
-            entry.id === existing.id ? { ...entry, quantity } : entry,
+            entry.id === existing.id
+              ? {
+                  ...entry,
+                  quantity,
+                  workerId: entryWorkerTrackingActive
+                    ? entryForm.workerId
+                    : null,
+                }
+              : entry,
           )
         : [
             {
               id: createId('production'),
               companyId,
               productId: entrySettings.id,
+              workerId: entryWorkerTrackingActive
+                ? entryForm.workerId
+                : null,
               period: entryForm.period,
               date,
               quantity,
@@ -758,6 +843,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       period: entry.period,
       date: entry.date,
       quantity: String(entry.quantity),
+      workerId: entry.workerId ?? product.workerIds[0] ?? '',
     })
     setEditingEntryId(entry.id)
     setFormError('')
@@ -808,7 +894,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setSelectedProductId(nextProduct?.id ?? null)
     setEntryProductId(nextProduct?.id ?? '')
     setSettingsForm(settingsFormFor(nextProduct))
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      workerId: nextProduct?.workerIds[0] ?? '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -950,40 +1040,35 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           amount: roundMoney(hours * entry.rate),
         }
       })
-    const ratesBySeller = new Map(
-      data.productionWorkerRates
-        .filter((rate) => rate.mode === 'per-piece')
-        .map((rate) => [rate.sellerId, rate.rate]),
+    const exportProductIds = new Set(
+      exportProducts.map((product) => product.id),
     )
-    const pieceRows = results.products.flatMap(({ product }) =>
-      data.productionEntries
-        .filter(
-          (entry) =>
-            entry.productId === product.id && inRange(entry.date),
-        )
-        .flatMap((entry) =>
-          configuredIds(product.workerIds).flatMap((sellerId) => {
-            const rate = ratesBySeller.get(sellerId)
-            if (rate === undefined) return []
-            return [
-              {
-                sellerId,
-                sellerName:
-                  sellerNamesById.get(sellerId) ?? 'Lavoratrice rimossa',
-                date: entry.date,
-                product: product.productName || 'Prodotto senza nome',
-                mode: 'A pezzo',
-                startTime: '',
-                endTime: '',
-                hours: 0,
-                pieces: entry.quantity,
-                rate,
-                amount: roundMoney(entry.quantity * rate),
-              },
-            ]
-          }),
-        ),
+    const pieceRows = productionSalaryCostsForPeriod(
+      data,
+      range.start,
+      range.end,
     )
+      .filter(
+        (cost) =>
+          cost.payMode === 'per-piece' &&
+          cost.productId !== null &&
+          exportProductIds.has(cost.productId),
+      )
+      .map((cost) => ({
+        sellerId: cost.sellerId,
+        sellerName:
+          sellerNamesById.get(cost.sellerId) ?? 'Lavoratrice rimossa',
+        date: cost.date,
+        product:
+          productNames.get(cost.productId ?? '') ?? 'Prodotto rimosso',
+        mode: 'A pezzo',
+        startTime: '',
+        endTime: '',
+        hours: 0,
+        pieces: cost.quantity,
+        rate: cost.rate,
+        amount: cost.amount,
+      }))
     return [...hourlyRows, ...pieceRows].sort(
       (left, right) =>
         left.sellerName.localeCompare(right.sellerName, 'it') ||
@@ -1621,6 +1706,46 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               ))
             )}
           </fieldset>
+          <div className="production-piece-tracking">
+            <label className="checkbox-row production-piece-toggle">
+              <input
+                checked={settingsForm.workerPieceTrackingEnabled}
+                onChange={(event) =>
+                  setSettingsForm((current) => ({
+                    ...current,
+                    workerPieceTrackingEnabled: event.target.checked,
+                    workerPieceTrackingStartMonth:
+                      current.workerPieceTrackingStartMonth ||
+                      today().slice(0, 7),
+                  }))
+                }
+                type="checkbox"
+              />
+              <span>
+                <strong>Attribuisci i panini alla lavoratrice</strong>
+                <small>
+                  ON: ogni quantità viene pagata solo a chi l’ha prodotta.
+                  OFF: resta il calcolo precedente.
+                </small>
+              </span>
+            </label>
+            {settingsForm.workerPieceTrackingEnabled && (
+              <label>
+                Calcolo attivo dal mese
+                <input
+                  onChange={(event) =>
+                    setSettingsForm((current) => ({
+                      ...current,
+                      workerPieceTrackingStartMonth: event.target.value,
+                    }))
+                  }
+                  required
+                  type="month"
+                  value={settingsForm.workerPieceTrackingStartMonth}
+                />
+              </label>
+            )}
+          </div>
           <p className="production-help">
             Le fatture dei venditori, le spese mensili e le lavoratrici
             selezionate formano il costo del prodotto. Se una spesa o una
@@ -1660,11 +1785,16 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 Prodotto
                 <select
                   onChange={(event) => {
-                    setEntryProductId(event.target.value)
+                    const productId = event.target.value
+                    const product = data.productionSettings.find(
+                      (settings) => settings.id === productId,
+                    )
+                    setEntryProductId(productId)
                     setEditingEntryId(null)
                     setEntryForm((current) => ({
                       ...current,
                       quantity: '',
+                      workerId: product?.workerIds[0] ?? '',
                     }))
                     setFormError('')
                   }}
@@ -1721,6 +1851,32 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 value={entryForm.quantity}
               />
             </label>
+            {entryWorkerTrackingActive && (
+              <label>
+                Chi li ha prodotti
+                <select
+                  onChange={(event) =>
+                    setEntryForm({
+                      ...entryForm,
+                      workerId: event.target.value,
+                    })
+                  }
+                  required
+                  value={entryForm.workerId}
+                >
+                  <option value="">Seleziona lavoratrice</option>
+                  {data.sellers
+                    .filter((seller) =>
+                      entrySettings?.workerIds.includes(seller.id),
+                    )
+                    .map((seller) => (
+                      <option key={seller.id} value={seller.id}>
+                        {seller.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
           </div>
           <p className="production-help">
             Un totale settimanale sostituisce gli inserimenti giornalieri della
@@ -1822,6 +1978,24 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                       : 'Totale settimanale'}
                     {showingAllProducts &&
                       ` · ${productNames.get(entry.productId) ?? 'Prodotto'}`}
+                    {(() => {
+                      const product = data.productionSettings.find(
+                        (settings) => settings.id === entry.productId,
+                      )
+                      const requiresWorker =
+                        product?.workerPieceTrackingEnabled &&
+                        product.workerPieceTrackingStartMonth &&
+                        entry.date.slice(0, 7) >=
+                          product.workerPieceTrackingStartMonth
+                      if (entry.workerId) {
+                        return ` · ${
+                          data.sellers.find(
+                            (seller) => seller.id === entry.workerId,
+                          )?.name ?? 'Lavoratrice rimossa'
+                        }`
+                      }
+                      return requiresWorker ? ' · Da assegnare' : ''
+                    })()}
                   </small>
                 </span>
                 <span>

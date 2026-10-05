@@ -265,12 +265,15 @@ export interface ProductionSettings {
   sellerIds: string[]
   expenseIds: string[]
   workerIds: string[]
+  workerPieceTrackingEnabled: boolean
+  workerPieceTrackingStartMonth: string
 }
 
 export interface ProductionEntry {
   id: string
   companyId: string
   productId: string
+  workerId: string | null
   period: ProductionEntryPeriod
   date: string
   quantity: number
@@ -287,6 +290,7 @@ export interface ProductionWorkerRate {
   sellerId: string
   mode: ProductionPayMode
   rate: number
+  effectiveMonth: string
 }
 
 export interface ProductionWorkEntry {
