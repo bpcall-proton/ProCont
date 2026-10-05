@@ -209,7 +209,9 @@ export interface Rental {
   id: string
   companyId: string
   allocationSellerIds: string[]
+  attachmentImages: string[]
   property: string
+  notes: string
   tenant: string
   total: number
   vatRate: number
@@ -245,6 +247,7 @@ export interface AccountingExpense {
   id: string
   companyId: string
   allocationSellerIds: string[]
+  attachmentImages: string[]
   type: ExpenseType
   description: string
   sellerId: string | null

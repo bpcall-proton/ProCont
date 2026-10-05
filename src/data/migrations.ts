@@ -327,7 +327,9 @@ function mapRental(value: JsonRecord): Rental {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
     allocationSellerIds: textList(value.venditoriRipartizioneIds),
+    attachmentImages: textList(value.allegati),
     property: text(value.immobile),
+    notes: text(value.note),
     tenant: text(value.inquilino),
     total,
     vatRate,
@@ -386,6 +388,7 @@ function mapExpense(value: JsonRecord): AccountingExpense {
     id: text(value.id, crypto.randomUUID()),
     companyId: text(value.aziendaId),
     allocationSellerIds: textList(value.venditoriRipartizioneIds),
+    attachmentImages: textList(value.allegati),
     type,
     description: text(value.descrizione),
     sellerId: nullableText(value.venditoreId),
@@ -677,6 +680,9 @@ export function normalizeStoredState(
       ...expense,
       companyId: expense.companyId || fallbackCompanyId,
       allocationSellerIds: expense.allocationSellerIds ?? [],
+      attachmentImages: Array.isArray(expense.attachmentImages)
+        ? expense.attachmentImages
+        : [],
       recurrence: expense.recurrence ?? 'once',
       recurrenceEndDate: expense.recurrenceEndDate ?? null,
     }))
@@ -989,6 +995,10 @@ export function normalizeStoredState(
           ...rental,
           companyId: rental.companyId || fallbackCompanyId,
           allocationSellerIds: rental.allocationSellerIds ?? [],
+          attachmentImages: Array.isArray(rental.attachmentImages)
+            ? rental.attachmentImages
+            : [],
+          notes: rental.notes ?? '',
         })),
         accountantInvoices: (accounting.accountantInvoices ?? []).map(
           (invoice) => ({
