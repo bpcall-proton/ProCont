@@ -1011,13 +1011,25 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     const sellerNamesById = new Map(
       data.sellers.map((seller) => [seller.id, seller.name]),
     )
+    const ratesBySeller = new Map(
+      data.productionWorkerRates.map((rate) => [rate.sellerId, rate]),
+    )
     const hourlyRows = data.productionWorkEntries
-      .filter(
-        (entry) =>
-          entry.payMode === 'hourly' &&
-          inRange(entry.date) &&
-          (showingAllProducts || workerIds.has(entry.sellerId)),
-      )
+      .filter((entry) => {
+        if (
+          entry.payMode !== 'hourly' ||
+          !inRange(entry.date) ||
+          (!showingAllProducts && !workerIds.has(entry.sellerId))
+        ) {
+          return false
+        }
+        const rate = ratesBySeller.get(entry.sellerId)
+        return !(
+          rate?.mode === 'per-piece' &&
+          rate.effectiveMonth &&
+          entry.date.slice(0, 7) >= rate.effectiveMonth
+        )
+      })
       .map((entry) => {
         const hours = durationHours(entry.startTime, entry.endTime)
         return {
