@@ -2360,6 +2360,7 @@ function ExpensesPanel() {
   const data = activeAccounting(state.accounting)
   const [expenseDescription, setExpenseDescription] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseNotes, setExpenseNotes] = useState('')
   const [expenseType, setExpenseType] =
     useState<AccountingExpense['type']>('tassa')
   const [expenseDate, setExpenseDate] = useState(today())
@@ -2369,11 +2370,19 @@ function ExpensesPanel() {
   const [expenseSellerId, setExpenseSellerId] = useState('')
   const [expenseAllocationSellerIds, setExpenseAllocationSellerIds] =
     useState<string[]>([])
+  const [expenseAttachmentImages, setExpenseAttachmentImages] = useState<
+    string[]
+  >([])
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
   const [rentalProperty, setRentalProperty] = useState('')
   const [rentalTotal, setRentalTotal] = useState('')
+  const [rentalNotes, setRentalNotes] = useState('')
   const [rentalAllocationSellerIds, setRentalAllocationSellerIds] =
     useState<string[]>([])
+  const [rentalAttachmentImages, setRentalAttachmentImages] = useState<
+    string[]
+  >([])
+  const [editingRentalId, setEditingRentalId] = useState<string | null>(null)
   const [accountantDescription, setAccountantDescription] = useState('')
   const [accountantTotal, setAccountantTotal] = useState('')
   const [
@@ -2396,6 +2405,7 @@ function ExpensesPanel() {
                       expenseType === 'stipendio'
                         ? []
                         : expenseAllocationSellerIds,
+                    attachmentImages: expenseAttachmentImages,
                     type: expenseType,
                     description: expenseDescription.trim(),
                     sellerId:
@@ -2406,6 +2416,7 @@ function ExpensesPanel() {
                     date: expenseDate,
                     recurrence: expenseRecurrence,
                     recurrenceEndDate: expenseEndDate || null,
+                    notes: expenseNotes.trim(),
                     settled:
                       expenseType === 'stipendio' ? true : expense.settled,
                   }
@@ -2419,6 +2430,7 @@ function ExpensesPanel() {
                   expenseType === 'stipendio'
                     ? []
                     : expenseAllocationSellerIds,
+                attachmentImages: expenseAttachmentImages,
                 type: expenseType,
                 description: expenseDescription.trim(),
                 sellerId:
@@ -2429,7 +2441,7 @@ function ExpensesPanel() {
                 date: expenseDate,
                 recurrence: expenseRecurrence,
                 recurrenceEndDate: expenseEndDate || null,
-                notes: '',
+                notes: expenseNotes.trim(),
                 settled: expenseType === 'stipendio',
               },
               ...current.expenses,
@@ -2439,11 +2451,13 @@ function ExpensesPanel() {
     setEditingExpenseId(null)
     setExpenseDescription('')
     setExpenseAmount('')
+    setExpenseNotes('')
     setExpenseDate(today())
     setExpenseRecurrence('once')
     setExpenseEndDate('')
     setExpenseSellerId('')
     setExpenseAllocationSellerIds([])
+    setExpenseAttachmentImages([])
   }
 
   function editExpense(expense: AccountingExpense) {
@@ -2451,11 +2465,23 @@ function ExpensesPanel() {
     setExpenseType(expense.type)
     setExpenseDescription(expense.description)
     setExpenseAmount(String(expense.amount))
+    setExpenseNotes(expense.notes)
     setExpenseDate(expense.date)
     setExpenseRecurrence(expense.recurrence)
     setExpenseEndDate(expense.recurrenceEndDate ?? '')
     setExpenseSellerId(expense.sellerId ?? '')
     setExpenseAllocationSellerIds(expense.allocationSellerIds)
+    setExpenseAttachmentImages(expense.attachmentImages)
+  }
+
+  async function uploadExpenseAttachments(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
+    const images = await Promise.all(files.map(fileDataUrl))
+    setExpenseAttachmentImages((current) => [...current, ...images])
+    event.target.value = ''
   }
 
   function addRental(event: FormEvent) {
@@ -2464,11 +2490,35 @@ function ExpensesPanel() {
     const vat = splitVat(total, 22)
     updateAccounting((current) =>
       mutateCompany(current, (companyId) => {
+        if (editingRentalId) {
+          return {
+            ...current,
+            rentals: current.rentals.map((rental) =>
+              rental.id === editingRentalId
+                ? {
+                    ...rental,
+                    allocationSellerIds: rentalAllocationSellerIds,
+                    attachmentImages: rentalAttachmentImages,
+                    property: rentalProperty.trim(),
+                    notes: rentalNotes.trim(),
+                    total,
+                    taxableAmount: vat.taxableAmount,
+                    vat: vat.vat,
+                    paidAmount: rental.settled
+                      ? total
+                      : Math.min(rental.paidAmount, total),
+                  }
+                : rental,
+            ),
+          }
+        }
         const rental: Rental = {
           id: createId('rental'),
           companyId,
           allocationSellerIds: rentalAllocationSellerIds,
+          attachmentImages: rentalAttachmentImages,
           property: rentalProperty.trim(),
+          notes: rentalNotes.trim(),
           tenant: '',
           total,
           vatRate: 22,
@@ -2487,9 +2537,31 @@ function ExpensesPanel() {
         return { ...current, rentals: [rental, ...current.rentals] }
       }),
     )
+    setEditingRentalId(null)
     setRentalProperty('')
     setRentalTotal('')
+    setRentalNotes('')
     setRentalAllocationSellerIds([])
+    setRentalAttachmentImages([])
+  }
+
+  function editRental(rental: Rental) {
+    setEditingRentalId(rental.id)
+    setRentalProperty(rental.property)
+    setRentalTotal(String(rental.total))
+    setRentalNotes(rental.notes)
+    setRentalAllocationSellerIds(rental.allocationSellerIds)
+    setRentalAttachmentImages(rental.attachmentImages)
+  }
+
+  async function uploadRentalAttachments(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
+    const images = await Promise.all(files.map(fileDataUrl))
+    setRentalAttachmentImages((current) => [...current, ...images])
+    event.target.value = ''
   }
 
   function addAccountantInvoice(event: FormEvent) {
@@ -2540,6 +2612,17 @@ function ExpensesPanel() {
           )}
           <input placeholder="Descrizione" required value={expenseDescription} onChange={(event) => setExpenseDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Importo" required value={expenseAmount} onChange={(event) => setExpenseAmount(event.target.value)} />
+          <textarea placeholder="Nota (facoltativa), es. ACT verifica 3.000, pagato 1.000, saldo 2.000" value={expenseNotes} onChange={(event) => setExpenseNotes(event.target.value)} />
+          <AttachmentEditor
+            images={expenseAttachmentImages}
+            label="Allega foto alla spesa"
+            onRemove={(index) =>
+              setExpenseAttachmentImages((current) =>
+                current.filter((_, imageIndex) => imageIndex !== index),
+              )
+            }
+            onUpload={uploadExpenseAttachments}
+          />
           <label>
             {expenseType === 'stipendio'
               ? 'Data pagamento effettivo'
@@ -2561,7 +2644,18 @@ function ExpensesPanel() {
             />
           )}
           <div className="form-actions">
-            {editingExpenseId && <button className="button button-secondary" type="button" onClick={() => setEditingExpenseId(null)}>Annulla</button>}
+            {editingExpenseId && <button className="button button-secondary" type="button" onClick={() => {
+              setEditingExpenseId(null)
+              setExpenseDescription('')
+              setExpenseAmount('')
+              setExpenseNotes('')
+              setExpenseDate(today())
+              setExpenseRecurrence('once')
+              setExpenseEndDate('')
+              setExpenseSellerId('')
+              setExpenseAllocationSellerIds([])
+              setExpenseAttachmentImages([])
+            }}>Annulla</button>}
             <button className="button button-primary" type="submit">{editingExpenseId ? 'Salva modifica' : 'Registra'}</button>
           </div>
         </form>
@@ -2572,14 +2666,35 @@ function ExpensesPanel() {
         <form className="inline-create-form vertical-form" onSubmit={addRental}>
           <input placeholder="Immobile / locale" required value={rentalProperty} onChange={(event) => setRentalProperty(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={rentalTotal} onChange={(event) => setRentalTotal(event.target.value)} />
+          <textarea placeholder="Nota (facoltativa), es. ACT verifica 3.000, pagato 1.000, saldo 2.000" value={rentalNotes} onChange={(event) => setRentalNotes(event.target.value)} />
+          <AttachmentEditor
+            images={rentalAttachmentImages}
+            label="Allega foto all'affitto"
+            onRemove={(index) =>
+              setRentalAttachmentImages((current) =>
+                current.filter((_, imageIndex) => imageIndex !== index),
+              )
+            }
+            onUpload={uploadRentalAttachments}
+          />
           <SellerAllocationFields
             selectedSellerIds={rentalAllocationSellerIds}
             sellers={data.sellers}
             onChange={setRentalAllocationSellerIds}
           />
-          <button className="button button-primary" type="submit">Registra</button>
+          <div className="form-actions">
+            {editingRentalId && <button className="button button-secondary" type="button" onClick={() => {
+              setEditingRentalId(null)
+              setRentalProperty('')
+              setRentalTotal('')
+              setRentalNotes('')
+              setRentalAllocationSellerIds([])
+              setRentalAttachmentImages([])
+            }}>Annulla</button>}
+            <button className="button button-primary" type="submit">{editingRentalId ? 'Salva modifica' : 'Registra'}</button>
+          </div>
         </form>
-        <SettlementList items={data.rentals} kind="rentals" sellers={data.sellers} />
+        <SettlementList items={data.rentals} kind="rentals" sellers={data.sellers} onEditRental={editRental} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">PRESTAZIONI</span><h2>Fatture del contabile</h2></div></div>
@@ -2599,6 +2714,79 @@ function ExpensesPanel() {
   )
 }
 
+function AttachmentEditor({
+  images,
+  label,
+  onUpload,
+  onRemove,
+}: {
+  images: string[]
+  label: string
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemove: (index: number) => void
+}) {
+  return (
+    <div className="invoice-verification-actions">
+      <label className="button button-secondary">
+        {label}
+        <input
+          accept="image/*"
+          hidden
+          multiple
+          onChange={(event) => void onUpload(event)}
+          type="file"
+        />
+      </label>
+      <small>
+        {images.length === 0
+          ? 'Nessuna foto allegata.'
+          : `${images.length} foto allegate.`}
+      </small>
+      {images.length > 0 && (
+        <div className="review-photo-strip">
+          {images.map((image, index) => (
+            <figure key={`${index}-${image.slice(0, 40)}`}>
+              <a href={image} rel="noreferrer" target="_blank">
+                <img alt={`Allegato ${index + 1}`} src={image} />
+              </a>
+              <button
+                className="danger-text"
+                onClick={() => onRemove(index)}
+                type="button"
+              >
+                Rimuovi
+              </button>
+            </figure>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AttachmentGallery({ images }: { images: string[] }) {
+  if (images.length === 0) return null
+  return (
+    <>
+      <small>
+        {images.length} {images.length === 1 ? 'foto allegata' : 'foto allegate'}
+      </small>
+      <span className="review-photo-strip">
+        {images.map((image, index) => (
+          <a
+            href={image}
+            key={`${index}-${image.slice(0, 40)}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <img alt={`Allegato ${index + 1}`} src={image} />
+          </a>
+        ))}
+      </span>
+    </>
+  )
+}
+
 function ExpenseList({
   items,
   sellers,
@@ -2610,22 +2798,27 @@ function ExpenseList({
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button>{item.type === 'stipendio' ? <small>Corrisposto</small> : <button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button>}<RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small>{item.notes && <small>Nota: {item.notes}</small>}<AttachmentGallery images={item.attachmentImages} /></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button>{item.type === 'stipendio' ? <small>Corrisposto</small> : <button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button>}<RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
 }
 
 function SettlementList({
   items,
   kind,
   sellers,
+  onEditRental,
 }: {
   items: Rental[] | AccountantInvoice[]
   kind: 'rentals' | 'accountantInvoices'
   sellers: AccountingSeller[]
+  onEditRental?: (item: Rental) => void
 }) {
   const { updateAccounting } = useAppStore()
   return <div className="record-list">{items.map((item) => {
     const label = 'property' in item ? item.property : item.description
-    return <div className="record-card allocation-record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small></span><SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, allocationSellerIds } : currentItem) }))} /><span><strong>{money(item.total)}</strong><button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))} /></span></div>
+    const notes = 'notes' in item ? item.notes : ''
+    const attachmentImages =
+      'attachmentImages' in item ? item.attachmentImages : []
+    return <div className="record-card allocation-record-card" key={item.id}><span><strong>{label}</strong><small>{item.date} · IVA {money(item.vat)}</small>{notes && <small>Nota: {notes}</small>}<AttachmentGallery images={attachmentImages} /></span><SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, allocationSellerIds } : currentItem) }))} /><span><strong>{money(item.total)}</strong>{'property' in item && onEditRental && <button type="button" onClick={() => onEditRental(item)}>Modifica</button>}<button type="button" onClick={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].map((currentItem) => currentItem.id === item.id ? { ...currentItem, settled: !currentItem.settled, paidAmount: currentItem.settled ? 0 : currentItem.total, paymentDate: currentItem.settled ? null : today(), paymentMethod: currentItem.settled ? null : 'Bonifico' } : currentItem) }))}>{item.settled ? 'Pagata' : 'Da pagare'}</button><RowDeleteButton onConfirm={() => updateAccounting((current) => ({ ...current, [kind]: current[kind].filter((currentItem) => currentItem.id !== item.id) }))} /></span></div>
   })}</div>
 }
 
