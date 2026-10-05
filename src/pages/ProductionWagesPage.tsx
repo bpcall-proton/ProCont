@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import {
   activeAccounting,
   money,
+  productionSalaryCostsForPeriod,
   today,
 } from '../domain/accounting'
 import type { ProductionPayMode } from '../domain/types'
@@ -16,6 +17,7 @@ interface RateForm {
   sellerId: string
   mode: ProductionPayMode
   rate: string
+  effectiveMonth: string
 }
 
 interface WorkForm {
@@ -76,6 +78,7 @@ export function ProductionWagesPage({
     sellerId: firstSellerId,
     mode: 'hourly',
     rate: '',
+    effectiveMonth: wageFilterDefaults.month,
   })
   const [workForm, setWorkForm] = useState<WorkForm>({
     sellerId: firstSellerId,
@@ -93,37 +96,67 @@ export function ProductionWagesPage({
   const selectedRate = ratesBySeller.get(workForm.sellerId)
   const monthlyHourlyEntries = data.productionWorkEntries
     .filter(
-      (entry) =>
-        entry.payMode === 'hourly' && entry.date.startsWith(month),
+      (entry) => {
+        if (entry.payMode !== 'hourly' || !entry.date.startsWith(month)) {
+          return false
+        }
+        const rate = ratesBySeller.get(entry.sellerId)
+        return !(
+          rate?.mode === 'per-piece' &&
+          rate.effectiveMonth &&
+          entry.date.slice(0, 7) >= rate.effectiveMonth
+        )
+      },
     )
     .sort((left, right) =>
       `${right.date}-${right.startTime}`.localeCompare(
         `${left.date}-${left.startTime}`,
       ),
     )
-  const automaticPieceRows = data.productionWorkerRates
-    .filter((settings) => settings.mode === 'per-piece')
-    .flatMap((settings) =>
-      data.productionSettings
-        .filter((product) => product.workerIds.includes(settings.sellerId))
-        .map((product) => {
-          const quantity = data.productionEntries
-            .filter(
-              (entry) =>
-                entry.productId === product.id &&
-                entry.date.startsWith(month),
-            )
-            .reduce((total, entry) => total + entry.quantity, 0)
-          return {
-            sellerId: settings.sellerId,
-            productId: product.id,
-            productName: product.productName,
-            quantity,
-            rate: settings.rate,
-            total: quantity * settings.rate,
+  const [monthYear, monthNumber] = month.split('-').map(Number)
+  const monthStart = `${month}-01`
+  const monthEnd =
+    monthYear && monthNumber
+      ? new Date(Date.UTC(monthYear, monthNumber, 0))
+          .toISOString()
+          .slice(0, 10)
+      : monthStart
+  const automaticPieceRows = [
+    ...productionSalaryCostsForPeriod(data, monthStart, monthEnd)
+      .filter(
+        (cost) => cost.payMode === 'per-piece' && cost.productId !== null,
+      )
+      .reduce(
+        (rows, cost) => {
+          const key = `${cost.sellerId}:${cost.productId}`
+          const current = rows.get(key)
+          rows.set(key, {
+            sellerId: cost.sellerId,
+            productId: cost.productId ?? '',
+            productName:
+              data.productionSettings.find(
+                (product) => product.id === cost.productId,
+              )?.productName ?? 'Prodotto rimosso',
+            quantity: (current?.quantity ?? 0) + cost.quantity,
+            rate: cost.rate,
+            total: (current?.total ?? 0) + cost.amount,
+          })
+          return rows
+        },
+        new Map<
+          string,
+          {
+            sellerId: string
+            productId: string
+            productName: string
+            quantity: number
+            rate: number
+            total: number
           }
-        }),
-    )
+        >(),
+      )
+      .values(),
+  ]
   const selectedPieceRows = automaticPieceRows.filter(
     (row) => row.sellerId === workForm.sellerId,
   )
@@ -182,6 +215,12 @@ export function ProductionWagesPage({
     if (!data.company || !rateForm.sellerId) return
     const rate = Number(rateForm.rate)
     if (!Number.isFinite(rate) || rate <= 0) return
+    if (
+      rateForm.mode === 'per-piece' &&
+      !/^\d{4}-\d{2}$/.test(rateForm.effectiveMonth)
+    ) {
+      return
+    }
     updateAccounting((current) => {
       const existing = current.productionWorkerRates.find(
         (settings) =>
@@ -194,6 +233,10 @@ export function ProductionWagesPage({
         sellerId: rateForm.sellerId,
         mode: rateForm.mode,
         rate,
+        effectiveMonth:
+          rateForm.mode === 'per-piece'
+            ? rateForm.effectiveMonth || month
+            : '',
       }
       return {
         ...current,
@@ -261,6 +304,7 @@ export function ProductionWagesPage({
       sellerId,
       mode: settings.mode,
       rate: String(settings.rate),
+      effectiveMonth: settings.effectiveMonth || month,
     })
   }
 
@@ -346,6 +390,7 @@ export function ProductionWagesPage({
                   sellerId,
                   mode: settings?.mode ?? 'hourly',
                   rate: settings ? String(settings.rate) : '',
+                  effectiveMonth: settings?.effectiveMonth || month,
                 })
               }}
               required
@@ -388,6 +433,22 @@ export function ProductionWagesPage({
               value={rateForm.rate}
             />
           </label>
+          {rateForm.mode === 'per-piece' && (
+            <label>
+              Decorrenza
+              <input
+                onChange={(event) =>
+                  setRateForm({
+                    ...rateForm,
+                    effectiveMonth: event.target.value,
+                  })
+                }
+                required
+                type="month"
+                value={rateForm.effectiveMonth}
+              />
+            </label>
+          )}
           <button className="button button-primary" type="submit">
             Salva tariffa
           </button>
@@ -410,6 +471,10 @@ export function ProductionWagesPage({
                   {money(settings.rate)}
                   {settings.mode === 'hourly' ? ' / ora' : ' / pezzo'}
                 </strong>
+                {settings.mode === 'per-piece' &&
+                  settings.effectiveMonth && (
+                    <small>Dal {settings.effectiveMonth}</small>
+                  )}
               </button>
             )
           })}

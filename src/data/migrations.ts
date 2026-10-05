@@ -439,6 +439,12 @@ function mapProductionSettings(
           (workerId): workerId is string => typeof workerId === 'string',
         )
       : [],
+    workerPieceTrackingEnabled: flag(value.workerPieceTrackingEnabled),
+    workerPieceTrackingStartMonth: /^\d{4}-\d{2}$/.test(
+      text(value.workerPieceTrackingStartMonth),
+    )
+      ? text(value.workerPieceTrackingStartMonth)
+      : '',
   }
 }
 
@@ -454,6 +460,7 @@ function mapProductionEntry(
       value.productId,
       legacyProductionProductId(companyId),
     ),
+    workerId: nullableText(value.workerId),
     period: value.period === 'week' ? 'week' : 'day',
     date: text(value.date),
     quantity: Math.max(0, amount(value.quantity)),
@@ -493,6 +500,9 @@ function mapProductionWorkerRate(
     sellerId: text(value.sellerId),
     mode: productionPayMode(value.mode),
     rate: Math.max(0, amount(value.rate)),
+    effectiveMonth: /^\d{4}-\d{2}$/.test(text(value.effectiveMonth))
+      ? text(value.effectiveMonth)
+      : '',
   }
 }
 
@@ -866,7 +876,22 @@ export function normalizeStoredState(
         expenses,
         productionSettings,
         productionEntries: records(accounting.productionEntries).map(
-          (entry) => mapProductionEntry(entry, fallbackCompanyId),
+          (entry) => {
+            const normalized = mapProductionEntry(
+              entry,
+              fallbackCompanyId,
+            )
+            return {
+              ...normalized,
+              workerId: normalized.workerId
+                ? productionWorkerSellerId(
+                    normalized.workerId,
+                    normalized.companyId,
+                    normalizedAccountingSellers,
+                  )
+                : null,
+            }
+          },
         ),
         productionViewSettings: records(
           accounting.productionViewSettings,
