@@ -3115,6 +3115,57 @@ select {
   object-fit: cover;
 }
 
+.attachment-photo-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.attachment-photo-actions,
+.attachment-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-photo-actions button {
+  padding: 4px 7px;
+  font-size: 0.68rem;
+}
+
+.attachment-preview-overlay {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 4, 10, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.attachment-preview {
+  width: min(900px, 100%);
+  max-height: calc(100vh - 40px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+.review-photo-strip .attachment-preview img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(100vh - 130px);
+  border-radius: 12px;
+  object-fit: contain;
+}
+
 .verification-settings-panel {
   grid-column: 1 / -1;
 }

@@ -300,6 +300,33 @@ ipcMain.handle(
   },
 )
 
+ipcMain.handle(
+  'attachment:save',
+  async (_event, dataUrl, suggestedFilename) => {
+    if (typeof dataUrl !== 'string') {
+      throw new Error('Allegato non valido')
+    }
+    const match = dataUrl.match(
+      /^data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\r\n]+)$/,
+    )
+    if (!match) {
+      throw new Error('Formato allegato non supportato')
+    }
+    const filename =
+      typeof suggestedFilename === 'string' &&
+      /^[a-zA-Z0-9._-]{1,180}$/.test(suggestedFilename)
+        ? suggestedFilename
+        : 'allegato.jpg'
+    const result = await dialog.showSaveDialog({
+      defaultPath: path.join(app.getPath('downloads'), filename),
+      filters: [{ name: 'Immagine', extensions: [path.extname(filename).slice(1)] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    await fs.writeFile(result.filePath, Buffer.from(match[2], 'base64'))
+    return result.filePath
+  },
+)
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1440,

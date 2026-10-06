@@ -135,6 +135,26 @@ function fileDataUrl(file: File) {
   })
 }
 
+function attachmentFilename(image: string, index: number) {
+  const mimeType = image.match(/^data:image\/([a-zA-Z0-9.+-]+);/)?.[1] ?? 'jpg'
+  const extension = mimeType === 'jpeg' ? 'jpg' : mimeType.replaceAll('+', '-')
+  return `allegato-${index + 1}.${extension}`
+}
+
+async function downloadAttachment(image: string, index: number) {
+  const filename = attachmentFilename(image, index)
+  if (window.desktopApp?.saveAttachment) {
+    await window.desktopApp.saveAttachment(image, filename)
+    return
+  }
+  const anchor = document.createElement('a')
+  anchor.href = image
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
 function cashBalanceByTaking(takings: AccountingTaking[]) {
   const balanceBySeller = new Map<string, number>()
   const balanceByTaking = new Map<string, number>()
@@ -2745,18 +2765,12 @@ function AttachmentEditor({
       {images.length > 0 && (
         <div className="review-photo-strip">
           {images.map((image, index) => (
-            <figure key={`${index}-${image.slice(0, 40)}`}>
-              <a href={image} rel="noreferrer" target="_blank">
-                <img alt={`Allegato ${index + 1}`} src={image} />
-              </a>
-              <button
-                className="danger-text"
-                onClick={() => onRemove(index)}
-                type="button"
-              >
-                Rimuovi
-              </button>
-            </figure>
+            <AttachmentPhoto
+              image={image}
+              index={index}
+              key={`${index}-${image.slice(0, 40)}`}
+              onRemove={() => onRemove(index)}
+            />
           ))}
         </div>
       )}
@@ -2771,19 +2785,88 @@ function AttachmentGallery({ images }: { images: string[] }) {
       <small>
         {images.length} {images.length === 1 ? 'foto allegata' : 'foto allegate'}
       </small>
-      <span className="review-photo-strip">
+      <div className="review-photo-strip">
         {images.map((image, index) => (
-          <a
-            href={image}
+          <AttachmentPhoto
+            image={image}
+            index={index}
             key={`${index}-${image.slice(0, 40)}`}
-            rel="noreferrer"
-            target="_blank"
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+function AttachmentPhoto({
+  image,
+  index,
+  onRemove,
+}: {
+  image: string
+  index: number
+  onRemove?: () => void
+}) {
+  const [previewOpen, setPreviewOpen] = useState(false)
+  return (
+    <figure>
+      <button
+        className="attachment-photo-button"
+        onClick={() => setPreviewOpen(true)}
+        type="button"
+      >
+        <img alt={`Allegato ${index + 1}`} src={image} />
+      </button>
+      <span className="attachment-photo-actions">
+        <button onClick={() => setPreviewOpen(true)} type="button">
+          Apri
+        </button>
+        <button
+          onClick={() => void downloadAttachment(image, index)}
+          type="button"
+        >
+          Scarica
+        </button>
+        {onRemove && (
+          <button className="danger-text" onClick={onRemove} type="button">
+            Rimuovi
+          </button>
+        )}
+      </span>
+      {previewOpen && (
+        <div
+          className="attachment-preview-overlay"
+          onClick={() => setPreviewOpen(false)}
+          role="presentation"
+        >
+          <div
+            aria-label={`Anteprima allegato ${index + 1}`}
+            aria-modal="true"
+            className="attachment-preview"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
           >
             <img alt={`Allegato ${index + 1}`} src={image} />
-          </a>
-        ))}
-      </span>
-    </>
+            <div className="attachment-preview-actions">
+              <button
+                className="button button-secondary"
+                onClick={() => setPreviewOpen(false)}
+                type="button"
+              >
+                Chiudi
+              </button>
+              <button
+                className="button button-primary"
+                onClick={() => void downloadAttachment(image, index)}
+                type="button"
+              >
+                Scarica foto
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </figure>
   )
 }
 

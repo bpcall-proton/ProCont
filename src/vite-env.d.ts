@@ -23,6 +23,10 @@ interface Window {
       filename: string,
       content: string,
     ) => Promise<string>
+    saveAttachment: (
+      dataUrl: string,
+      suggestedFilename: string,
+    ) => Promise<string | null>
   }
   showDirectoryPicker?: (options?: {
     mode?: 'read' | 'readwrite'

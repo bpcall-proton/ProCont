@@ -28,4 +28,6 @@ contextBridge.exposeInMainWorld('desktopApp', {
     ipcRenderer.invoke('drive-backup:select-folder'),
   saveDriveBackup: (folderPath, filename, content) =>
     ipcRenderer.invoke('drive-backup:save', folderPath, filename, content),
+  saveAttachment: (dataUrl, suggestedFilename) =>
+    ipcRenderer.invoke('attachment:save', dataUrl, suggestedFilename),
 })
