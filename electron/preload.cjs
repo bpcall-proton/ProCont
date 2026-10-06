@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('desktopApp', {
     ipcRenderer.invoke('drive-data:open-folder'),
   loadDriveState: (storageId) =>
     ipcRenderer.invoke('drive-data:load', storageId),
+  listDriveStates: () =>
+    ipcRenderer.invoke('drive-data:list'),
   saveDriveState: (storageId, content) =>
     ipcRenderer.invoke('drive-data:save', storageId, content),
   selectDriveBackupFolder: () =>
