@@ -3415,6 +3415,21 @@ select {
   align-self: center;
 }
 
+.payment-panel .invoice-payment-history {
+  grid-column: 1 / -1;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.invoice-payment-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .table-toolbar {
   display: flex;
   align-items: center;
