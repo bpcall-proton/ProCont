@@ -456,6 +456,17 @@ function mapProductionEntry(
   fallbackCompanyId: string,
 ): ProductionEntry {
   const companyId = text(value.companyId, fallbackCompanyId)
+  const legacyQuantity = Math.max(0, amount(value.quantity))
+  const sandwichQuantity =
+    value.sandwichQuantity === undefined
+      ? legacyQuantity
+      : Math.max(0, amount(value.sandwichQuantity))
+  const pizzaQuantity = Math.max(0, amount(value.pizzaQuantity))
+  const tramezzinoQuantity = Math.max(
+    0,
+    amount(value.tramezzinoQuantity),
+  )
+  const otherQuantity = Math.max(0, amount(value.otherQuantity))
   return {
     id: text(value.id, crypto.randomUUID()),
     companyId,
@@ -466,7 +477,15 @@ function mapProductionEntry(
     workerId: nullableText(value.workerId),
     period: value.period === 'week' ? 'week' : 'day',
     date: text(value.date),
-    quantity: Math.max(0, amount(value.quantity)),
+    sandwichQuantity,
+    pizzaQuantity,
+    tramezzinoQuantity,
+    otherQuantity,
+    quantity:
+      sandwichQuantity +
+      pizzaQuantity +
+      tramezzinoQuantity +
+      otherQuantity,
   }
 }
 
@@ -477,7 +496,10 @@ function mapProductionViewSettings(
   return {
     companyId: text(value.companyId, fallbackCompanyId),
     reportPeriod:
-      value.reportPeriod === 'day' || value.reportPeriod === 'week'
+      value.reportPeriod === 'day' ||
+      value.reportPeriod === 'week' ||
+      value.reportPeriod === 'year' ||
+      value.reportPeriod === 'range'
         ? value.reportPeriod
         : 'month',
   }

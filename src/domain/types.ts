@@ -16,7 +16,12 @@ export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
 export type ProductionEntryPeriod = 'day' | 'week'
-export type ProductionReportPeriod = 'day' | 'week' | 'month'
+export type ProductionReportPeriod =
+  | 'day'
+  | 'week'
+  | 'month'
+  | 'year'
+  | 'range'
 export type ProductionPayMode = 'hourly' | 'per-piece'
 export type ProductionVerificationUnit = 'kg' | 'g' | 'pz'
 export type ReviewDocumentStatus =
@@ -279,6 +284,10 @@ export interface ProductionEntry {
   workerId: string | null
   period: ProductionEntryPeriod
   date: string
+  sandwichQuantity: number
+  pizzaQuantity: number
+  tramezzinoQuantity: number
+  otherQuantity: number
   quantity: number
 }
 
