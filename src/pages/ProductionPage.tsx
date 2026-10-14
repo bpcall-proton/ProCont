@@ -18,6 +18,12 @@ import { useAppStore } from '../store/AppStoreContext'
 
 type SelectedProductId = string | 'all' | null
 type DetailCard = 'quantity' | 'costs' | 'unit-cost' | 'profit'
+type ProductionQuantities = {
+  sandwiches: number
+  pizzas: number
+  tramezzini: number
+  other: number
+}
 const noIds: string[] = []
 
 function settingsFormFor(
@@ -72,6 +78,57 @@ function quantityExpressionValue(value: string) {
   return Number.isFinite(total) ? total : null
 }
 
+function optionalQuantityExpressionValue(value: string) {
+  return value.trim() ? quantityExpressionValue(value) : 0
+}
+
+function productionQuantities(entry: ProductionEntry): ProductionQuantities {
+  const hasCategorizedQuantities = [
+    entry.sandwichQuantity,
+    entry.pizzaQuantity,
+    entry.tramezzinoQuantity,
+    entry.otherQuantity,
+  ].some((value) => Number.isFinite(value))
+  if (!hasCategorizedQuantities) {
+    return {
+      sandwiches: entry.quantity,
+      pizzas: 0,
+      tramezzini: 0,
+      other: 0,
+    }
+  }
+  return {
+    sandwiches: Math.max(0, entry.sandwichQuantity ?? entry.quantity),
+    pizzas: Math.max(0, entry.pizzaQuantity ?? 0),
+    tramezzini: Math.max(0, entry.tramezzinoQuantity ?? 0),
+    other: Math.max(0, entry.otherQuantity ?? 0),
+  }
+}
+
+function sumProductionQuantities(entries: ProductionEntry[]) {
+  return entries.reduce<ProductionQuantities>(
+    (totals, entry) => {
+      const quantities = productionQuantities(entry)
+      return {
+        sandwiches: totals.sandwiches + quantities.sandwiches,
+        pizzas: totals.pizzas + quantities.pizzas,
+        tramezzini: totals.tramezzini + quantities.tramezzini,
+        other: totals.other + quantities.other,
+      }
+    },
+    { sandwiches: 0, pizzas: 0, tramezzini: 0, other: 0 },
+  )
+}
+
+function productionQuantityTotal(quantities: ProductionQuantities) {
+  return (
+    quantities.sandwiches +
+    quantities.pizzas +
+    quantities.tramezzini +
+    quantities.other
+  )
+}
+
 function durationHours(startTime: string, endTime: string) {
   const [startHours, startMinutes] = startTime.split(':').map(Number)
   const [endHours, endMinutes] = endTime.split(':').map(Number)
@@ -112,14 +169,31 @@ function isValidDate(value: string) {
   )
 }
 
-function rangeFor(period: ProductionReportPeriod, selected: string) {
+function rangeFor(
+  period: ProductionReportPeriod,
+  selected: string,
+  customStart: string,
+  customEnd: string,
+) {
   if (!isValidDate(selected)) {
-    return rangeFor(period, today())
+    return rangeFor(period, today(), customStart, customEnd)
   }
   if (period === 'day') return { start: selected, end: selected }
   if (period === 'week') {
     const start = startOfWeek(selected)
     return { start, end: addDays(start, 6) }
+  }
+  if (
+    period === 'range' &&
+    isValidDate(customStart) &&
+    isValidDate(customEnd)
+  ) {
+    return customStart <= customEnd
+      ? { start: customStart, end: customEnd }
+      : { start: customEnd, end: customStart }
+  }
+  if (period === 'year') {
+    return { start: `${selected.slice(0, 4)}-01-01`, end: selected }
   }
   const date = new Date(`${selected}T00:00:00Z`)
   const year = date.getUTCFullYear()
@@ -211,11 +285,17 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     period: ProductionEntryPeriod
     date: string
     quantity: string
+    pizzaQuantity: string
+    tramezzinoQuantity: string
+    otherQuantity: string
     workerId: string
   }>({
     period: 'day',
     date: today(),
     quantity: '',
+    pizzaQuantity: '',
+    tramezzinoQuantity: '',
+    otherQuantity: '',
     workerId: firstProduct?.workerIds[0] ?? '',
   })
   const [entryProductId, setEntryProductId] = useState(
@@ -224,7 +304,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const [reportPeriod, setReportPeriod] = useState<ProductionReportPeriod>(
     data.productionViewSettings?.reportPeriod ?? 'month',
   )
-  const productionFilterDefaults = { selectedDate: today() }
+  const productionFilterDefaults = {
+    selectedDate: today(),
+    rangeStart: `${today().slice(0, 7)}-01`,
+    rangeEnd: today(),
+  }
   const productionFilterKey = `production-filters:${companyId ?? 'none'}`
   const [productionFilters, setProductionFilters] = useStoredFilters(
     productionFilterKey,
@@ -233,6 +317,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const selectedDate = isValidDate(productionFilters.selectedDate)
     ? productionFilters.selectedDate
     : productionFilterDefaults.selectedDate
+  const rangeStart = isValidDate(productionFilters.rangeStart)
+    ? productionFilters.rangeStart
+    : productionFilterDefaults.rangeStart
+  const rangeEnd = isValidDate(productionFilters.rangeEnd)
+    ? productionFilters.rangeEnd
+    : productionFilterDefaults.rangeEnd
   const [selectedDateDraft, setSelectedDateDraft] = useState({
     key: productionFilterKey,
     value: selectedDate,
@@ -244,7 +334,12 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const [formError, setFormError] = useState('')
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [detailCard, setDetailCard] = useState<DetailCard>('costs')
-  const range = rangeFor(reportPeriod, selectedDate)
+  const range = rangeFor(
+    reportPeriod,
+    selectedDate,
+    rangeStart,
+    rangeEnd,
+  )
   const showingAllProducts =
     selectedProductId === 'all' || selectedProductId === null
   const entrySettings =
@@ -457,10 +552,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         (total, item) => total + item.amount,
         0,
       )
-      const quantity = productionEntries.reduce(
-        (total, entry) => total + entry.quantity,
-        0,
-      )
+      const categoryQuantities =
+        sumProductionQuantities(productionEntries)
+      const quantity = productionQuantityTotal(categoryQuantities)
       const totalCosts = invoiceCosts + fixedCosts + salaryCosts
       const revenue = quantity * product.salePrice
       return {
@@ -470,6 +564,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         rentals,
         productionSalaries,
         productionEntries,
+        categoryQuantities,
         invoiceCosts: roundMoney(invoiceCosts),
         fixedCosts: roundMoney(fixedCosts),
         salaryCosts: roundMoney(salaryCosts),
@@ -536,10 +631,18 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       (total, product) => total + product.salaryCosts,
       0,
     )
-    const quantity = productsResults.reduce(
-      (total, product) => total + product.quantity,
-      0,
+    const categoryQuantities = productsResults.reduce<ProductionQuantities>(
+      (totals, product) => ({
+        sandwiches:
+          totals.sandwiches + product.categoryQuantities.sandwiches,
+        pizzas: totals.pizzas + product.categoryQuantities.pizzas,
+        tramezzini:
+          totals.tramezzini + product.categoryQuantities.tramezzini,
+        other: totals.other + product.categoryQuantities.other,
+      }),
+      { sandwiches: 0, pizzas: 0, tramezzini: 0, other: 0 },
     )
+    const quantity = productionQuantityTotal(categoryQuantities)
     const totalCosts = invoiceCosts + fixedCosts + salaryCosts
     const revenue = productsResults.reduce(
       (total, product) => total + product.revenue,
@@ -549,6 +652,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       invoiceCosts: roundMoney(invoiceCosts),
       fixedCosts: roundMoney(fixedCosts),
       salaryCosts: roundMoney(salaryCosts),
+      categoryQuantities,
       quantity,
       totalCosts: roundMoney(totalCosts),
       unitCost: quantity > 0 ? roundMoney(totalCosts / quantity) : 0,
@@ -569,6 +673,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setEntryForm((current) => ({
       ...current,
       quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
       workerId: product?.workerIds[0] ?? '',
     }))
     setEditingEntryId(null)
@@ -587,6 +694,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setEntryForm((current) => ({
       ...current,
       quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
       workerId: product?.workerIds[0] ?? '',
     }))
     setEditingEntryId(null)
@@ -599,6 +709,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setEntryForm((current) => ({
       ...current,
       quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
       workerId: '',
     }))
     setEditingEntryId(null)
@@ -730,12 +843,43 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       )
       return
     }
-    const quantity = quantityExpressionValue(entryForm.quantity)
-    if (quantity === null || quantity <= 0) {
+    const sandwichQuantity = optionalQuantityExpressionValue(
+      entryForm.quantity,
+    )
+    const pizzaQuantity = optionalQuantityExpressionValue(
+      entryForm.pizzaQuantity,
+    )
+    const tramezzinoQuantity = optionalQuantityExpressionValue(
+      entryForm.tramezzinoQuantity,
+    )
+    const otherQuantity = optionalQuantityExpressionValue(
+      entryForm.otherQuantity,
+    )
+    if (
+      sandwichQuantity === null ||
+      pizzaQuantity === null ||
+      tramezzinoQuantity === null ||
+      otherQuantity === null
+    ) {
       setFormError(
-        'Inserisci una quantità valida o una somma come 100+200+300.',
+        'Inserisci quantità valide o somme come 100+200+300.',
       )
       return
+    }
+    const quantity =
+      sandwichQuantity +
+      pizzaQuantity +
+      tramezzinoQuantity +
+      otherQuantity
+    if (quantity <= 0) {
+      setFormError('Inserisci almeno una quantità prodotta.')
+      return
+    }
+    const categorizedQuantities = {
+      sandwichQuantity,
+      pizzaQuantity,
+      tramezzinoQuantity,
+      otherQuantity,
     }
     const date =
       entryForm.period === 'week'
@@ -790,6 +934,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                     : null,
                   period: entryForm.period,
                   date,
+                  ...categorizedQuantities,
                   quantity,
                 }
               : entry,
@@ -799,6 +944,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             entry.id === existing.id
               ? {
                   ...entry,
+                  ...categorizedQuantities,
                   quantity,
                   workerId: entryWorkerTrackingActive
                     ? entryForm.workerId
@@ -816,12 +962,19 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                 : null,
               period: entryForm.period,
               date,
+              ...categorizedQuantities,
               quantity,
             },
             ...current.productionEntries,
           ],
     }))
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -839,10 +992,16 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       setEntryProductId(product.id)
       setSettingsForm(settingsFormFor(product))
     }
+    const quantities = productionQuantities(entry)
     setEntryForm({
       period: entry.period,
       date: entry.date,
-      quantity: String(entry.quantity),
+      quantity: quantities.sandwiches ? String(quantities.sandwiches) : '',
+      pizzaQuantity: quantities.pizzas ? String(quantities.pizzas) : '',
+      tramezzinoQuantity: quantities.tramezzini
+        ? String(quantities.tramezzini)
+        : '',
+      otherQuantity: quantities.other ? String(quantities.other) : '',
       workerId: entry.workerId ?? product.workerIds[0] ?? '',
     })
     setEditingEntryId(entry.id)
@@ -853,7 +1012,13 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   }
 
   function cancelEntryEdit() {
-    setEntryForm((current) => ({ ...current, quantity: '' }))
+    setEntryForm((current) => ({
+      ...current,
+      quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
+    }))
     setEditingEntryId(null)
     setFormError('')
   }
@@ -897,6 +1062,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     setEntryForm((current) => ({
       ...current,
       quantity: '',
+      pizzaQuantity: '',
+      tramezzinoQuantity: '',
+      otherQuantity: '',
       workerId: nextProduct?.workerIds[0] ?? '',
     }))
     setEditingEntryId(null)
@@ -914,8 +1082,10 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const entries = data.productionEntries
     .filter(
       (entry) =>
-        showingAllProducts ||
-        entry.productId === selectedProductId,
+        (showingAllProducts ||
+          entry.productId === selectedProductId) &&
+        entry.date >= range.start &&
+        entry.date <= range.end,
     )
     .sort((left, right) => right.date.localeCompare(left.date))
   const quantityDetails = results.products.flatMap((product) =>
@@ -989,7 +1159,30 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
       expense.type !== 'stipendio' &&
       expense.recurrence === 'monthly',
   )
-  const quantityTotal = quantityExpressionValue(entryForm.quantity)
+  const formQuantityValues = {
+    sandwiches: optionalQuantityExpressionValue(entryForm.quantity),
+    pizzas: optionalQuantityExpressionValue(entryForm.pizzaQuantity),
+    tramezzini: optionalQuantityExpressionValue(
+      entryForm.tramezzinoQuantity,
+    ),
+    other: optionalQuantityExpressionValue(entryForm.otherQuantity),
+  }
+  const formQuantityTotal =
+    formQuantityValues.sandwiches !== null &&
+    formQuantityValues.pizzas !== null &&
+    formQuantityValues.tramezzini !== null &&
+    formQuantityValues.other !== null
+    ? formQuantityValues.sandwiches +
+      formQuantityValues.pizzas +
+      formQuantityValues.tramezzini +
+      formQuantityValues.other
+    : null
+  const formHasExpression = [
+    entryForm.quantity,
+    entryForm.pizzaQuantity,
+    entryForm.tramezzinoQuantity,
+    entryForm.otherQuantity,
+  ].some((value) => value.includes('+'))
   const wageExportRows = (() => {
     const inRange = (date: string) =>
       date >= range.start && date <= range.end
@@ -1316,34 +1509,72 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
             <option value="day">Giornaliera</option>
             <option value="week">Settimanale</option>
             <option value="month">Mensile</option>
+            <option value="year">Annuale maturata</option>
+            <option value="range">Intervallo da–a</option>
           </select>
         </label>
-        <label>
-          Data di riferimento
-          <input
-            onBlur={(event) => {
-              if (!isValidDate(event.currentTarget.value)) {
+        {reportPeriod === 'range' ? (
+          <>
+            <label>
+              Da
+              <input
+                min="2000-01-01"
+                onChange={(event) =>
+                  setProductionFilters({
+                    ...productionFilters,
+                    rangeStart: event.target.value,
+                  })
+                }
+                type="date"
+                value={rangeStart}
+              />
+            </label>
+            <label>
+              A
+              <input
+                min="2000-01-01"
+                onChange={(event) =>
+                  setProductionFilters({
+                    ...productionFilters,
+                    rangeEnd: event.target.value,
+                  })
+                }
+                type="date"
+                value={rangeEnd}
+              />
+            </label>
+          </>
+        ) : (
+          <label>
+            Data di riferimento
+            <input
+              onBlur={(event) => {
+                if (!isValidDate(event.currentTarget.value)) {
+                  setSelectedDateDraft({
+                    key: productionFilterKey,
+                    value: selectedDate,
+                  })
+                }
+              }}
+              onChange={(event) => {
+                const value = event.target.value
                 setSelectedDateDraft({
                   key: productionFilterKey,
-                  value: selectedDate,
+                  value,
                 })
-              }
-            }}
-            onChange={(event) => {
-              const value = event.target.value
-              setSelectedDateDraft({
-                key: productionFilterKey,
-                value,
-              })
-              if (isValidDate(value)) {
-                setProductionFilters({ selectedDate: value })
-              }
-            }}
-            min="2000-01-01"
-            type="date"
-            value={selectedDateInput}
-          />
-        </label>
+                if (isValidDate(value)) {
+                  setProductionFilters({
+                    ...productionFilters,
+                    selectedDate: value,
+                  })
+                }
+              }}
+              min="2000-01-01"
+              type="date"
+              value={selectedDateInput}
+            />
+          </label>
+        )}
         <button
           className="button button-secondary"
           onClick={() => {
@@ -1358,6 +1589,40 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
         >
           Azzera filtri
         </button>
+      </section>
+
+      <section
+        aria-label="Produzione per categoria"
+        className="production-category-summary"
+      >
+        <div>
+          <span>Panini</span>
+          <strong>
+            {results.categoryQuantities.sandwiches.toLocaleString('it-IT')}
+          </strong>
+        </div>
+        <div>
+          <span>Pizze</span>
+          <strong>
+            {results.categoryQuantities.pizzas.toLocaleString('it-IT')}
+          </strong>
+        </div>
+        <div>
+          <span>Tramezzini</span>
+          <strong>
+            {results.categoryQuantities.tramezzini.toLocaleString('it-IT')}
+          </strong>
+        </div>
+        <div>
+          <span>Altro prodotto</span>
+          <strong>
+            {results.categoryQuantities.other.toLocaleString('it-IT')}
+          </strong>
+        </div>
+        <div className="production-category-total">
+          <span>Totale prodotto</span>
+          <strong>{results.quantity.toLocaleString('it-IT')}</strong>
+        </div>
       </section>
 
       <section className="stats-grid production-stats">
@@ -1453,9 +1718,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                         ? formatProductionDate(entry.date)
                         : `Settimana dal ${formatProductionDate(entry.date)}`}
                     </small>
+                    <small>
+                      {(() => {
+                        const quantities = productionQuantities(entry)
+                        return `Panini ${quantities.sandwiches.toLocaleString('it-IT')} · Pizze ${quantities.pizzas.toLocaleString('it-IT')} · Tramezzini ${quantities.tramezzini.toLocaleString('it-IT')} · Altro ${quantities.other.toLocaleString('it-IT')}`
+                      })()}
+                    </small>
                   </span>
                   <strong>
-                    {entry.quantity.toLocaleString('it-IT')} pezzi
+                    Totale {entry.quantity.toLocaleString('it-IT')} pezzi
                   </strong>
                 </div>
               ))}
@@ -1806,6 +2077,9 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                     setEntryForm((current) => ({
                       ...current,
                       quantity: '',
+                      pizzaQuantity: '',
+                      tramezzinoQuantity: '',
+                      otherQuantity: '',
                       workerId: product?.workerIds[0] ?? '',
                     }))
                     setFormError('')
@@ -1848,7 +2122,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
               />
             </label>
             <label>
-              Numero pezzi
+              Panini
               <input
                 inputMode="decimal"
                 onChange={(event) =>
@@ -1858,14 +2132,58 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                   })
                 }
                 placeholder="Es. 100+200+300"
-                required
                 type="text"
                 value={entryForm.quantity}
               />
             </label>
+            <label>
+              Pizze
+              <input
+                inputMode="decimal"
+                onChange={(event) =>
+                  setEntryForm({
+                    ...entryForm,
+                    pizzaQuantity: event.target.value,
+                  })
+                }
+                placeholder="Es. 50+25"
+                type="text"
+                value={entryForm.pizzaQuantity}
+              />
+            </label>
+            <label>
+              Tramezzini
+              <input
+                inputMode="decimal"
+                onChange={(event) =>
+                  setEntryForm({
+                    ...entryForm,
+                    tramezzinoQuantity: event.target.value,
+                  })
+                }
+                placeholder="Es. 100+50"
+                type="text"
+                value={entryForm.tramezzinoQuantity}
+              />
+            </label>
+            <label>
+              Altro prodotto
+              <input
+                inputMode="decimal"
+                onChange={(event) =>
+                  setEntryForm({
+                    ...entryForm,
+                    otherQuantity: event.target.value,
+                  })
+                }
+                placeholder="Es. 20+30"
+                type="text"
+                value={entryForm.otherQuantity}
+              />
+            </label>
             {entryWorkerTrackingActive && (
               <label>
-                Chi li ha prodotti
+                Chi ha prodotto
                 <select
                   onChange={(event) =>
                     setEntryForm({
@@ -1893,12 +2211,15 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           <p className="production-help">
             Un totale settimanale sostituisce gli inserimenti giornalieri della
             stessa settimana ed è visibile nei filtri settimana e mese. Puoi
-            sommare più quantità usando il simbolo +.
-            {entryForm.quantity.includes('+') && quantityTotal !== null && (
+            sommare più quantità in ogni casella usando il simbolo +.
+            {formHasExpression && formQuantityTotal !== null && (
               <>
                 {' '}
                 Totale calcolato:{' '}
-                <strong>{quantityTotal.toLocaleString('it-IT')} pezzi</strong>.
+                <strong>
+                  {formQuantityTotal.toLocaleString('it-IT')} pezzi
+                </strong>
+                .
               </>
             )}
           </p>
@@ -2011,6 +2332,40 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                   </small>
                 </span>
                 <span>
+                  {(() => {
+                    const quantities = productionQuantities(entry)
+                    return (
+                      <small className="production-history-categories">
+                        <span>
+                          Panini{' '}
+                          <strong>
+                            {quantities.sandwiches.toLocaleString('it-IT')}
+                          </strong>
+                        </span>
+                        <span>
+                          Pizze{' '}
+                          <strong>
+                            {quantities.pizzas.toLocaleString('it-IT')}
+                          </strong>
+                        </span>
+                        <span>
+                          Tramezzini{' '}
+                          <strong>
+                            {quantities.tramezzini.toLocaleString('it-IT')}
+                          </strong>
+                        </span>
+                        <span>
+                          Altro{' '}
+                          <strong>
+                            {quantities.other.toLocaleString('it-IT')}
+                          </strong>
+                        </span>
+                      </small>
+                    )
+                  })()}
+                </span>
+                <span className="production-history-total">
+                  <small>Totalone</small>
                   <strong>{entry.quantity.toLocaleString('it-IT')} pezzi</strong>
                   <button onClick={() => editEntry(entry)} type="button">
                     Modifica

@@ -2805,7 +2805,10 @@ select {
 
 .production-filter {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(180px, 0.55fr));
+  grid-template-columns: minmax(220px, 1fr) repeat(
+      auto-fit,
+      minmax(170px, 0.55fr)
+    );
   align-items: end;
   gap: 18px;
 }
@@ -2835,6 +2838,42 @@ select {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.production-category-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.production-category-summary > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(7, 11, 22, 0.62);
+}
+
+.production-category-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.production-category-summary strong {
+  font-size: clamp(1.2rem, 2vw, 1.75rem);
+}
+
+.production-category-summary .production-category-total {
+  border-color: rgba(34, 211, 238, 0.58);
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.16),
+    rgba(37, 99, 235, 0.12)
+  );
 }
 
 .production-stat-button:hover,
@@ -2875,7 +2914,7 @@ select {
 }
 
 .production-entry-fields {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .production-sellers {
@@ -2944,6 +2983,26 @@ select {
 
 .production-history-panel {
   order: 4;
+}
+
+.production-history-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+}
+
+.production-history-categories span {
+  white-space: nowrap;
+}
+
+.production-history-total {
+  min-width: 130px;
+  justify-items: end;
+}
+
+.production-history-total > strong {
+  color: #67e8f9;
+  font-size: 1.12rem;
 }
 
 .production-settings-panel {
@@ -4812,6 +4871,14 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .production-category-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .production-category-total {
+    grid-column: span 2;
+  }
+
   .production-wage-filter,
   .production-wage-form,
   .production-work-form,
@@ -4934,6 +5001,18 @@ select {
 
   .production-piece-summary {
     grid-template-columns: 1fr;
+  }
+
+  .production-category-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .production-category-total {
+    grid-column: 1 / -1;
+  }
+
+  .production-history-total {
+    justify-items: start;
   }
 
   .production-verification-section-form,
