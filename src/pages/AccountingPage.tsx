@@ -476,6 +476,10 @@ export function InvoicesPanel({
     useState<PaymentMethod>('Bonifico')
   const [advanceSupplier, setAdvanceSupplier] = useState('')
   const [advanceAmount, setAdvanceAmount] = useState('')
+  const currentPaymentTarget = paymentTarget
+    ? data.invoices.find((invoice) => invoice.id === paymentTarget.id) ??
+      paymentTarget
+    : null
   const activeSupplierFilter = data.suppliers.some(
     (supplier) => supplier.id === supplierFilter,
   )
@@ -982,13 +986,13 @@ export function InvoicesPanel({
 
   function addPayment(event: FormEvent) {
     event.preventDefault()
-    if (!paymentTarget) return
+    if (!currentPaymentTarget) return
     const amount = numberValue(paymentAmount)
     if (amount <= 0) return
     updateAccounting((current) => ({
       ...current,
       invoices: current.invoices.map((invoice) => {
-        if (invoice.id !== paymentTarget.id) return invoice
+        if (invoice.id !== currentPaymentTarget.id) return invoice
         const applied = Math.min(amount, invoiceRemaining(invoice))
         const paidAmount = Math.min(invoice.total, invoice.paidAmount + applied)
         const settled = paidAmount >= invoice.total - 0.001
@@ -1012,6 +1016,50 @@ export function InvoicesPanel({
     }))
     setPaymentTarget(null)
     setPaymentAmount('')
+  }
+
+  function removePayment(invoiceId: string, paymentId: string) {
+    updateAccounting((current) => ({
+      ...current,
+      invoices: current.invoices.map((invoice) => {
+        if (invoice.id !== invoiceId) return invoice
+        const payments = invoice.payments.filter(
+          (payment) => payment.id !== paymentId,
+        )
+        const paidAmount = Math.min(
+          invoice.total,
+          payments.reduce((sum, payment) => sum + payment.amount, 0),
+        )
+        const settled = paidAmount >= invoice.total - 0.001
+        const latestPayment = payments[payments.length - 1]
+        return {
+          ...invoice,
+          payments,
+          paidAmount,
+          settled,
+          paymentDate: settled ? latestPayment?.date ?? null : null,
+          paymentMethod: latestPayment?.method ?? null,
+        }
+      }),
+    }))
+  }
+
+  function clearRecordedPayment(invoiceId: string) {
+    updateAccounting((current) => ({
+      ...current,
+      invoices: current.invoices.map((invoice) =>
+        invoice.id === invoiceId
+          ? {
+              ...invoice,
+              payments: [],
+              paidAmount: 0,
+              settled: false,
+              paymentDate: null,
+              paymentMethod: null,
+            }
+          : invoice,
+      ),
+    }))
   }
 
   function distributeAdvance(event: FormEvent) {
@@ -1590,14 +1638,47 @@ export function InvoicesPanel({
         </div>
       </section>
 
-      {paymentTarget && (
+      {currentPaymentTarget && (
         <form className="panel payment-panel" onSubmit={addPayment}>
-          <div><strong>Pagamento parziale o saldo fattura {paymentTarget.number}</strong><small>Inserisci un acconto oppure l'intero residuo di {money(invoiceRemaining(paymentTarget))}</small></div>
-          <input inputMode="decimal" max={invoiceRemaining(paymentTarget)} placeholder="Importo pagato" required value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
+          <div><strong>Pagamento parziale o saldo fattura {currentPaymentTarget.number}</strong><small>Inserisci un acconto oppure l'intero residuo di {money(invoiceRemaining(currentPaymentTarget))}</small></div>
+          <input inputMode="decimal" max={invoiceRemaining(currentPaymentTarget)} placeholder="Importo pagato" required value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
           <input type="date" required value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
           <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{paymentMethods.map((item) => <option key={item}>{item}</option>)}</select>
           <button className="button button-primary" type="submit">Registra pagamento</button>
           <button className="button button-secondary" type="button" onClick={() => setPaymentTarget(null)}>Chiudi</button>
+          {currentPaymentTarget.payments.length > 0 && (
+            <div className="invoice-payment-history">
+              <strong>Acconti e pagamenti registrati</strong>
+              {currentPaymentTarget.payments.map((payment) => (
+                <div className="invoice-payment-history-row" key={payment.id}>
+                  <span>
+                    {payment.date} · {money(payment.amount)} · {payment.method}
+                  </span>
+                  <RowDeleteButton
+                    label="Cancella acconto"
+                    onConfirm={() =>
+                      removePayment(currentPaymentTarget.id, payment.id)
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {currentPaymentTarget.paidAmount > 0 &&
+            currentPaymentTarget.payments.length === 0 && (
+              <div className="invoice-payment-history">
+                <strong>Pagamento parziale senza dettaglio</strong>
+                <div className="invoice-payment-history-row">
+                  <span>{money(currentPaymentTarget.paidAmount)}</span>
+                  <RowDeleteButton
+                    label="Azzera parziale"
+                    onConfirm={() =>
+                      clearRecordedPayment(currentPaymentTarget.id)
+                    }
+                  />
+                </div>
+              </div>
+            )}
         </form>
       )}
     </>
