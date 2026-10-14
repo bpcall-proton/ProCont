@@ -2679,7 +2679,6 @@ function ExpensesPanel() {
             <button className="button button-primary" type="submit">{editingExpenseId ? 'Salva modifica' : 'Registra'}</button>
           </div>
         </form>
-        <ExpenseList items={data.expenses} sellers={data.sellers} onEdit={editExpense} onUpdate={(items) => updateAccounting((current) => ({ ...current, expenses: [...current.expenses.filter((expense) => expense.companyId !== current.activeCompanyId), ...items] }))} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2></div></div>
@@ -2714,7 +2713,6 @@ function ExpensesPanel() {
             <button className="button button-primary" type="submit">{editingRentalId ? 'Salva modifica' : 'Registra'}</button>
           </div>
         </form>
-        <SettlementList items={data.rentals} kind="rentals" sellers={data.sellers} onEditRental={editRental} />
       </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">PRESTAZIONI</span><h2>Fatture del contabile</h2></div></div>
@@ -2728,8 +2726,26 @@ function ExpensesPanel() {
           />
           <button className="button button-primary" type="submit">Registra</button>
         </form>
-        <SettlementList items={data.accountantInvoices} kind="accountantInvoices" sellers={data.sellers} />
       </article>
+      <MonthlyManualExpenseList
+        accountantInvoices={data.accountantInvoices}
+        expenses={data.expenses}
+        onEditExpense={editExpense}
+        onEditRental={editRental}
+        onUpdateExpenses={(items) =>
+          updateAccounting((current) => ({
+            ...current,
+            expenses: [
+              ...current.expenses.filter(
+                (expense) => expense.companyId !== current.activeCompanyId,
+              ),
+              ...items,
+            ],
+          }))
+        }
+        rentals={data.rentals}
+        sellers={data.sellers}
+      />
     </section>
   )
 }
@@ -2867,6 +2883,245 @@ function AttachmentPhoto({
         </div>
       )}
     </figure>
+  )
+}
+
+type ManualExpenseMonth = {
+  key: string
+  expenses: AccountingExpense[]
+  rentals: Rental[]
+  accountantInvoices: AccountantInvoice[]
+}
+
+function manualExpenseMonthKey(date: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : 'senza-data'
+}
+
+function manualExpenseMonthLabel(key: string) {
+  if (key === 'senza-data') return 'Data non disponibile'
+  const label = new Intl.DateTimeFormat('it-IT', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${key}-01T00:00:00Z`))
+  return label.charAt(0).toLocaleUpperCase() + label.slice(1)
+}
+
+function MonthlyManualExpenseList({
+  expenses,
+  rentals,
+  accountantInvoices,
+  sellers,
+  onEditExpense,
+  onEditRental,
+  onUpdateExpenses,
+}: {
+  expenses: AccountingExpense[]
+  rentals: Rental[]
+  accountantInvoices: AccountantInvoice[]
+  sellers: AccountingSeller[]
+  onEditExpense: (item: AccountingExpense) => void
+  onEditRental: (item: Rental) => void
+  onUpdateExpenses: (items: AccountingExpense[]) => void
+}) {
+  const months = useMemo(() => {
+    const grouped = new Map<string, ManualExpenseMonth>()
+    const month = (date: string) => {
+      const key = manualExpenseMonthKey(date)
+      const current = grouped.get(key)
+      if (current) return current
+      const created: ManualExpenseMonth = {
+        key,
+        expenses: [],
+        rentals: [],
+        accountantInvoices: [],
+      }
+      grouped.set(key, created)
+      return created
+    }
+
+    expenses.forEach((item) => month(item.date).expenses.push(item))
+    rentals.forEach((item) => month(item.date).rentals.push(item))
+    accountantInvoices.forEach((item) =>
+      month(item.date).accountantInvoices.push(item),
+    )
+
+    return [...grouped.values()].sort((left, right) => {
+      if (left.key === 'senza-data') return 1
+      if (right.key === 'senza-data') return -1
+      return right.key.localeCompare(left.key)
+    })
+  }, [accountantInvoices, expenses, rentals])
+
+  function updateExpenseCategory(
+    categoryItems: AccountingExpense[],
+    updatedItems: AccountingExpense[],
+  ) {
+    const categoryIds = new Set(categoryItems.map((item) => item.id))
+    const updatedById = new Map(updatedItems.map((item) => [item.id, item]))
+    onUpdateExpenses(
+      expenses.flatMap((item) => {
+        if (!categoryIds.has(item.id)) return [item]
+        const updated = updatedById.get(item.id)
+        return updated ? [updated] : []
+      }),
+    )
+  }
+
+  return (
+    <article className="panel manual-expense-archive">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">ARCHIVIO MENSILE</span>
+          <h2>Spese per mese di competenza</h2>
+        </div>
+      </div>
+      {months.length === 0 ? (
+        <p className="empty-state">Nessuna spesa manuale registrata.</p>
+      ) : (
+        <div className="monthly-expense-list">
+          {months.map((month) => {
+            const categories = [
+              {
+                key: 'stipendi',
+                label: 'Stipendi',
+                expenses: month.expenses.filter(
+                  (item) => item.type === 'stipendio',
+                ),
+                rentals: [] as Rental[],
+                accountantInvoices: [] as AccountantInvoice[],
+              },
+              {
+                key: 'tasse',
+                label: 'Tasse',
+                expenses: month.expenses.filter(
+                  (item) => item.type === 'tassa',
+                ),
+                rentals: [] as Rental[],
+                accountantInvoices: [] as AccountantInvoice[],
+              },
+              {
+                key: 'affitti',
+                label: 'Affitti',
+                expenses: [] as AccountingExpense[],
+                rentals: month.rentals,
+                accountantInvoices: [] as AccountantInvoice[],
+              },
+              {
+                key: 'contabile',
+                label: 'Costi contabili',
+                expenses: month.expenses.filter(
+                  (item) => item.type === 'contabile',
+                ),
+                rentals: [] as Rental[],
+                accountantInvoices: month.accountantInvoices,
+              },
+              {
+                key: 'altre',
+                label: 'Altre spese',
+                expenses: month.expenses.filter(
+                  (item) => item.type === 'altra',
+                ),
+                rentals: [] as Rental[],
+                accountantInvoices: [] as AccountantInvoice[],
+              },
+            ]
+              .map((category) => ({
+                ...category,
+                count:
+                  category.expenses.length +
+                  category.rentals.length +
+                  category.accountantInvoices.length,
+                total:
+                  category.expenses.reduce(
+                    (sum, item) => sum + item.amount,
+                    0,
+                  ) +
+                  category.rentals.reduce(
+                    (sum, item) => sum + item.total,
+                    0,
+                  ) +
+                  category.accountantInvoices.reduce(
+                    (sum, item) => sum + item.total,
+                    0,
+                  ),
+              }))
+              .filter((category) => category.count > 0)
+            const monthTotal = categories.reduce(
+              (sum, category) => sum + category.total,
+              0,
+            )
+            const monthCount = categories.reduce(
+              (sum, category) => sum + category.count,
+              0,
+            )
+
+            return (
+              <details className="monthly-expense-folder" key={month.key}>
+                <summary className="monthly-expense-summary">
+                  <span>
+                    <strong>{manualExpenseMonthLabel(month.key)}</strong>
+                    <small>
+                      {monthCount}{' '}
+                      {monthCount === 1 ? 'registrazione' : 'registrazioni'}
+                    </small>
+                  </span>
+                  <strong>{money(monthTotal)}</strong>
+                </summary>
+                <div className="monthly-expense-categories">
+                  {categories.map((category) => (
+                    <details
+                      className="monthly-expense-category"
+                      key={category.key}
+                    >
+                      <summary className="monthly-expense-category-summary">
+                        <span>
+                          <strong>{category.label}</strong>
+                          <small>
+                            {category.count}{' '}
+                            {category.count === 1
+                              ? 'registrazione'
+                              : 'registrazioni'}
+                          </small>
+                        </span>
+                        <strong>{money(category.total)}</strong>
+                      </summary>
+                      <div className="monthly-expense-category-content">
+                        {category.expenses.length > 0 && (
+                          <ExpenseList
+                            items={category.expenses}
+                            sellers={sellers}
+                            onEdit={onEditExpense}
+                            onUpdate={(items) =>
+                              updateExpenseCategory(category.expenses, items)
+                            }
+                          />
+                        )}
+                        {category.rentals.length > 0 && (
+                          <SettlementList
+                            items={category.rentals}
+                            kind="rentals"
+                            sellers={sellers}
+                            onEditRental={onEditRental}
+                          />
+                        )}
+                        {category.accountantInvoices.length > 0 && (
+                          <SettlementList
+                            items={category.accountantInvoices}
+                            kind="accountantInvoices"
+                            sellers={sellers}
+                          />
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      )}
+    </article>
   )
 }
 

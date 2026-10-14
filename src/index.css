@@ -4054,6 +4054,80 @@ select {
   gap: 18px;
 }
 
+.manual-expense-archive {
+  grid-column: 1 / -1;
+}
+
+.monthly-expense-list,
+.monthly-expense-categories {
+  display: grid;
+  gap: 10px;
+}
+
+.monthly-expense-folder,
+.monthly-expense-category {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.monthly-expense-category {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.monthly-expense-summary,
+.monthly-expense-category-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.monthly-expense-summary::-webkit-details-marker,
+.monthly-expense-category-summary::-webkit-details-marker {
+  display: none;
+}
+
+.monthly-expense-summary::before,
+.monthly-expense-category-summary::before {
+  content: '›';
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+}
+
+.monthly-expense-folder[open] > .monthly-expense-summary::before,
+.monthly-expense-category[open] > .monthly-expense-category-summary::before {
+  transform: rotate(90deg);
+}
+
+.monthly-expense-summary > span,
+.monthly-expense-category-summary > span {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+
+.monthly-expense-summary small,
+.monthly-expense-category-summary small {
+  color: var(--muted);
+}
+
+.monthly-expense-categories {
+  padding: 0 12px 12px;
+}
+
+.monthly-expense-category-content {
+  padding: 0 10px 10px;
+}
+
 .inline-create-form {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
