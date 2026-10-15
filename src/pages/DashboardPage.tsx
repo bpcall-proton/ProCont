@@ -5,7 +5,6 @@ import {
   activeAccounting,
   bestContactNameMatch,
   expenseForMaturedDates,
-  invoiceRemaining,
   money,
   monthlyCostsForMaturedDates,
   officialTaking,
@@ -172,6 +171,8 @@ export function DashboardPage() {
     unboundedEconomicRangeEnd > currentDate
       ? currentDate
       : unboundedEconomicRangeEnd
+  const isInEconomicBalanceRange = (date: string) =>
+    date <= economicRangeEnd
   const economicPeriodLabel =
     economicMode === 'month'
       ? new Intl.DateTimeFormat('it-IT', {
@@ -211,6 +212,19 @@ export function DashboardPage() {
     (invoice) =>
       invoice.date >= economicRangeStart &&
       invoice.date <= economicRangeEnd,
+  )
+  const economicBalanceInvoices = accounting.invoices.filter((invoice) =>
+    isInEconomicBalanceRange(invoice.date),
+  )
+  const economicBalanceRentals = accounting.rentals.filter((rental) =>
+    isInEconomicBalanceRange(rental.date),
+  )
+  const economicBalanceAccountantInvoices =
+    accounting.accountantInvoices.filter((invoice) =>
+      isInEconomicBalanceRange(invoice.date),
+    )
+  const economicBalanceTakings = accounting.takings.filter((taking) =>
+    isInEconomicBalanceRange(taking.date),
   )
   const annualTakings = accounting.takings.filter(
     (taking) =>
@@ -347,20 +361,32 @@ export function DashboardPage() {
       (invoice.settled || invoice.paidAmount > 0)
     )
   })
-  const economicRentals = accounting.rentals.filter(
-    (rental) =>
-      rental.date >= economicRangeStart &&
-      rental.date <= economicRangeEnd,
-  )
-  const economicAccountantInvoices =
-    accounting.accountantInvoices.filter(
-      (invoice) =>
-        invoice.date >= economicRangeStart &&
-        invoice.date <= economicRangeEnd,
-    )
   const economicInvoiceValue = roundMoney(
     annualInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
   )
+  const invoiceRemainingAtPeriodEnd = (
+    invoice: (typeof accounting.invoices)[number],
+  ) => {
+    const payments = invoice.payments ?? []
+    const recordedPaidAmount = payments
+      .filter((payment) => payment.date <= economicRangeEnd)
+      .reduce((sum, payment) => sum + payment.amount, 0)
+    const legacyPaidAmount =
+      payments.length === 0 &&
+      (!invoice.paymentDate ||
+        invoice.paymentDate <= economicRangeEnd)
+        ? invoice.settled
+          ? invoice.total
+          : invoice.paidAmount
+        : 0
+    const paidAmount =
+      invoice.settled &&
+      (!invoice.paymentDate ||
+        invoice.paymentDate <= economicRangeEnd)
+        ? invoice.total
+        : recordedPaidAmount || legacyPaidAmount
+    return roundMoney(Math.max(0, invoice.total - paidAmount))
+  }
   const economicPaidInvoiceValue = roundMoney(
     economicPaidInvoices.reduce(
       (sum, invoice) =>
@@ -369,21 +395,31 @@ export function DashboardPage() {
     ),
   )
   const economicRemainingInvoices = roundMoney(
-    annualInvoices.reduce(
-      (sum, invoice) => sum + invoiceRemaining(invoice),
+    economicBalanceInvoices.reduce(
+      (sum, invoice) =>
+        sum + invoiceRemainingAtPeriodEnd(invoice),
       0,
     ),
   )
   const economicInputVat = roundMoney(
-    annualInvoices.reduce((sum, invoice) => sum + invoice.vat, 0) +
-      economicRentals.reduce((sum, rental) => sum + rental.vat, 0) +
-      economicAccountantInvoices.reduce(
+    economicBalanceInvoices.reduce(
+      (sum, invoice) => sum + invoice.vat,
+      0,
+    ) +
+      economicBalanceRentals.reduce(
+        (sum, rental) => sum + rental.vat,
+        0,
+      ) +
+      economicBalanceAccountantInvoices.reduce(
         (sum, invoice) => sum + invoice.vat,
         0,
       ),
   )
   const economicOutputVat = roundMoney(
-    annualTakings.reduce((sum, taking) => sum + taking.vat, 0),
+    economicBalanceTakings.reduce(
+      (sum, taking) => sum + taking.vat,
+      0,
+    ),
   )
   const economicVatBalance = roundMoney(
     economicOutputVat - economicInputVat,
@@ -551,21 +587,21 @@ export function DashboardPage() {
     isInEconomicRange(row.date),
   )
   const economicRemainingInvoiceRows: DashboardDetailRow[] =
-    annualInvoices
+    economicBalanceInvoices
       .map((invoice) => ({
         date: invoice.dueDate || invoice.date,
         category: 'Residuo fattura',
         description:
           invoice.supplierName || 'Fornitore non indicato',
         reference: `Fattura ${invoice.number || 'senza numero'}`,
-        amount: invoiceRemaining(invoice),
+        amount: invoiceRemainingAtPeriodEnd(invoice),
       }))
       .filter((row) => row.amount > 0)
   const economicInputVatRows = inputVatRows.filter((row) =>
-    isInEconomicRange(row.date),
+    isInEconomicBalanceRange(row.date),
   )
   const economicOutputVatRows = outputVatRows.filter((row) =>
-    isInEconomicRange(row.date),
+    isInEconomicBalanceRange(row.date),
   )
   const economicCashRows = cashRows.filter((row) =>
     isInEconomicRange(row.date),
@@ -797,21 +833,30 @@ export function DashboardPage() {
     },
     'remaining-invoices': {
       title: `Residuo da pagare · ${economicPeriodLabel}`,
-      note: 'Importi ancora dovuti sulle fatture del periodo.',
+      note:
+        economicMode === 'month'
+          ? 'Importi ancora dovuti a fine mese, compresi i residui precedenti.'
+          : 'Importi ancora dovuti a fine anno, compresi i residui precedenti.',
       value: economicRemainingInvoices,
       tone: 'amber',
       rows: economicRemainingInvoiceRows,
     },
     'input-vat': {
       title: `IVA acquisti · ${economicPeriodLabel}`,
-      note: 'IVA del periodo su fatture fornitori, affitti e contabile.',
+      note:
+        economicMode === 'month'
+          ? 'IVA progressiva fino a fine mese su fatture, affitti e contabile.'
+          : 'IVA progressiva fino a fine anno su fatture, affitti e contabile.',
       value: economicInputVat,
       tone: 'cyan',
       rows: economicInputVatRows,
     },
     'output-vat': {
       title: `IVA incassi · ${economicPeriodLabel}`,
-      note: 'IVA del periodo già inclusa negli importi Cash + POS.',
+      note:
+        economicMode === 'month'
+          ? 'IVA progressiva fino a fine mese, già inclusa in Cash + POS.'
+          : 'IVA progressiva fino a fine anno, già inclusa in Cash + POS.',
       value: economicOutputVat,
       tone: 'amber',
       rows: economicOutputVatRows,
@@ -823,7 +868,10 @@ export function DashboardPage() {
           : economicVatBalance < 0
             ? `IVA: a credito · ${economicPeriodLabel}`
             : 'IVA: in pareggio',
-      note: 'Differenza tra IVA incassi e IVA acquisti.',
+      note:
+        economicMode === 'month'
+          ? 'Saldo IVA progressivo, compreso il risultato dei mesi precedenti.'
+          : 'Saldo IVA progressivo, compreso il risultato degli anni precedenti.',
       value: Math.abs(economicVatBalance),
       tone:
         economicVatBalance > 0
@@ -2346,21 +2394,33 @@ export function DashboardPage() {
           value={money(economicPaidInvoiceValue)}
         />
         <StatCard
-          detail="Residuo delle fatture del periodo"
+          detail={
+            economicMode === 'month'
+              ? 'Compresi i residui dei mesi precedenti'
+              : 'Compresi i residui degli anni precedenti'
+          }
           label="Residuo da pagare"
           onClick={() => setDetail('remaining-invoices')}
           tone="amber"
           value={money(economicRemainingInvoices)}
         />
         <StatCard
-          detail="Nel periodo su fatture, affitti e contabile"
+          detail={
+            economicMode === 'month'
+              ? 'Progressiva fino alla fine del mese'
+              : 'Progressiva fino alla fine dell’anno'
+          }
           label="IVA acquisti"
           onClick={() => setDetail('input-vat')}
           tone="cyan"
           value={money(economicInputVat)}
         />
         <StatCard
-          detail="Nel periodo, già inclusa in Cash + POS"
+          detail={
+            economicMode === 'month'
+              ? 'Progressiva fino alla fine del mese'
+              : 'Progressiva fino alla fine dell’anno'
+          }
           label="IVA incassi"
           onClick={() => setDetail('output-vat')}
           tone="amber"
