@@ -243,7 +243,7 @@ export function SettingsPage() {
         ? 'Pronto, modalità locale'
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
-          : 'File Drive locale aggiornato'
+          : 'Archivio Drive locale aperto'
 
   async function runLocalBackup() {
     if (!window.desktopApp) return
@@ -1027,7 +1027,9 @@ export function SettingsPage() {
               </div>
             ))}
             <small className="drive-file-warning">
-              Questi sono i file letti e scritti dal programma. Non rinominarli.
+              Questi file non vanno rinominati. Il programma mantiene anche una
+              copia protetta distinta per ogni PC, così una copia obsoleta non
+              può sostituire automaticamente quella più recente.
             </small>
           </div>
           {googleMessage && (

@@ -114,14 +114,18 @@ function backupLabel(filename, content) {
     return 'Archivio generale'
   }
   try {
-    const state = JSON.parse(content)
+    const parsed = JSON.parse(content)
+    const state =
+      parsed?.format === 'fip-drive-snapshot-v1' ? parsed.state : parsed
     const companies = state?.accounting?.companies
     const activeCompanyId = state?.accounting?.activeCompanyId
     const company = Array.isArray(companies)
       ? companies.find((item) => item?.id === activeCompanyId) ?? companies[0]
       : null
     if (typeof company?.name === 'string' && company.name.trim()) {
-      return company.name
+      return /^device-.+\.json$/.test(filename)
+        ? `${company.name} - copia protetta`
+        : company.name
     }
   } catch {
     return filename.replace(/^state-/, '').replace(/\.json$/, '')
@@ -141,7 +145,8 @@ async function backupLocalStates() {
     .filter((filename) =>
       driveFolder
         ? filename === 'workspace.json' ||
-          /^company-.+\.json$/.test(filename)
+          /^company-.+\.json$/.test(filename) ||
+          /^device-.+\.json$/.test(filename)
         : /^state-.+\.json$/.test(filename),
     )
     .sort()
@@ -259,6 +264,21 @@ ipcMain.handle('drive-data:load', async (_event, storageId) => {
     if (error && error.code === 'ENOENT') return null
     throw error
   }
+})
+
+ipcMain.handle('drive-data:list', async () => {
+  const folderPath = await savedDriveFolder()
+  if (!folderPath) {
+    throw new Error('Seleziona la cartella locale di Google Drive')
+  }
+  try {
+    await fs.access(folderPath, constants.R_OK | constants.W_OK)
+  } catch {
+    throw new Error(`Cartella Google Drive non accessibile: ${folderPath}`)
+  }
+  return (await fs.readdir(folderPath))
+    .filter((filename) => /^[a-zA-Z0-9_-]{1,160}\.json$/.test(filename))
+    .map((filename) => filename.replace(/\.json$/, ''))
 })
 
 ipcMain.handle('drive-data:save', async (_event, storageId, content) => {
