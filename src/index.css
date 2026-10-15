@@ -1129,7 +1129,8 @@ select {
   font-weight: 700;
 }
 
-.dashboard-seller-date-filter input {
+.dashboard-seller-date-filter input,
+.dashboard-seller-date-filter select {
   width: 165px;
   padding: 8px 10px;
 }
@@ -1348,7 +1349,7 @@ select {
 }
 
 .cash-withdrawal-overview-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2529,7 +2530,8 @@ select {
     flex: 1 1 180px;
   }
 
-  .dashboard-seller-date-filter input {
+  .dashboard-seller-date-filter input,
+  .dashboard-seller-date-filter select {
     width: 100%;
   }
 

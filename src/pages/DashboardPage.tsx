@@ -114,6 +114,10 @@ export function DashboardPage() {
     useState<SellerMetricDetail | null>(null)
   const [storeDetailId, setStoreDetailId] = useState<string | null>(null)
   const [sellerAsOfDate, setSellerAsOfDate] = useState('')
+  const [sellerPeriodMode, setSellerPeriodMode] = useState<
+    'annual' | 'month'
+  >('annual')
+  const [sellerMonth, setSellerMonth] = useState(today().slice(0, 7))
   const { review } = state
   const companyId = state.accounting.activeCompanyId
   const withdrawalFilterDefaults = {
@@ -978,11 +982,24 @@ export function DashboardPage() {
       rows: annualBalanceRows,
     },
   }
-  const sellerInvoices = accounting.invoices.filter(
-    (invoice) => !sellerAsOfDate || invoice.date <= sellerAsOfDate,
+  const selectedSellerMonth = /^\d{4}-\d{2}$/.test(sellerMonth)
+    ? sellerMonth
+    : currentMonth
+  const sellerMonthStart = `${selectedSellerMonth}-01`
+  const unboundedSellerMonthEnd = monthEnd(selectedSellerMonth)
+  const sellerMonthEnd =
+    unboundedSellerMonthEnd > currentDate
+      ? currentDate
+      : unboundedSellerMonthEnd
+  const isInSellerPeriod = (date: string) =>
+    sellerPeriodMode === 'month'
+      ? date >= sellerMonthStart && date <= sellerMonthEnd
+      : !sellerAsOfDate || date <= sellerAsOfDate
+  const sellerInvoices = accounting.invoices.filter((invoice) =>
+    isInSellerPeriod(invoice.date),
   )
-  const sellerTakings = accounting.takings.filter(
-    (taking) => !sellerAsOfDate || taking.date <= sellerAsOfDate,
+  const sellerTakings = accounting.takings.filter((taking) =>
+    isInSellerPeriod(taking.date),
   )
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
   const sellerRevenueTransfers = (invoices: typeof accounting.invoices) =>
@@ -1025,7 +1042,10 @@ export function DashboardPage() {
     })
   const supplierSellerRevenueTransfers =
     sellerRevenueTransfers(sellerInvoices)
-  const sellerStockEnd = sellerAsOfDate || economicRangeEnd
+  const sellerStockEnd =
+    sellerPeriodMode === 'month'
+      ? sellerMonthEnd
+      : sellerAsOfDate || economicRangeEnd
   const sellerStockInvoices = accounting.invoices.filter(
     (invoice) => invoice.date <= sellerStockEnd,
   )
@@ -1034,8 +1054,14 @@ export function DashboardPage() {
   )
   const sellerStockRevenueTransfers =
     sellerRevenueTransfers(sellerStockInvoices)
-  const sellerResultEnd = sellerAsOfDate || today()
-  const sellerResultStart = `${sellerResultEnd.slice(0, 7)}-01`
+  const sellerResultEnd =
+    sellerPeriodMode === 'month'
+      ? sellerMonthEnd
+      : sellerAsOfDate || today()
+  const sellerResultStart =
+    sellerPeriodMode === 'month'
+      ? sellerMonthStart
+      : `${sellerResultEnd.slice(0, 7)}-01`
   const sellerResultInvoices = sellerInvoices.filter(
     (invoice) =>
       invoice.date >= sellerResultStart && invoice.date <= sellerResultEnd,
@@ -1358,6 +1384,22 @@ export function DashboardPage() {
     const cumulativeStockTakings = sellerStockTakings.filter(
       (taking) => taking.sellerId === seller.id,
     )
+    const cumulativeCashReal = cumulativeStockTakings.reduce(
+      (sum, taking) => sum + realTaking(taking),
+      0,
+    )
+    const cumulativeCashPos = cumulativeStockTakings.reduce(
+      (sum, taking) => sum + taking.pos,
+      0,
+    )
+    const cumulativeCashWithdrawals = cumulativeStockTakings.reduce(
+      (sum, taking) => sum + taking.withdrawal,
+      0,
+    )
+    const cumulativeCashUnregisteredGoods = cumulativeStockTakings.reduce(
+      (sum, taking) => sum + taking.unregisteredGoods,
+      0,
+    )
     const sellerOfficial = takings.reduce(
       (sum, taking) => sum + officialTaking(taking),
       0,
@@ -1438,11 +1480,15 @@ export function DashboardPage() {
       unregisteredGoodsCash: sellerUnregisteredGoodsCash,
       cashResidual: Math.max(
         0,
-        sellerReal -
-          sellerPos -
-          sellerWithdrawals -
-          sellerUnregisteredGoodsCash,
+        cumulativeCashReal -
+          cumulativeCashPos -
+          cumulativeCashWithdrawals -
+          cumulativeCashUnregisteredGoods,
       ),
+      cashBalanceReal: cumulativeCashReal,
+      cashBalancePos: cumulativeCashPos,
+      cashBalanceWithdrawals: cumulativeCashWithdrawals,
+      cashBalanceUnregisteredGoods: cumulativeCashUnregisteredGoods,
       official: sellerOfficial,
       real: sellerReal,
       vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
@@ -1513,6 +1559,22 @@ export function DashboardPage() {
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
     )
+    const unassignedCashReal = unassignedStockTakings.reduce(
+      (sum, taking) => sum + realTaking(taking),
+      0,
+    )
+    const unassignedCashPos = unassignedStockTakings.reduce(
+      (sum, taking) => sum + taking.pos,
+      0,
+    )
+    const unassignedCashWithdrawals = unassignedStockTakings.reduce(
+      (sum, taking) => sum + taking.withdrawal,
+      0,
+    )
+    const unassignedCashUnregisteredGoods = unassignedStockTakings.reduce(
+      (sum, taking) => sum + taking.unregisteredGoods,
+      0,
+    )
     sellerSummaries.push({
       id: 'unassigned',
       name: 'Non assegnato',
@@ -1530,11 +1592,15 @@ export function DashboardPage() {
       unregisteredGoodsCash: unassignedUnregisteredGoodsCash,
       cashResidual: Math.max(
         0,
-        unassignedReal -
-          unassignedPos -
-          unassignedWithdrawals -
-          unassignedUnregisteredGoodsCash,
+        unassignedCashReal -
+          unassignedCashPos -
+          unassignedCashWithdrawals -
+          unassignedCashUnregisteredGoods,
       ),
+      cashBalanceReal: unassignedCashReal,
+      cashBalancePos: unassignedCashPos,
+      cashBalanceWithdrawals: unassignedCashWithdrawals,
+      cashBalanceUnregisteredGoods: unassignedCashUnregisteredGoods,
       official: unassignedOfficial,
       real: unassignedReal,
       vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
@@ -1589,16 +1655,31 @@ export function DashboardPage() {
   )
   const cashWithdrawalTotals = new Map<
     string,
-    { id: string; name: string; total: number; entries: number }
+    {
+      id: string
+      name: string
+      total: number
+      entries: number
+      displayGroup: number
+      overviewPriority: number
+      sourceIndex: number
+    }
   >()
-  for (const seller of accounting.sellers) {
+  accounting.sellers.forEach((seller, sourceIndex) => {
     cashWithdrawalTotals.set(seller.id, {
       id: seller.id,
       name: seller.name,
       total: 0,
       entries: 0,
+      displayGroup: seller.productionCostDistributor
+        ? 0
+        : seller.pointOfSaleSeller
+          ? 1
+          : 2,
+      overviewPriority: seller.overviewPriority,
+      sourceIndex,
     })
-  }
+  })
   for (const taking of cashWithdrawalTakings) {
     const seller =
       accounting.sellers.find((item) => item.id === taking.sellerId) ??
@@ -1611,6 +1692,9 @@ export function DashboardPage() {
       name: fallbackName,
       total: 0,
       entries: 0,
+      displayGroup: 2,
+      overviewPriority: 0,
+      sourceIndex: accounting.sellers.length,
     }
     cashWithdrawalTotals.set(key, {
       ...current,
@@ -1619,9 +1703,52 @@ export function DashboardPage() {
     })
   }
   const cashWithdrawalSellerTotals = [...cashWithdrawalTotals.values()]
+    .filter((seller) => seller.displayGroup < 2 || seller.entries > 0)
+    .sort((left, right) => {
+      if (left.displayGroup !== right.displayGroup) {
+        return left.displayGroup - right.displayGroup
+      }
+      const leftPriority =
+        left.overviewPriority > 0
+          ? left.overviewPriority
+          : Number.POSITIVE_INFINITY
+      const rightPriority =
+        right.overviewPriority > 0
+          ? right.overviewPriority
+          : Number.POSITIVE_INFINITY
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority
+      }
+      return left.sourceIndex - right.sourceIndex
+    })
   const cashWithdrawalTotal = roundMoney(
     cashWithdrawalTakings.reduce(
       (sum, taking) => sum + taking.withdrawal,
+      0,
+    ),
+  )
+  const currentCashBySeller = new Map<string, number>()
+  for (const taking of accounting.takings) {
+    if (taking.date > currentDate) continue
+    const seller =
+      accounting.sellers.find((item) => item.id === taking.sellerId) ??
+      bestContactNameMatch(taking.sellerName, accounting.sellers)
+    if (!seller?.pointOfSaleSeller) continue
+    const current = currentCashBySeller.get(seller.id) ?? 0
+    currentCashBySeller.set(
+      seller.id,
+      roundMoney(
+        current +
+          realTaking(taking) -
+          taking.pos -
+          taking.withdrawal -
+          taking.unregisteredGoods,
+      ),
+    )
+  }
+  const currentCashInHandTotal = roundMoney(
+    [...currentCashBySeller.values()].reduce(
+      (sum, value) => sum + Math.max(0, value),
       0,
     ),
   )
@@ -1778,38 +1905,38 @@ export function DashboardPage() {
             }))
             .filter((row) => row.amount !== 0)
           const rawCashResidual =
-            selectedSeller.real -
-            selectedSeller.pos -
-            selectedSeller.withdrawals -
-            selectedSeller.unregisteredGoodsCash
+            selectedSeller.cashBalanceReal -
+            selectedSeller.cashBalancePos -
+            selectedSeller.cashBalanceWithdrawals -
+            selectedSeller.cashBalanceUnregisteredGoods
           const cashResidualRows: DashboardDetailRow[] = [
             {
               date: '',
               category: 'Incasso reale',
               description: selectedSeller.name,
               reference: 'Valore di partenza',
-              amount: selectedSeller.real,
+              amount: selectedSeller.cashBalanceReal,
             },
             {
               date: '',
               category: 'POS',
               description: selectedSeller.name,
               reference: 'Importo sottratto',
-              amount: -selectedSeller.pos,
+              amount: -selectedSeller.cashBalancePos,
             },
             {
               date: '',
               category: 'Cash ritirato',
               description: selectedSeller.name,
               reference: 'Importo sottratto',
-              amount: -selectedSeller.withdrawals,
+              amount: -selectedSeller.cashBalanceWithdrawals,
             },
             {
               date: '',
               category: 'Merce acquistata senza fattura',
               description: selectedSeller.name,
               reference: 'Importo sottratto dalla cassa',
-              amount: -selectedSeller.unregisteredGoodsCash,
+              amount: -selectedSeller.cashBalanceUnregisteredGoods,
             },
             ...(rawCashResidual < 0
               ? [
@@ -1860,12 +1987,18 @@ export function DashboardPage() {
             ...stockCededRows,
             ...stockRealRows,
           ]
-          const periodNote = sellerAsOfDate
-            ? ` Dati fino al ${sellerAsOfDate}, data compresa.`
-            : ' Tutto lo storico disponibile.'
-          const stockPeriodNote = sellerAsOfDate
-            ? ` Stock progressivo fino al ${sellerAsOfDate}, data compresa.`
-            : ` Stock progressivo fino al ${economicRangeEnd}: comprende il residuo precedente e i movimenti del periodo selezionato.`
+          const periodNote =
+            sellerPeriodMode === 'month'
+              ? ` Dati del mese ${selectedSellerMonth}.`
+              : sellerAsOfDate
+                ? ` Dati fino al ${sellerAsOfDate}, data compresa.`
+                : ' Tutto lo storico disponibile.'
+          const stockPeriodNote =
+            sellerPeriodMode === 'month'
+              ? ` Stock progressivo fino al ${sellerMonthEnd}: comprende il residuo precedente.`
+              : sellerAsOfDate
+                ? ` Stock progressivo fino al ${sellerAsOfDate}, data compresa.`
+                : ` Stock progressivo fino al ${economicRangeEnd}: comprende il residuo precedente e i movimenti del periodo selezionato.`
           const sellerMetrics: Record<SellerMetricKey, DashboardMetric> = {
             invoices: {
               title: `Fatture assegnate · ${selectedSeller.name}`,
@@ -1932,7 +2065,7 @@ export function DashboardPage() {
             },
             'cash-residual': {
               title: `Cash in mano attuale · ${selectedSeller.name}`,
-              note: `Incasso reale meno POS, Cash ritirato e merce senza fattura.${periodNote}`,
+              note: `Saldo progressivo fino alla fine del periodo: Incasso reale meno POS, Cash ritirato e merce senza fattura.${stockPeriodNote}`,
               value: selectedSeller.cashResidual,
               tone: 'green',
               rows: cashResidualRows,
@@ -2669,6 +2802,12 @@ export function DashboardPage() {
             tone="violet"
             value={money(cashWithdrawalTotal)}
           />
+          <StatCard
+            detail="Somma progressiva del Cash in mano attuale di tutti i punti vendita"
+            label="Cash in mano attuale"
+            tone="green"
+            value={money(currentCashInHandTotal)}
+          />
           {cashWithdrawalSellerTotals.map((seller) => (
             <StatCard
               detail={`${seller.entries} ${
@@ -2691,14 +2830,41 @@ export function DashboardPage() {
           </div>
           <div className="dashboard-seller-heading-controls">
             <label className="dashboard-seller-date-filter">
-              <span>Situazione al (data compresa)</span>
-              <input
-                type="date"
-                value={sellerAsOfDate}
-                onChange={(event) => setSellerAsOfDate(event.target.value)}
-              />
+              <span>Periodo</span>
+              <select
+                onChange={(event) =>
+                  setSellerPeriodMode(
+                    event.target.value === 'month' ? 'month' : 'annual',
+                  )
+                }
+                value={sellerPeriodMode}
+              >
+                <option value="annual">Annuale / fino alla data</option>
+                <option value="month">Mensile</option>
+              </select>
             </label>
-            {sellerAsOfDate && (
+            {sellerPeriodMode === 'month' ? (
+              <label className="dashboard-seller-date-filter">
+                <span>Mese</span>
+                <input
+                  max={currentMonth}
+                  onChange={(event) => setSellerMonth(event.target.value)}
+                  type="month"
+                  value={selectedSellerMonth}
+                />
+              </label>
+            ) : (
+              <label className="dashboard-seller-date-filter">
+                <span>Situazione al (data compresa)</span>
+                <input
+                  max={currentDate}
+                  type="date"
+                  value={sellerAsOfDate}
+                  onChange={(event) => setSellerAsOfDate(event.target.value)}
+                />
+              </label>
+            )}
+            {sellerPeriodMode === 'annual' && sellerAsOfDate && (
               <button
                 className="text-button"
                 onClick={() => setSellerAsOfDate('')}
