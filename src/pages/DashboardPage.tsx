@@ -207,91 +207,6 @@ export function DashboardPage() {
           ),
       ),
   )
-  const invoiceValue = accounting.invoices.reduce(
-    (sum, invoice) => sum + invoice.total,
-    0,
-  )
-  const paidInvoices = accounting.invoices.reduce(
-    (sum, invoice) =>
-      sum + (invoice.settled ? invoice.total : invoice.paidAmount),
-    0,
-  )
-  const remainingInvoices = accounting.invoices.reduce(
-    (sum, invoice) => sum + invoiceRemaining(invoice),
-    0,
-  )
-  const inputVat =
-    accounting.invoices.reduce((sum, invoice) => sum + invoice.vat, 0) +
-    accounting.rentals.reduce((sum, rental) => sum + rental.vat, 0) +
-    accounting.accountantInvoices.reduce(
-      (sum, invoice) => sum + invoice.vat,
-      0,
-    )
-  const outputVat = accounting.takings.reduce(
-    (sum, taking) => sum + taking.vat,
-    0,
-  )
-  const vatBalance = outputVat - inputVat
-  const cash = accounting.takings.reduce(
-    (sum, taking) => sum + taking.cash,
-    0,
-  )
-  const pos = accounting.takings.reduce(
-    (sum, taking) => sum + taking.pos,
-    0,
-  )
-  const withdrawals = accounting.takings.reduce(
-    (sum, taking) => sum + taking.withdrawal,
-    0,
-  )
-  const unregisteredGoods = accounting.invoices.reduce(
-    (sum, invoice) => sum + invoice.unregisteredGoods,
-    0,
-  )
-  const unregisteredGoodsCash = accounting.takings.reduce(
-    (sum, taking) => sum + taking.unregisteredGoods,
-    0,
-  )
-  const official = accounting.takings.reduce(
-    (sum, taking) => sum + officialTaking(taking),
-    0,
-  )
-  const real = accounting.takings.reduce(
-    (sum, taking) => sum + realTaking(taking),
-    0,
-  )
-  const cashResidual = Math.max(
-    0,
-    real - pos - withdrawals - unregisteredGoodsCash,
-  )
-  const theoretical = accounting.invoices.reduce(
-    (sum, invoice) => sum + invoice.theoreticalRevenue,
-    0,
-  )
-  const rents = accounting.rentals.reduce(
-    (sum, rental) => sum + rental.total,
-    0,
-  )
-  const accountantCosts = accounting.accountantInvoices.reduce(
-    (sum, invoice) => sum + invoice.total,
-    0,
-  )
-  const otherExpenses = accounting.expenses.reduce(
-    (sum, expense) => sum + expense.amount,
-    0,
-  )
-  const productionSalaryCosts = productionSalaryCostsForPeriod(accounting)
-  const productionSalaries = productionSalaryCosts.reduce(
-    (sum, cost) => sum + cost.amount,
-    0,
-  )
-  const totalCosts =
-    invoiceValue +
-    unregisteredGoods +
-    rents +
-    accountantCosts +
-    otherExpenses +
-    productionSalaries
   const annualInvoices = accounting.invoices.filter(
     (invoice) =>
       invoice.date >= economicRangeStart &&
@@ -377,11 +292,12 @@ export function DashboardPage() {
   const stockTakings = accounting.takings.filter(
     (taking) => taking.date <= economicRangeEnd,
   )
+  const stockTransferredVenit = transferredVenit(stockInvoices)
   const stockTheoretical = roundMoney(
     stockInvoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
-    ) - transferredVenit(stockInvoices),
+    ) - stockTransferredVenit,
   )
   const stockReal = roundMoney(
     stockTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
@@ -423,6 +339,94 @@ export function DashboardPage() {
       : annualPotentialBalance >= 0
         ? 'Negativo oggi, recuperabile vendendo lo stock'
         : 'Negativo anche vendendo tutto lo stock'
+  const economicPaidInvoices = accounting.invoices.filter((invoice) => {
+    const paymentDate = invoice.paymentDate ?? invoice.date
+    return (
+      paymentDate >= economicRangeStart &&
+      paymentDate <= economicRangeEnd &&
+      (invoice.settled || invoice.paidAmount > 0)
+    )
+  })
+  const economicRentals = accounting.rentals.filter(
+    (rental) =>
+      rental.date >= economicRangeStart &&
+      rental.date <= economicRangeEnd,
+  )
+  const economicAccountantInvoices =
+    accounting.accountantInvoices.filter(
+      (invoice) =>
+        invoice.date >= economicRangeStart &&
+        invoice.date <= economicRangeEnd,
+    )
+  const economicInvoiceValue = roundMoney(
+    annualInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+  )
+  const economicPaidInvoiceValue = roundMoney(
+    economicPaidInvoices.reduce(
+      (sum, invoice) =>
+        sum + (invoice.settled ? invoice.total : invoice.paidAmount),
+      0,
+    ),
+  )
+  const economicRemainingInvoices = roundMoney(
+    annualInvoices.reduce(
+      (sum, invoice) => sum + invoiceRemaining(invoice),
+      0,
+    ),
+  )
+  const economicInputVat = roundMoney(
+    annualInvoices.reduce((sum, invoice) => sum + invoice.vat, 0) +
+      economicRentals.reduce((sum, rental) => sum + rental.vat, 0) +
+      economicAccountantInvoices.reduce(
+        (sum, invoice) => sum + invoice.vat,
+        0,
+      ),
+  )
+  const economicOutputVat = roundMoney(
+    annualTakings.reduce((sum, taking) => sum + taking.vat, 0),
+  )
+  const economicVatBalance = roundMoney(
+    economicOutputVat - economicInputVat,
+  )
+  const economicCash = roundMoney(
+    annualTakings.reduce((sum, taking) => sum + taking.cash, 0),
+  )
+  const economicPos = roundMoney(
+    annualTakings.reduce((sum, taking) => sum + taking.pos, 0),
+  )
+  const economicWithdrawals = roundMoney(
+    annualTakings.reduce((sum, taking) => sum + taking.withdrawal, 0),
+  )
+  const economicUnregisteredGoods = roundMoney(
+    annualInvoices.reduce(
+      (sum, invoice) => sum + invoice.unregisteredGoods,
+      0,
+    ),
+  )
+  const economicUnregisteredGoodsCash = roundMoney(
+    annualTakings.reduce(
+      (sum, taking) => sum + taking.unregisteredGoods,
+      0,
+    ),
+  )
+  const economicOfficial = roundMoney(
+    annualTakings.reduce(
+      (sum, taking) => sum + officialTaking(taking),
+      0,
+    ),
+  )
+  const economicRawCashResidual = roundMoney(
+    annualReal -
+      economicPos -
+      economicWithdrawals -
+      economicUnregisteredGoodsCash,
+  )
+  const economicCashResidual = roundMoney(
+    Math.max(0, economicRawCashResidual),
+  )
+  const economicTotalCosts = roundMoney(
+    annualPurchaseCosts + annualFixedCosts,
+  )
   const invoiceRows: DashboardDetailRow[] = accounting.invoices.map(
     (invoice) => ({
       date: invoice.date,
@@ -439,15 +443,6 @@ export function DashboardPage() {
       description: invoice.supplierName || 'Fornitore non indicato',
       reference: `Fattura ${invoice.number || 'senza numero'} · ${invoice.paymentMethod ?? 'Metodo non indicato'}`,
       amount: invoice.settled ? invoice.total : invoice.paidAmount,
-    }))
-    .filter((row) => row.amount > 0)
-  const remainingInvoiceRows: DashboardDetailRow[] = accounting.invoices
-    .map((invoice) => ({
-      date: invoice.dueDate || invoice.date,
-      category: 'Residuo fattura',
-      description: invoice.supplierName || 'Fornitore non indicato',
-      reference: `Fattura ${invoice.number || 'senza numero'} · scadenza ${invoice.dueDate || 'non indicata'}`,
-      amount: invoiceRemaining(invoice),
     }))
     .filter((row) => row.amount > 0)
   const inputVatRows: DashboardDetailRow[] = [
@@ -538,49 +533,6 @@ export function DashboardPage() {
       sellerId: invoice.sellerId,
     }))
     .filter((row) => row.amount !== 0)
-  const rawCashResidual =
-    real - pos - withdrawals - unregisteredGoodsCash
-  const cashResidualRows: DashboardDetailRow[] = [
-    {
-      date: '',
-      category: 'Incasso reale',
-      description: 'Totale effettivamente incassato',
-      reference: 'Valore di partenza',
-      amount: real,
-    },
-    {
-      date: '',
-      category: 'POS',
-      description: 'Pagamenti elettronici',
-      reference: 'Importo sottratto',
-      amount: -pos,
-    },
-    {
-      date: '',
-      category: 'Cash ritirato',
-      description: 'Contanti già ritirati',
-      reference: 'Importo sottratto',
-      amount: -withdrawals,
-    },
-    {
-      date: '',
-      category: 'Merce acquistata senza fattura',
-      description: 'Pagamenti effettuati dalla cassa',
-      reference: 'Importo sottratto',
-      amount: -unregisteredGoodsCash,
-    },
-    ...(rawCashResidual < 0
-      ? [
-          {
-            date: '',
-            category: 'Limite minimo',
-            description: 'Il cash residuo non può essere negativo',
-            reference: 'Adeguamento a zero',
-            amount: -rawCashResidual,
-          },
-        ]
-      : []),
-  ]
   const theoreticalRows: DashboardDetailRow[] = accounting.invoices
     .map((invoice) => ({
       date: invoice.date,
@@ -590,42 +542,153 @@ export function DashboardPage() {
       amount: invoice.theoreticalRevenue,
     }))
     .filter((row) => row.amount !== 0)
-  const rentalRows: DashboardDetailRow[] = accounting.rentals.map(
-    (rental) => ({
-      date: rental.date,
-      category: 'Affitto',
-      description: rental.property || 'Immobile non indicato',
-      reference: rental.period || 'Periodo non indicato',
-      amount: rental.total,
-    }),
+  const isInEconomicRange = (date: string) =>
+    date >= economicRangeStart && date <= economicRangeEnd
+  const economicInvoiceRows = invoiceRows.filter((row) =>
+    isInEconomicRange(row.date),
   )
-  const accountantRows: DashboardDetailRow[] =
-    accounting.accountantInvoices.map((invoice) => ({
-      date: invoice.date,
-      category: 'Contabile',
-      description: invoice.description || 'Fattura contabile',
-      reference: `Fattura ${invoice.number || 'senza numero'}`,
-      amount: invoice.total,
+  const economicPaidInvoiceRows = paidInvoiceRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicRemainingInvoiceRows: DashboardDetailRow[] =
+    annualInvoices
+      .map((invoice) => ({
+        date: invoice.dueDate || invoice.date,
+        category: 'Residuo fattura',
+        description:
+          invoice.supplierName || 'Fornitore non indicato',
+        reference: `Fattura ${invoice.number || 'senza numero'}`,
+        amount: invoiceRemaining(invoice),
+      }))
+      .filter((row) => row.amount > 0)
+  const economicInputVatRows = inputVatRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicOutputVatRows = outputVatRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicCashRows = cashRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicPosRows = posRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicOfficialRows = officialRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicRealRows = realRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicWithdrawalRows = withdrawalRows.filter((row) =>
+    isInEconomicRange(row.date),
+  )
+  const economicUnregisteredGoodsRows = unregisteredGoodsRows.filter(
+    (row) => isInEconomicRange(row.date),
+  )
+  const economicCashResidualRows: DashboardDetailRow[] = [
+    {
+      date: economicRangeEnd,
+      category: 'Incasso reale',
+      description: 'Totale effettivamente incassato nel periodo',
+      reference: 'Valore di partenza',
+      amount: annualReal,
+    },
+    {
+      date: economicRangeEnd,
+      category: 'POS',
+      description: 'Pagamenti elettronici del periodo',
+      reference: 'Importo sottratto',
+      amount: -economicPos,
+    },
+    {
+      date: economicRangeEnd,
+      category: 'Cash ritirato',
+      description: 'Contanti ritirati nel periodo',
+      reference: 'Importo sottratto',
+      amount: -economicWithdrawals,
+    },
+    {
+      date: economicRangeEnd,
+      category: 'Merce acquistata senza fattura',
+      description: 'Pagamenti effettuati dalla cassa nel periodo',
+      reference: 'Importo sottratto',
+      amount: -economicUnregisteredGoodsCash,
+    },
+    ...(economicRawCashResidual < 0
+      ? [
+          {
+            date: economicRangeEnd,
+            category: 'Limite minimo',
+            description: 'Il cash residuo non può essere negativo',
+            reference: 'Adeguamento a zero',
+            amount: -economicRawCashResidual,
+          },
+        ]
+      : []),
+  ]
+  const economicTheoreticalRows = [
+    ...theoreticalRows.filter((row) => isInEconomicRange(row.date)),
+    ...(annualTransferredVenit > 0
+      ? [
+          {
+            date: economicRangeEnd,
+            category: 'Venit ceduto',
+            description: 'Trasferimenti tra venditori del periodo',
+            reference: 'Importo sottratto',
+            amount: -annualTransferredVenit,
+          },
+        ]
+      : []),
+  ]
+  const economicStockTheoreticalRows = [
+    ...theoreticalRows.filter((row) => row.date <= economicRangeEnd),
+    ...(stockTransferredVenit > 0
+      ? [
+          {
+            date: economicRangeEnd,
+            category: 'Venit ceduto progressivo',
+            description: 'Trasferimenti tra venditori fino alla data',
+            reference: 'Importo sottratto',
+            amount: -stockTransferredVenit,
+          },
+        ]
+      : []),
+  ]
+  const economicStockRealRows = realRows
+    .filter((row) => row.date <= economicRangeEnd)
+    .map((row) => ({ ...row, amount: -row.amount }))
+  const economicRentalRows: DashboardDetailRow[] =
+    annualRentalCosts.map(({ item, amount }) => ({
+      date: item.date,
+      category: 'Affitto maturato',
+      description: item.property || item.tenant || 'Affitto',
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      amount,
     }))
-  const expenseRows: DashboardDetailRow[] = accounting.expenses.map(
-    (expense) => ({
+  const economicAccountantRows: DashboardDetailRow[] =
+    annualAccountantCosts.map(({ item, amount }) => ({
+      date: item.date,
+      category: 'Contabile maturato',
+      description: item.description || 'Fattura contabile',
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      amount,
+    }))
+  const economicExpenseRows: DashboardDetailRow[] =
+    annualExpenseCosts.map(({ expense, amount }) => ({
       date: expense.date,
-      category: 'Spesa',
+      category: 'Spesa del periodo',
       description: expense.description || expense.type,
-      reference: expense.sellerName || expense.notes || 'Spesa aziendale',
-      amount: expense.amount,
-    }),
-  )
-  const productionSalaryRows: DashboardDetailRow[] =
-    productionSalaryCosts.map((cost) => {
+      reference:
+        expense.recurrence === 'monthly'
+          ? `Quota su ${annualMaturedDates.size} giorni maturati`
+          : expense.notes || 'Spesa effettiva',
+      amount,
+    }))
+  const economicProductionSalaryRows: DashboardDetailRow[] =
+    annualProductionSalaryCosts.map((cost) => {
       const seller = accounting.sellers.find(
         (item) => item.id === cost.sellerId,
       )
-      const product = cost.productId
-        ? accounting.productionSettings.find(
-            (item) => item.id === cost.productId,
-          )
-        : undefined
       return {
         date: cost.date,
         category: 'Stipendio produzione',
@@ -633,19 +696,19 @@ export function DashboardPage() {
         reference:
           cost.payMode === 'hourly'
             ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
-            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}${product ? ` · ${product.productName}` : ''}`,
+            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}`,
         amount: cost.amount,
       }
     })
-  const costRows = [
-    ...invoiceRows,
-    ...unregisteredGoodsRows,
-    ...rentalRows,
-    ...accountantRows,
-    ...expenseRows,
-    ...productionSalaryRows,
+  const economicCostRows = [
+    ...economicInvoiceRows,
+    ...economicUnregisteredGoodsRows,
+    ...economicRentalRows,
+    ...economicAccountantRows,
+    ...economicExpenseRows,
+    ...economicProductionSalaryRows,
   ]
-  const negativeCostRows = costRows.map((row) => ({
+  const negativeEconomicCostRows = economicCostRows.map((row) => ({
     ...row,
     amount: -row.amount,
   }))
@@ -719,135 +782,145 @@ export function DashboardPage() {
   ]
   const metrics: Record<DashboardMetricKey, DashboardMetric> = {
     invoices: {
-      title: 'Fatture ricevute',
-      note: 'Totale delle fatture fornitori registrate per l’azienda.',
-      value: invoiceValue,
+      title: `Fatture ricevute · ${economicPeriodLabel}`,
+      note: 'Totale delle fatture fornitori registrate nel periodo.',
+      value: economicInvoiceValue,
       tone: 'cyan',
-      rows: invoiceRows,
+      rows: economicInvoiceRows,
     },
     'paid-invoices': {
-      title: 'Fatture pagate',
-      note: 'Acconti e saldi registrati sulle fatture fornitori.',
-      value: paidInvoices,
+      title: `Fatture pagate · ${economicPeriodLabel}`,
+      note: 'Acconti e saldi registrati nel periodo.',
+      value: economicPaidInvoiceValue,
       tone: 'green',
-      rows: paidInvoiceRows,
+      rows: economicPaidInvoiceRows,
     },
     'remaining-invoices': {
-      title: 'Residuo da pagare',
-      note: 'Importi ancora dovuti ai fornitori.',
-      value: remainingInvoices,
+      title: `Residuo da pagare · ${economicPeriodLabel}`,
+      note: 'Importi ancora dovuti sulle fatture del periodo.',
+      value: economicRemainingInvoices,
       tone: 'amber',
-      rows: remainingInvoiceRows,
+      rows: economicRemainingInvoiceRows,
     },
     'input-vat': {
-      title: 'IVA acquisti',
-      note: 'IVA registrata su fatture fornitori, affitti e contabile.',
-      value: inputVat,
+      title: `IVA acquisti · ${economicPeriodLabel}`,
+      note: 'IVA del periodo su fatture fornitori, affitti e contabile.',
+      value: economicInputVat,
       tone: 'cyan',
-      rows: inputVatRows,
+      rows: economicInputVatRows,
     },
     'output-vat': {
-      title: 'IVA incassi',
-      note: 'IVA già inclusa negli importi Cash + POS.',
-      value: outputVat,
+      title: `IVA incassi · ${economicPeriodLabel}`,
+      note: 'IVA del periodo già inclusa negli importi Cash + POS.',
+      value: economicOutputVat,
       tone: 'amber',
-      rows: outputVatRows,
+      rows: economicOutputVatRows,
     },
     'vat-balance': {
       title:
-        vatBalance > 0
-          ? 'IVA: a debito'
-          : vatBalance < 0
-            ? 'IVA: a credito'
+        economicVatBalance > 0
+          ? `IVA: a debito · ${economicPeriodLabel}`
+          : economicVatBalance < 0
+            ? `IVA: a credito · ${economicPeriodLabel}`
             : 'IVA: in pareggio',
       note: 'Differenza tra IVA incassi e IVA acquisti.',
-      value: Math.abs(vatBalance),
-      tone: vatBalance > 0 ? 'red' : vatBalance < 0 ? 'green' : 'cyan',
+      value: Math.abs(economicVatBalance),
+      tone:
+        economicVatBalance > 0
+          ? 'red'
+          : economicVatBalance < 0
+            ? 'green'
+            : 'cyan',
       rows: [
-        ...outputVatRows,
-        ...inputVatRows.map((row) => ({ ...row, amount: -row.amount })),
+        ...economicOutputVatRows,
+        ...economicInputVatRows.map((row) => ({
+          ...row,
+          amount: -row.amount,
+        })),
       ],
     },
     cash: {
-      title: 'Cash',
-      note: 'Contanti registrati negli incassi.',
-      value: cash,
+      title: `Cash · ${economicPeriodLabel}`,
+      note: 'Contanti registrati negli incassi del periodo.',
+      value: economicCash,
       tone: 'green',
-      rows: cashRows,
+      rows: economicCashRows,
     },
     pos: {
-      title: 'POS',
-      note: 'Pagamenti elettronici registrati negli incassi.',
-      value: pos,
+      title: `POS · ${economicPeriodLabel}`,
+      note: 'Pagamenti elettronici registrati nel periodo.',
+      value: economicPos,
       tone: 'green',
-      rows: posRows,
+      rows: economicPosRows,
     },
     official: {
-      title: 'Incasso registrato',
-      note: 'Somma di Cash e POS, con IVA già compresa.',
-      value: official,
+      title: `Incasso registrato · ${economicPeriodLabel}`,
+      note: 'Somma di Cash e POS del periodo, con IVA già compresa.',
+      value: economicOfficial,
       tone: 'green',
-      rows: officialRows,
+      rows: economicOfficialRows,
     },
     real: {
-      title: 'Incasso reale',
-      note: 'Totale effettivamente incassato, autonomo dal fiscale.',
-      value: real,
+      title: `Incasso reale · ${economicPeriodLabel}`,
+      note: 'Totale effettivamente incassato nel periodo.',
+      value: annualReal,
       tone: 'cyan',
-      rows: realRows,
+      rows: economicRealRows,
     },
     withdrawals: {
-      title: 'Cash ritirato',
-      note: 'Contanti ritirati dai venditori e dai punti vendita.',
-      value: withdrawals,
+      title: `Cash ritirato · ${economicPeriodLabel}`,
+      note: 'Contanti ritirati dai venditori nel periodo.',
+      value: economicWithdrawals,
       tone: 'violet',
-      rows: withdrawalRows,
+      rows: economicWithdrawalRows,
     },
     'unregistered-goods': {
-      title: 'Merce acquistata senza fattura',
-      note: 'Spese pagate con la cassa e registrate separatamente dalle fatture.',
-      value: unregisteredGoods,
+      title: `Merce acquistata senza fattura · ${economicPeriodLabel}`,
+      note: 'Spese del periodo pagate con la cassa.',
+      value: economicUnregisteredGoods,
       tone: 'red',
-      rows: unregisteredGoodsRows,
+      rows: economicUnregisteredGoodsRows,
     },
     'cash-residual': {
-      title: 'Cash residuo',
-      note: 'Incasso reale meno POS, Cash ritirato e merce senza fattura.',
-      value: cashResidual,
+      title: `Cash residuo · ${economicPeriodLabel}`,
+      note:
+        'Incasso reale del periodo meno POS, Cash ritirato e merce senza fattura.',
+      value: economicCashResidual,
       tone: 'green',
-      rows: cashResidualRows,
+      rows: economicCashResidualRows,
     },
     theoretical: {
-      title: 'Venit complessivo',
-      note: 'Vendita teorica dei prodotti acquistati.',
-      value: theoretical,
+      title: `Venit complessivo · ${economicPeriodLabel}`,
+      note: 'Vendita teorica dei prodotti acquistati nel periodo.',
+      value: annualTheoretical,
       tone: 'cyan',
-      rows: theoreticalRows,
+      rows: economicTheoreticalRows,
     },
     stock: {
-      title: 'Venit stock',
-      note: 'Venit teorico meno incasso reale.',
-      value: theoretical - real,
+      title: `Venit stock · ${economicPeriodLabel}`,
+      note:
+        'Residuo precedente più i movimenti del periodo selezionato.',
+      value: annualStock,
       tone: 'amber',
       rows: [
-        ...theoreticalRows,
-        ...realRows.map((row) => ({ ...row, amount: -row.amount })),
+        ...economicStockTheoreticalRows,
+        ...economicStockRealRows,
       ],
     },
     costs: {
-      title: 'Costi complessivi',
+      title: `Costi complessivi · ${economicPeriodLabel}`,
       note:
-        'Fatture, merce senza fattura, affitti, contabile, stipendi produzione e altre spese.',
-      value: totalCosts,
+        'Fatture e costi maturati nel periodo selezionato.',
+      value: economicTotalCosts,
       tone: 'amber',
-      rows: costRows,
+      rows: economicCostRows,
     },
     'real-result': {
-      title: 'Risultato reale',
-      note: 'Incasso reale meno tutti i costi registrati.',
-      value: real - totalCosts,
-      tone: real - totalCosts >= 0 ? 'green' : 'red',
-      rows: [...realRows, ...negativeCostRows],
+      title: `Risultato reale · ${economicPeriodLabel}`,
+      note: 'Incasso reale meno i costi maturati nel periodo.',
+      value: annualRealBalance,
+      tone: annualRealBalance >= 0 ? 'green' : 'red',
+      rows: [...economicRealRows, ...negativeEconomicCostRows],
     },
     'annual-real-balance': {
       title: `Bilancio reale · ${economicPeriodLabel}`,
@@ -2198,9 +2271,8 @@ export function DashboardPage() {
             <span className="eyebrow">SITUAZIONE ECONOMICA GENERALE</span>
             <h2>{economicPeriodLabel}</h2>
             <p>
-              Il mese mostra solo i movimenti e i costi maturati nel mese
-              scelto; lo Stock residuo include anche il residuo precedente.
-              L’anno mostra la situazione maturata fino a oggi.
+              Il filtro aggiorna tutte le card sottostanti. Lo Stock residuo
+              include anche il residuo precedente.
             </p>
           </div>
           <div className="dashboard-economic-period-controls">
@@ -2256,184 +2328,145 @@ export function DashboardPage() {
             )}
           </div>
         </div>
-        <div className="stats-grid dashboard-economic-summary-grid">
-          <StatCard
-            detail="Totale effettivamente incassato nel periodo"
-            label="Incasso reale"
-            tone="cyan"
-            value={money(annualReal)}
-          />
-          <StatCard
-            detail="Fatture e merce senza fattura del periodo"
-            label="Acquisti"
-            tone="red"
-            value={money(annualPurchaseCosts)}
-          />
-          <StatCard
-            detail={`Quote maturate su ${annualMaturedDates.size} giorni`}
-            label="Spese maturate"
-            tone="amber"
-            value={money(annualFixedCosts)}
-          />
-          <StatCard
-            detail="Vendita teorica degli acquisti del periodo"
-            label="Venit teorico"
-            tone="cyan"
-            value={money(annualTheoretical)}
-          />
-          <StatCard
-            detail={`Residuo progressivo fino al ${economicRangeEnd}`}
-            label="Stock residuo"
-            tone="amber"
-            value={money(annualStock)}
-          />
-          <StatCard
-            detail={annualBalanceStatus}
-            label="Bilancio reale"
-            onClick={() => setDetail('annual-real-balance')}
-            tone={annualBalanceTone}
-            value={money(annualRealBalance)}
-          />
-          <StatCard
-            detail="Bilancio reale più stock ancora vendibile"
-            label="Bilancio potenziale"
-            tone={annualPotentialBalance >= 0 ? 'green' : 'red'}
-            value={money(annualPotentialBalance)}
-          />
-        </div>
       </section>
 
       <section className="stats-grid dashboard-stats-grid">
         <StatCard
-          detail={`${accounting.invoices.length} documenti registrati`}
+          detail={`${annualInvoices.length} documenti nel periodo`}
           label="Fatture ricevute"
           onClick={() => setDetail('invoices')}
           tone="cyan"
-          value={money(invoiceValue)}
+          value={money(economicInvoiceValue)}
         />
         <StatCard
-          detail="Acconti e saldi registrati"
+          detail="Acconti e saldi registrati nel periodo"
           label="Fatture pagate"
           onClick={() => setDetail('paid-invoices')}
           tone="green"
-          value={money(paidInvoices)}
+          value={money(economicPaidInvoiceValue)}
         />
         <StatCard
-          detail="Importo ancora dovuto ai fornitori"
+          detail="Residuo delle fatture del periodo"
           label="Residuo da pagare"
           onClick={() => setDetail('remaining-invoices')}
           tone="amber"
-          value={money(remainingInvoices)}
+          value={money(economicRemainingInvoices)}
         />
         <StatCard
-          detail="Su fatture, affitti e contabile"
+          detail="Nel periodo su fatture, affitti e contabile"
           label="IVA acquisti"
           onClick={() => setDetail('input-vat')}
           tone="cyan"
-          value={money(inputVat)}
+          value={money(economicInputVat)}
         />
         <StatCard
-          detail="Già inclusa negli importi Cash + POS"
+          detail="Nel periodo, già inclusa in Cash + POS"
           label="IVA incassi"
           onClick={() => setDetail('output-vat')}
           tone="amber"
-          value={money(outputVat)}
+          value={money(economicOutputVat)}
         />
         <StatCard
           detail={
-            vatBalance > 0
+            economicVatBalance > 0
               ? 'IVA incassi superiore all’IVA acquisti'
-              : vatBalance < 0
+              : economicVatBalance < 0
                 ? 'IVA acquisti superiore all’IVA incassi'
                 : 'IVA acquisti e incassi in equilibrio'
           }
           label={
-            vatBalance > 0
+            economicVatBalance > 0
               ? 'IVA: a debito'
-              : vatBalance < 0
+              : economicVatBalance < 0
                 ? 'IVA: a credito'
                 : 'IVA: in pareggio'
           }
           onClick={() => setDetail('vat-balance')}
-          tone={vatBalance > 0 ? 'red' : vatBalance < 0 ? 'green' : 'cyan'}
-          value={money(Math.abs(vatBalance))}
+          tone={
+            economicVatBalance > 0
+              ? 'red'
+              : economicVatBalance < 0
+                ? 'green'
+                : 'cyan'
+          }
+          value={money(Math.abs(economicVatBalance))}
         />
         <StatCard
-          detail="Contanti registrati negli incassi"
+          detail="Contanti registrati nel periodo"
           label="Cash"
           onClick={() => setDetail('cash')}
           tone="green"
-          value={money(cash)}
+          value={money(economicCash)}
         />
         <StatCard
-          detail="Pagamenti elettronici registrati"
+          detail="Pagamenti elettronici del periodo"
           label="POS"
           onClick={() => setDetail('pos')}
           tone="green"
-          value={money(pos)}
+          value={money(economicPos)}
         />
         <StatCard
-          detail="Cash + POS, IVA già compresa"
+          detail="Cash + POS del periodo, IVA già compresa"
           label="Incasso registrato"
           onClick={() => setDetail('official')}
           tone="green"
-          value={money(official)}
+          value={money(economicOfficial)}
         />
         <StatCard
-          detail="Totale effettivamente incassato"
+          detail="Totale effettivamente incassato nel periodo"
           label="Incasso reale"
           onClick={() => setDetail('real')}
           tone="cyan"
-          value={money(real)}
+          value={money(annualReal)}
         />
         <StatCard
-          detail="Cash prelevato dai punti vendita"
+          detail="Cash prelevato nel periodo"
           label="Cash ritirato"
           onClick={() => setDetail('withdrawals')}
           tone="violet"
-          value={money(withdrawals)}
+          value={money(economicWithdrawals)}
         />
         <StatCard
-          detail="Spesa registrata senza fattura e pagata dalla cassa"
+          detail="Spesa senza fattura registrata nel periodo"
           label="Merce senza fattura"
           onClick={() => setDetail('unregistered-goods')}
           tone="red"
-          value={money(unregisteredGoods)}
+          value={money(economicUnregisteredGoods)}
         />
         <StatCard
-          detail="Incasso reale − POS − Cash ritirato − Merce senza fattura"
+          detail="Valori del solo periodo selezionato"
           label="Cash residuo"
           onClick={() => setDetail('cash-residual')}
           tone="green"
-          value={money(cashResidual)}
+          value={money(economicCashResidual)}
         />
         <StatCard
-          detail="Vendita teorica dei prodotti acquistati"
+          detail="Vendita teorica degli acquisti del periodo"
           label="Venit complessivo"
           onClick={() => setDetail('theoretical')}
           tone="cyan"
-          value={money(theoretical)}
+          value={money(annualTheoretical)}
         />
         <StatCard
-          detail="Venit teorico meno incasso reale"
+          detail="Residuo precedente + movimenti del periodo"
           label="Venit stock"
           onClick={() => setDetail('stock')}
           tone="amber"
-          value={money(theoretical - real)}
+          value={money(annualStock)}
         />
         <StatCard
-          detail="Fatture, merce senza fattura e altre spese"
+          detail="Fatture e spese maturate nel periodo"
           label="Costi complessivi"
           onClick={() => setDetail('costs')}
           tone="amber"
-          value={money(totalCosts)}
+          value={money(economicTotalCosts)}
         />
         <StatCard
-          detail="Incasso reale meno i costi registrati"
+          detail="Incasso reale meno i costi del periodo"
           label="Risultato reale"
           onClick={() => setDetail('real-result')}
-          tone={real - totalCosts >= 0 ? 'green' : 'red'}
-          value={money(real - totalCosts)}
+          tone={annualRealBalance >= 0 ? 'green' : 'red'}
+          value={money(annualRealBalance)}
         />
       </section>
 
