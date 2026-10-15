@@ -339,38 +339,55 @@ export function DashboardPage() {
   const knownAnnualSellerIds = new Set(
     accounting.sellers.map((seller) => seller.id),
   )
-  const annualTransferredVenit = annualInvoices.reduce((sum, invoice) => {
-    if (
-      !invoice.sellerId ||
-      invoice.taxableAmount !== 0 ||
-      invoice.theoreticalRevenue <= 0
-    ) {
-      return sum
-    }
-    const supplier = accounting.suppliers.find(
-      (item) => item.id === invoice.supplierId,
-    )
-    if (!supplier?.sellerRevenueTransferEnabled) return sum
-    const linkedSellerId =
-      bestContactNameMatch(
-        invoice.supplierName || supplier.name,
-        accounting.sellers,
-      )?.id ?? supplier.linkedSellerId
-    return linkedSellerId &&
-      linkedSellerId !== invoice.sellerId &&
-      knownAnnualSellerIds.has(linkedSellerId) &&
-      knownAnnualSellerIds.has(invoice.sellerId)
-      ? sum + invoice.theoreticalRevenue
-      : sum
-  }, 0)
+  const transferredVenit = (invoices: typeof accounting.invoices) =>
+    invoices.reduce((sum, invoice) => {
+      if (
+        !invoice.sellerId ||
+        invoice.taxableAmount !== 0 ||
+        invoice.theoreticalRevenue <= 0
+      ) {
+        return sum
+      }
+      const supplier = accounting.suppliers.find(
+        (item) => item.id === invoice.supplierId,
+      )
+      if (!supplier?.sellerRevenueTransferEnabled) return sum
+      const linkedSellerId =
+        bestContactNameMatch(
+          invoice.supplierName || supplier.name,
+          accounting.sellers,
+        )?.id ?? supplier.linkedSellerId
+      return linkedSellerId &&
+        linkedSellerId !== invoice.sellerId &&
+        knownAnnualSellerIds.has(linkedSellerId) &&
+        knownAnnualSellerIds.has(invoice.sellerId)
+        ? sum + invoice.theoreticalRevenue
+        : sum
+    }, 0)
+  const annualTransferredVenit = transferredVenit(annualInvoices)
   const annualTheoretical = roundMoney(
     annualInvoices.reduce(
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
     ) - annualTransferredVenit,
   )
+  const stockInvoices = accounting.invoices.filter(
+    (invoice) => invoice.date <= economicRangeEnd,
+  )
+  const stockTakings = accounting.takings.filter(
+    (taking) => taking.date <= economicRangeEnd,
+  )
+  const stockTheoretical = roundMoney(
+    stockInvoices.reduce(
+      (sum, invoice) => sum + invoice.theoreticalRevenue,
+      0,
+    ) - transferredVenit(stockInvoices),
+  )
+  const stockReal = roundMoney(
+    stockTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
+  )
   const annualStock = roundMoney(
-    Math.max(annualTheoretical - annualReal, 0),
+    Math.max(stockTheoretical - stockReal, 0),
   )
   const annualPurchaseCosts = roundMoney(
     annualInvoices.reduce(
@@ -847,43 +864,55 @@ export function DashboardPage() {
     (taking) => !sellerAsOfDate || taking.date <= sellerAsOfDate,
   )
   const knownSellerIds = new Set(accounting.sellers.map((seller) => seller.id))
-  const supplierSellerRevenueTransfers = sellerInvoices.flatMap((invoice) => {
-    if (
-      !invoice.sellerId ||
-      invoice.taxableAmount !== 0 ||
-      invoice.theoreticalRevenue <= 0
-    ) {
-      return []
-    }
-    const supplier = accounting.suppliers.find(
-      (item) => item.id === invoice.supplierId,
-    )
-    if (!supplier?.sellerRevenueTransferEnabled) return []
-    const linkedSellerId =
-      bestContactNameMatch(
-        invoice.supplierName || supplier.name,
-        accounting.sellers,
-      )?.id ?? supplier.linkedSellerId
-    if (
-      !linkedSellerId ||
-      linkedSellerId === invoice.sellerId ||
-      !knownSellerIds.has(linkedSellerId) ||
-      !knownSellerIds.has(invoice.sellerId)
-    ) {
-      return []
-    }
-    return [
-      {
-        fromSellerId: linkedSellerId,
-        toSellerId: invoice.sellerId,
-        date: invoice.date,
-        amount: roundMoney(invoice.theoreticalRevenue),
-        reference: `Fattura ${invoice.number || 'senza numero'} · ${
-          supplier.name
-        }`,
-      },
-    ]
-  })
+  const sellerRevenueTransfers = (invoices: typeof accounting.invoices) =>
+    invoices.flatMap((invoice) => {
+      if (
+        !invoice.sellerId ||
+        invoice.taxableAmount !== 0 ||
+        invoice.theoreticalRevenue <= 0
+      ) {
+        return []
+      }
+      const supplier = accounting.suppliers.find(
+        (item) => item.id === invoice.supplierId,
+      )
+      if (!supplier?.sellerRevenueTransferEnabled) return []
+      const linkedSellerId =
+        bestContactNameMatch(
+          invoice.supplierName || supplier.name,
+          accounting.sellers,
+        )?.id ?? supplier.linkedSellerId
+      if (
+        !linkedSellerId ||
+        linkedSellerId === invoice.sellerId ||
+        !knownSellerIds.has(linkedSellerId) ||
+        !knownSellerIds.has(invoice.sellerId)
+      ) {
+        return []
+      }
+      return [
+        {
+          fromSellerId: linkedSellerId,
+          toSellerId: invoice.sellerId,
+          date: invoice.date,
+          amount: roundMoney(invoice.theoreticalRevenue),
+          reference: `Fattura ${invoice.number || 'senza numero'} · ${
+            supplier.name
+          }`,
+        },
+      ]
+    })
+  const supplierSellerRevenueTransfers =
+    sellerRevenueTransfers(sellerInvoices)
+  const sellerStockEnd = sellerAsOfDate || economicRangeEnd
+  const sellerStockInvoices = accounting.invoices.filter(
+    (invoice) => invoice.date <= sellerStockEnd,
+  )
+  const sellerStockTakings = accounting.takings.filter(
+    (taking) => taking.date <= sellerStockEnd,
+  )
+  const sellerStockRevenueTransfers =
+    sellerRevenueTransfers(sellerStockInvoices)
   const sellerResultEnd = sellerAsOfDate || today()
   const sellerResultStart = `${sellerResultEnd.slice(0, 7)}-01`
   const sellerResultInvoices = sellerInvoices.filter(
@@ -1202,6 +1231,12 @@ export function DashboardPage() {
     const takings = sellerTakings.filter(
       (taking) => taking.sellerId === seller.id,
     )
+    const cumulativeStockInvoices = sellerStockInvoices.filter(
+      (invoice) => invoice.sellerId === seller.id,
+    )
+    const cumulativeStockTakings = sellerStockTakings.filter(
+      (taking) => taking.sellerId === seller.id,
+    )
     const sellerOfficial = takings.reduce(
       (sum, taking) => sum + officialTaking(taking),
       0,
@@ -1241,6 +1276,26 @@ export function DashboardPage() {
       (sum, transfer) => sum + transfer.amount,
       0,
     )
+    const stockRevenueCededTransfers =
+      sellerStockRevenueTransfers.filter(
+        (transfer) => transfer.fromSellerId === seller.id,
+      )
+    const cumulativeStockTheoretical = roundMoney(
+      cumulativeStockInvoices.reduce(
+        (sum, invoice) => sum + invoice.theoreticalRevenue,
+        0,
+      ) -
+        stockRevenueCededTransfers.reduce(
+          (sum, transfer) => sum + transfer.amount,
+          0,
+        ),
+    )
+    const cumulativeStockReal = roundMoney(
+      cumulativeStockTakings.reduce(
+        (sum, taking) => sum + realTaking(taking),
+        0,
+      ),
+    )
     const sellerTheoretical = roundMoney(
       sellerBaseTheoretical - revenueCeded,
     )
@@ -1275,9 +1330,14 @@ export function DashboardPage() {
       revenueCeded,
       revenueAcquiredTransfers,
       revenueCededTransfers,
+      stockInvoices: cumulativeStockInvoices,
+      stockTakings: cumulativeStockTakings,
+      stockRevenueCededTransfers,
       realResult: realResult.value,
       realResultRows: realResult.rows,
-      stockResidual: sellerTheoretical - sellerReal,
+      stockResidual: roundMoney(
+        cumulativeStockTheoretical - cumulativeStockReal,
+      ),
     }
   })
   sellerSummaries.sort((left, right) => {
@@ -1295,6 +1355,12 @@ export function DashboardPage() {
     (invoice) => !invoice.sellerId || !knownSellerIds.has(invoice.sellerId),
   )
   const unassignedTakings = sellerTakings.filter(
+    (taking) => !taking.sellerId || !knownSellerIds.has(taking.sellerId),
+  )
+  const unassignedStockInvoices = sellerStockInvoices.filter(
+    (invoice) => !invoice.sellerId || !knownSellerIds.has(invoice.sellerId),
+  )
+  const unassignedStockTakings = sellerStockTakings.filter(
     (taking) => !taking.sellerId || !knownSellerIds.has(taking.sellerId),
   )
   if (unassignedInvoices.length > 0 || unassignedTakings.length > 0) {
@@ -1356,9 +1422,21 @@ export function DashboardPage() {
       revenueCeded: 0,
       revenueAcquiredTransfers: [],
       revenueCededTransfers: [],
+      stockInvoices: unassignedStockInvoices,
+      stockTakings: unassignedStockTakings,
+      stockRevenueCededTransfers: [],
       realResult: 0,
       realResultRows: [],
-      stockResidual: unassignedTheoretical - unassignedReal,
+      stockResidual: roundMoney(
+        unassignedStockInvoices.reduce(
+          (sum, invoice) => sum + invoice.theoreticalRevenue,
+          0,
+        ) -
+          unassignedStockTakings.reduce(
+            (sum, taking) => sum + realTaking(taking),
+            0,
+          ),
+      ),
     })
   }
   const storeSummaries = stores
@@ -1624,13 +1702,49 @@ export function DashboardPage() {
                 ]
               : []),
           ]
+          const stockInvoiceRows = selectedSeller.stockInvoices
+            .map((invoice) => ({
+              date: invoice.date,
+              category: 'Venit teorico progressivo',
+              description: invoice.supplierName || 'Fornitore non indicato',
+              reference: `Fattura ${invoice.number || 'senza numero'}`,
+              amount: invoice.theoreticalRevenue,
+            }))
+            .filter((row) => row.amount !== 0)
+          const stockCededRows =
+            selectedSeller.stockRevenueCededTransfers
+              .map((transfer) => ({
+                date: transfer.date,
+                category: 'Venit ceduto progressivo',
+                description: `A ${
+                  accounting.sellers.find(
+                    (seller) => seller.id === transfer.toSellerId,
+                  )?.name ?? 'venditore non disponibile'
+                }`,
+                reference: transfer.reference,
+                amount: -Math.abs(transfer.amount),
+              }))
+              .filter((row) => row.amount !== 0)
+          const stockRealRows = selectedSeller.stockTakings
+            .map((taking) => ({
+              date: taking.date,
+              category: 'Incasso reale progressivo',
+              description: selectedSeller.name,
+              reference: `Incasso registrato ${money(officialTaking(taking))}`,
+              amount: -realTaking(taking),
+            }))
+            .filter((row) => row.amount !== 0)
           const stockResidualRows = [
-            ...theoreticalRows,
-            ...realRows.map((row) => ({ ...row, amount: -row.amount })),
+            ...stockInvoiceRows,
+            ...stockCededRows,
+            ...stockRealRows,
           ]
           const periodNote = sellerAsOfDate
             ? ` Dati fino al ${sellerAsOfDate}, data compresa.`
             : ' Tutto lo storico disponibile.'
+          const stockPeriodNote = sellerAsOfDate
+            ? ` Stock progressivo fino al ${sellerAsOfDate}, data compresa.`
+            : ` Stock progressivo fino al ${economicRangeEnd}: comprende il residuo precedente e i movimenti del periodo selezionato.`
           const sellerMetrics: Record<SellerMetricKey, DashboardMetric> = {
             invoices: {
               title: `Fatture assegnate · ${selectedSeller.name}`,
@@ -1725,7 +1839,7 @@ export function DashboardPage() {
             },
             'stock-residual': {
               title: `Stock residuo · ${selectedSeller.name}`,
-              note: `Venit teorico meno Incasso reale.${periodNote}`,
+              note: `Venit teorico progressivo meno Incasso reale progressivo.${stockPeriodNote}`,
               value: selectedSeller.stockResidual,
               tone: 'amber',
               rows: stockResidualRows,
@@ -1975,7 +2089,7 @@ export function DashboardPage() {
             value={money(selectedStore.seller.theoretical)}
           />
           <StatCard
-            detail="Venit teorico meno Incasso reale"
+            detail={`Progressivo fino al ${sellerStockEnd}`}
             label="Stock residuo"
             onClick={() => openMetric('stock-residual')}
             tone="amber"
@@ -2085,7 +2199,8 @@ export function DashboardPage() {
             <h2>{economicPeriodLabel}</h2>
             <p>
               Il mese mostra solo i movimenti e i costi maturati nel mese
-              scelto; l’anno mostra la situazione maturata fino a oggi.
+              scelto; lo Stock residuo include anche il residuo precedente.
+              L’anno mostra la situazione maturata fino a oggi.
             </p>
           </div>
           <div className="dashboard-economic-period-controls">
@@ -2167,7 +2282,7 @@ export function DashboardPage() {
             value={money(annualTheoretical)}
           />
           <StatCard
-            detail="Venit teorico non ancora incassato"
+            detail={`Residuo progressivo fino al ${economicRangeEnd}`}
             label="Stock residuo"
             tone="amber"
             value={money(annualStock)}
