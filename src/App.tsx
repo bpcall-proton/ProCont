@@ -297,6 +297,13 @@ function Workspace() {
             <span>Ideatore del software</span>
             <strong>Bpcall S.r.l. © 2026 Moldavia</strong>
             <small>Versione {packageMetadata.version}</small>
+            <a
+              href="https://bpcall-proton.github.io/privacy.html"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Privacy Policy
+            </a>
           </div>
           <button className="logout-button" onClick={signOut} type="button">
             <LogoutIcon />

@@ -618,6 +618,16 @@ select {
   line-height: 1.35;
 }
 
+.software-credit a {
+  width: fit-content;
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.software-credit a:hover {
+  text-decoration: underline;
+}
+
 .software-credit strong {
   color: var(--text);
   font-size: 0.7rem;
