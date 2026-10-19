@@ -1663,6 +1663,27 @@ export function SettingsPage() {
           </div>
         </article>
 
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">PRIVACY</span>
+              <h2>Dati e collegamento Google Drive</h2>
+            </div>
+          </div>
+          <p className="settings-note">
+            Consulta l’informativa pubblica sul trattamento dei dati
+            dell’applicazione e sull’accesso limitato ai file Google Drive.
+          </p>
+          <a
+            className="button button-secondary"
+            href="https://bpcall-proton.github.io/privacy.html"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Apri Privacy Policy
+          </a>
+        </article>
+
       </section>
     </div>
   )
