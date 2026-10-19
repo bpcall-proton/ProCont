@@ -5,10 +5,12 @@ backup JSON.
 
 ## Google Drive
 
-Google Drive è l'archivio sincronizzato dell'applicazione. Non serve un
-backend: Google Drive Desktop sincronizza la cartella tra i PC.
+Google Drive è l'archivio sincronizzato dell'applicazione. I PC continuano a
+usare direttamente la cartella di Google Drive Desktop. Su iPhone e Android
+l'app usa Google Drive API tramite un Cloudflare Worker, perché i browser
+mobili non consentono di aprire una cartella Drive come filesystem.
 
-### Collegamento dei dispositivi
+### Collegamento dei PC
 
 1. Installa Google Drive Desktop e attendi che la cartella sia sincronizzata.
 2. Apri **Impostazioni → Modalità dati**.
@@ -35,6 +37,45 @@ Procedura iniziale se i dati corretti sono ancora nell'archivio locale:
 2. Scegli la cartella Google Drive.
 3. Usa **Copia dati locali nella cartella** e conferma due volte.
 4. Da quel momento usa la modalità **Google Drive**.
+
+### Collegamento del telefono
+
+1. Apri l'app da iPhone o Android.
+2. Vai in **Impostazioni → Modalità dati**.
+3. Premi **Collega Google Drive dal telefono**.
+4. Accedi con lo stesso account Google usato sul PC e autorizza l'accesso.
+5. Torna nell'app: la modalità Google Drive si attiva e resta sincronizzata.
+
+Il telefono conserva soltanto un token di dispositivo revocabile. Il refresh
+token Google rimane cifrato nel Worker e non entra nei JSON contabili.
+
+### Configurazione Google Drive API
+
+1. Crea o apri un progetto in
+   https://console.cloud.google.com/apis/library/drive.googleapis.com.
+2. Abilita **Google Drive API**.
+3. Configura la schermata consenso OAuth e aggiungi l'account proprietario
+   tra gli utenti di test finché l'app resta in modalità test.
+4. Crea un client OAuth **Applicazione web**.
+5. Aggiungi questo URI di reindirizzamento:
+   `https://procont-drive-sync.procont-bpcall.workers.dev/oauth/google/callback`.
+6. Nel Cloudflare Worker configura:
+   - `GOOGLE_OAUTH_CLIENT_ID`;
+   - `GOOGLE_OAUTH_CLIENT_SECRET`;
+   - `TOKEN_ENCRYPTION_KEY`, 32 byte in Base64;
+   - `APP_SECRET`.
+7. Collega al Worker un namespace KV con binding `PROCONT_KV`.
+8. Nel frontend imposta:
+   `VITE_DRIVE_SYNC_URL=https://procont-drive-sync.procont-bpcall.workers.dev`.
+
+Il Worker richiede il solo scope
+`https://www.googleapis.com/auth/drive.file` e crea/usa la cartella
+`Fatture & Incassi Pro`. Per condividere gli stessi file, sul PC va selezionata
+questa cartella come archivio Google Drive.
+
+Documentazione:
+- https://developers.google.com/identity/protocols/oauth2/web-server
+- https://developers.google.com/workspace/drive/api/guides/manage-uploads
 
 ## WhatsApp Business Cloud API
 

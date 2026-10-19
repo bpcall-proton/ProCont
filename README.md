@@ -57,9 +57,10 @@ cartella che contiene `workspace.json` e un file `company-<id>.json` per ogni
 azienda. Il sito usa gli stessi file tramite l'autorizzazione esplicita del
 browser alla cartella; Chrome o Edge desktop sono consigliati.
 
-Non è richiesto alcun servizio intermedio. Su browser mobili che non
-consentono la scelta di una cartella si usa l'importazione/esportazione
-manuale.
+Su iPhone e Android il pulsante **Collega Google Drive dal telefono** usa
+Google Drive API tramite il Worker configurato in `VITE_DRIVE_SYNC_URL`.
+L'accesso mobile è separato dalla cartella desktop, ma legge e aggiorna gli
+stessi file `workspace.json` e `company-<id>.json`.
 
 Firebase resta utilizzabile solo per l'accesso email/password esistente.
 
