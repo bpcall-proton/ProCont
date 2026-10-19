@@ -1,10 +1,11 @@
 const CACHE_NAME = 'fatture-incassi-pro-v1'
+const appUrl = (path) => new URL(path, self.registration.scope).href
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  appUrl('./'),
+  appUrl('./index.html'),
+  appUrl('./manifest.webmanifest'),
+  appUrl('./icons/icon-192.png'),
+  appUrl('./icons/icon-512.png'),
 ]
 
 self.addEventListener('install', (event) => {
@@ -34,10 +35,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone()
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy))
+          void caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(appUrl('./index.html'), copy))
           return response
         })
-        .catch(() => caches.match('/index.html')),
+        .catch(() => caches.match(appUrl('./index.html'))),
     )
     return
   }
