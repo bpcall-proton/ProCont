@@ -37,8 +37,11 @@ export interface AppStoreContextValue {
   driveSyncState: SyncState
   driveSyncMessage: string | null
   driveFolderLocation: string | null
+  isPhoneDevice: boolean
+  driveAccountEmail: string | null
   cloudAvailable: boolean
   refreshDriveFolder: () => Promise<void>
+  refreshMobileDriveConnection: () => void
   selectPrimaryDriveFolder: () => Promise<{ ok: boolean; error?: string }>
   openPrimaryDriveFolder: () => Promise<void>
   retrySync: () => Promise<void>
@@ -57,7 +60,7 @@ export interface AppStoreContextValue {
     viberUserId: string,
   ) => { ok: boolean; error?: string }
   removeStore: (storeId: string) => void
-  setDataMode: (mode: DataMode) => Promise<void>
+  setDataMode: (mode: DataMode) => Promise<boolean>
   copyLocalDataToCloud: () => Promise<{ ok: boolean; error?: string }>
   setDriveBackup: (enabled: boolean) => void
   setDriveFolder: (folder: string) => void

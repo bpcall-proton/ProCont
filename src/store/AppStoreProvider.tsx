@@ -31,6 +31,8 @@ import {
   selectDriveDataFolder,
 } from '../data/driveFolderRepository'
 import { LocalRepository } from '../data/localRepository'
+import { MobileDriveRepository } from '../data/mobileDriveRepository'
+import { loadMobileDriveSession } from '../data/mobileDriveSession'
 import type { AppRepository } from '../data/repository'
 import {
   exportLegacyAccounting,
@@ -139,6 +141,15 @@ function writeCloudRecovery(companyId: string, pending: boolean) {
     return
   }
   localStorage.removeItem(cloudRecoveryKey(companyId))
+}
+
+function isPhoneBrowser() {
+  if (window.desktopApp) return false
+  const userAgent = navigator.userAgent
+  return (
+    /Android|iPhone|iPod|Mobile/i.test(userAgent) ||
+    (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1)
+  )
 }
 
 function normalizeCompanyValue(value: string) {
@@ -324,10 +335,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => new LocalRepository(companyId),
     [companyId],
   )
-  const cloudRepository = useMemo(
+  const folderCloudRepository = useMemo(
     () => new DriveFolderRepository(companyId),
     [companyId],
   )
+  const mobileCloudRepository = useMemo(
+    () => new MobileDriveRepository(companyId),
+    [companyId],
+  )
+  const isPhoneDevice = useMemo(() => isPhoneBrowser(), [])
+  const cloudRepository = isPhoneDevice
+    ? mobileCloudRepository
+    : folderCloudRepository
   const [state, setState] = useState<AppState>(() =>
     createInitialState(companyId),
   )
@@ -341,6 +360,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [driveSyncMessage, setDriveSyncMessage] = useState<string | null>(null)
   const [driveFolderLocation, setDriveFolderLocation] =
     useState<string | null>(null)
+  const [driveAccountEmail, setDriveAccountEmail] = useState<string | null>(
+    () => loadMobileDriveSession()?.email ?? null,
+  )
   const activeRepository = useRef<AppRepository>(localRepository)
   const saveQueue = useRef(Promise.resolve())
   const stateRef = useRef(state)
@@ -348,10 +370,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const unsubscribe = useRef<() => void>(() => undefined)
 
   const refreshDriveFolder = useCallback(async () => {
+    if (isPhoneDevice) return
     setDriveFolderLocation(await configuredDriveFolderLabel())
-  }, [])
+  }, [isPhoneDevice])
 
   useEffect(() => {
+    if (isPhoneDevice) return
     let active = true
     void configuredDriveFolderLabel().then((folder) => {
       if (active) setDriveFolderLocation(folder)
@@ -359,7 +383,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [isPhoneDevice])
 
   const applyState = useCallback((next: AppState) => {
     const summarized = withActiveCompanySummaries(next)
@@ -574,9 +598,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       driveSyncState,
       driveSyncMessage,
       driveFolderLocation,
-      cloudAvailable: driveFolderLocation !== null,
+      isPhoneDevice,
+      driveAccountEmail,
+      cloudAvailable: isPhoneDevice
+        ? driveAccountEmail !== null
+        : driveFolderLocation !== null,
       refreshDriveFolder,
+      refreshMobileDriveConnection: () => {
+        setDriveAccountEmail(loadMobileDriveSession()?.email ?? null)
+      },
       selectPrimaryDriveFolder: async () => {
+        if (isPhoneDevice) {
+          return {
+            ok: false,
+            error: 'Usa “Collega Google Drive dal telefono”.',
+          }
+        }
         try {
           const folder = await selectDriveDataFolder()
           if (!folder) return { ok: false }
@@ -914,16 +951,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         })
       },
       setDataMode: async (mode: DataMode) => {
-        if (mode === state.dataSettings.mode && mode !== 'cloud') return
+        if (mode === state.dataSettings.mode && mode !== 'cloud') return true
         if (
           mode === 'cloud' &&
-          driveFolderLocation === null
+          (isPhoneDevice
+            ? loadMobileDriveSession() === null
+            : driveFolderLocation === null)
         ) {
           setSyncState('error')
           setSyncMessage(
-            'Seleziona la cartella Google Drive nelle Impostazioni',
+            isPhoneDevice
+              ? 'Collega Google Drive dal telefono nelle Impostazioni'
+              : 'Seleziona la cartella Google Drive nelle Impostazioni',
           )
-          return
+          return false
         }
         setSyncState('saving')
         setSyncMessage('Apertura archivio in corso')
@@ -970,6 +1011,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ? 'Dati Google Drive ricaricati'
               : 'Modalità dati aggiornata',
           )
+          return true
         } catch (error) {
           syncRecovery.current = 'retry-save'
           writeCloudRecovery(companyId, false)
@@ -977,6 +1019,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setSyncMessage(
             error instanceof Error ? error.message : 'Migrazione non riuscita',
           )
+          return false
         }
       },
       copyLocalDataToCloud: async () => {
@@ -1000,17 +1043,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           if (!local) {
             throw new Error('Archivio locale non trovato: nessun dato modificato')
           }
-          await cloudRepository.load()
+          await folderCloudRepository.load()
           const migrated = withTimestamp({
             ...local,
             dataSettings: { ...local.dataSettings, mode: 'cloud' },
           })
-          await cloudRepository.saveAll(migrated)
+          await folderCloudRepository.saveAll(migrated)
           await window.desktopApp.backupLocalStates()
           unsubscribe.current()
-          activeRepository.current = cloudRepository
+          activeRepository.current = folderCloudRepository
           syncRecovery.current = 'retry-save'
-          unsubscribe.current = subscribeToRepository(cloudRepository)
+          unsubscribe.current = subscribeToRepository(folderCloudRepository)
           writeModePreference(companyId, 'cloud')
           writeCloudRecovery(companyId, false)
           applyState(migrated)
@@ -1301,6 +1344,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       cloudRepository,
+      folderCloudRepository,
       applyState,
       enqueueSave,
       loading,
@@ -1314,9 +1358,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       driveSyncMessage,
       driveSyncState,
       driveFolderLocation,
+      driveAccountEmail,
       refreshDriveFolder,
       updateState,
       companyId,
+      isPhoneDevice,
     ],
   )
 

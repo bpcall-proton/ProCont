@@ -16,6 +16,12 @@ import {
   driveCompanyFilename,
 } from '../data/driveFolderRepository'
 import {
+  createMobileDrivePairing,
+  disconnectMobileDriveSession,
+  mobileDriveServiceConfigured,
+  readMobileDrivePairing,
+} from '../data/mobileDriveSession'
+import {
   useAppStore,
   type AccountingCompanyInput,
 } from '../store/AppStoreContext'
@@ -146,7 +152,10 @@ export function SettingsPage() {
     driveFolderLocation,
     driveSyncMessage,
     localStoragePaths,
+    isPhoneDevice,
+    driveAccountEmail,
     refreshDriveFolder,
+    refreshMobileDriveConnection,
     selectPrimaryDriveFolder,
     openPrimaryDriveFolder,
     syncMessage,
@@ -243,7 +252,9 @@ export function SettingsPage() {
         ? 'Pronto, modalità locale'
         : syncState === 'saving'
           ? 'Sincronizzazione in corso'
-          : 'File Drive locale aggiornato'
+          : isPhoneDevice
+            ? 'Google Drive sincronizzato'
+            : 'File Drive locale aggiornato'
 
   async function runLocalBackup() {
     if (!window.desktopApp) return
@@ -397,6 +408,72 @@ export function SettingsPage() {
       } else if (result.error) {
         setGoogleMessage(result.error)
       }
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function connectMobileDrive() {
+    const authorizationWindow = window.open('', '_blank')
+    setGoogleBusy(true)
+    setGoogleMessage(null)
+    try {
+      const pairing = await createMobileDrivePairing(
+        /iPad|iPhone|iPod/i.test(navigator.userAgent)
+          ? 'iPhone o iPad'
+          : 'Telefono Android',
+      )
+      if (!authorizationWindow) {
+        throw new Error(
+          'Consenti l’apertura delle finestre e premi nuovamente il pulsante.',
+        )
+      }
+      authorizationWindow.location.href = pairing.authorizationUrl
+      setGoogleMessage(
+        'Autorizza Google Drive nella pagina aperta, poi torna nell’app.',
+      )
+      while (Date.now() / 1000 < pairing.expiresAt) {
+        const session = await readMobileDrivePairing(pairing.pairingId)
+        if (session) {
+          authorizationWindow.close()
+          refreshMobileDriveConnection()
+          const opened = await setDataMode('cloud')
+          setGoogleMessage(
+            opened
+              ? `${session.email} collegato. I JSON Google Drive sono sincronizzati.`
+              : `${session.email} collegato, ma i JSON non sono stati aperti: controlla il messaggio di sincronizzazione.`,
+          )
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+      }
+      throw new Error('Collegamento scaduto: premi nuovamente il pulsante.')
+    } catch (error) {
+      authorizationWindow?.close()
+      setGoogleMessage(
+        error instanceof Error
+          ? error.message
+          : 'Collegamento Google Drive non riuscito.',
+      )
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function disconnectMobileDrive() {
+    setGoogleBusy(true)
+    setGoogleMessage(null)
+    try {
+      if (dataSettings.mode === 'cloud') await setDataMode('local')
+      await disconnectMobileDriveSession()
+      refreshMobileDriveConnection()
+      setGoogleMessage('Telefono scollegato da Google Drive.')
+    } catch (error) {
+      setGoogleMessage(
+        error instanceof Error
+          ? error.message
+          : 'Scollegamento Google Drive non riuscito.',
+      )
     } finally {
       setGoogleBusy(false)
     }
@@ -907,13 +984,17 @@ export function SettingsPage() {
               </span>
               <strong>Google Drive</strong>
               <span>
-                Usa i JSON nella cartella sincronizzata. Clicca per ricaricarli.
+                {isPhoneDevice
+                  ? 'Usa gli stessi JSON Drive del PC.'
+                  : 'Usa i JSON nella cartella sincronizzata. Clicca per ricaricarli.'}
               </span>
             </button>
           </div>
           {!cloudAvailable && (
             <p className="settings-note">
-              Seleziona la cartella sincronizzata da Google Drive Desktop.
+              {isPhoneDevice
+                ? 'Premi “Collega Google Drive dal telefono”.'
+                : 'Seleziona la cartella sincronizzata da Google Drive Desktop.'}
             </p>
           )}
           <div className="archive-location-stack">
@@ -969,7 +1050,9 @@ export function SettingsPage() {
                 syncMessage ??
                 (dataSettings.mode === 'cloud'
                   ? 'JSON Google Drive attivi'
-                  : 'Seleziona Google Drive per usare i JSON condivisi')
+                  : isPhoneDevice
+                    ? 'Collega Google Drive dal telefono'
+                    : 'Seleziona Google Drive per usare i JSON condivisi')
               }
             >
               <span className="drive-status-dot" />
@@ -977,32 +1060,103 @@ export function SettingsPage() {
               <strong>{cloudStatusLabel}</strong>
             </div>
           </div>
-          <div className="setting-row google-account-row">
-            <span>
-              <strong>Cartella dati Google Drive</strong>
-              <small>
-                {driveFolderLocation ??
-                  'Nessuna cartella selezionata'}
-              </small>
-            </span>
-            <button
-              className="button button-secondary"
-              disabled={googleBusy}
-              onClick={() => void choosePrimaryDriveFolder()}
-              type="button"
-            >
-              {googleBusy ? 'Apertura...' : 'Scegli cartella'}
-            </button>
-            {window.desktopApp && driveFolderLocation && (
+          {isPhoneDevice ? (
+            <div className="phone-drive-panel">
+              <div className="setting-row google-account-row">
+                <span>
+                  <strong>Google Drive dal telefono</strong>
+                  <small>
+                    {driveAccountEmail
+                      ? `${driveAccountEmail} · sincronizzazione continua`
+                      : 'Collega lo stesso account Google usato sul PC'}
+                  </small>
+                </span>
+                <button
+                  className="button button-primary"
+                  disabled={!mobileDriveServiceConfigured || googleBusy}
+                  onClick={() =>
+                    driveAccountEmail
+                      ? void disconnectMobileDrive()
+                      : void connectMobileDrive()
+                  }
+                  type="button"
+                >
+                  {googleBusy
+                    ? 'Collegamento...'
+                    : driveAccountEmail
+                      ? 'Scollega telefono'
+                      : 'Collega Google Drive dal telefono'}
+                </button>
+              </div>
+              <ol className="settings-steps">
+                <li>Premi il pulsante e accedi con l’account Google del PC.</li>
+                <li>Autorizza l’accesso ai file creati dall’app.</li>
+                <li>Torna nell’app: i JSON si aprono e restano sincronizzati.</li>
+              </ol>
+              <details className="mobile-drive-api-guide">
+                <summary>Come configurare Google Drive API</summary>
+                <ol className="settings-steps">
+                  <li>
+                    Apri{' '}
+                    <a
+                      href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Google Cloud Console
+                    </a>{' '}
+                    e abilita Google Drive API.
+                  </li>
+                  <li>
+                    Configura la schermata consenso OAuth e aggiungi l’account
+                    Google autorizzato.
+                  </li>
+                  <li>
+                    Crea un client OAuth “Applicazione web” con redirect{' '}
+                    <code>
+                      https://procont-drive-sync.procont-bpcall.workers.dev/oauth/google/callback
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Nel Worker Cloudflare configura client ID, client secret,
+                    chiave di cifratura e segreto applicazione.
+                  </li>
+                  <li>
+                    L’accesso usa il permesso limitato{' '}
+                    <code>drive.file</code>; questa installazione è già
+                    configurata.
+                  </li>
+                </ol>
+              </details>
+            </div>
+          ) : (
+            <div className="setting-row google-account-row">
+              <span>
+                <strong>Cartella dati Google Drive</strong>
+                <small>
+                  {driveFolderLocation ?? 'Nessuna cartella selezionata'}
+                </small>
+              </span>
               <button
-                className="button"
-                onClick={() => void openPrimaryDriveFolder()}
+                className="button button-secondary"
+                disabled={googleBusy}
+                onClick={() => void choosePrimaryDriveFolder()}
                 type="button"
               >
-                Apri cartella
+                {googleBusy ? 'Apertura...' : 'Scegli cartella'}
               </button>
-            )}
-          </div>
+              {window.desktopApp && driveFolderLocation && (
+                <button
+                  className="button"
+                  onClick={() => void openPrimaryDriveFolder()}
+                  type="button"
+                >
+                  Apri cartella
+                </button>
+              )}
+            </div>
+          )}
           <div className="drive-file-list">
             <div className="drive-file-row">
               <span>
@@ -1056,22 +1210,27 @@ export function SettingsPage() {
               </button>
             </div>
           )}
-          <p className="settings-note">
-            L’EXE legge la cartella locale sincronizzata; il sito richiede il
-            permesso del browser alla stessa cartella.
-          </p>
-          <ol className="settings-steps">
-            <li>Installa Google Drive Desktop e attendi la sincronizzazione.</li>
-            <li>Premi “Scegli cartella” e seleziona la cartella dei JSON.</li>
-            <li>
-              Apri Google Drive: verranno letti workspace.json e i file delle
-              aziende, senza unire i dati locali.
-            </li>
-            <li>
-              Ripeti la scelta su ogni nuovo PC. Su iPhone e Android usa
-              import/export se il browser non consente l’accesso alla cartella.
-            </li>
-          </ol>
+          {!isPhoneDevice && (
+            <>
+              <p className="settings-note">
+                L’EXE legge la cartella locale sincronizzata; il sito richiede
+                il permesso del browser alla stessa cartella.
+              </p>
+              <ol className="settings-steps">
+                <li>
+                  Installa Google Drive Desktop e attendi la sincronizzazione.
+                </li>
+                <li>
+                  Premi “Scegli cartella” e seleziona la cartella dei JSON.
+                </li>
+                <li>
+                  Apri Google Drive: verranno letti workspace.json e i file
+                  delle aziende, senza unire i dati locali.
+                </li>
+                <li>Ripeti la scelta su ogni nuovo PC.</li>
+              </ol>
+            </>
+          )}
         </article>
 
         <article className="panel">
