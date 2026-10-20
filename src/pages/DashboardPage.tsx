@@ -1484,6 +1484,10 @@ export function DashboardPage() {
       (sum, taking) => sum + taking.unregisteredGoods,
       0,
     )
+    const sellerBaseTheoretical = invoices.reduce(
+      (sum, invoice) => sum + invoice.theoreticalRevenue,
+      0,
+    )
     const revenueAcquiredTransfers = supplierSellerRevenueTransfers.filter(
       (transfer) => transfer.toSellerId === seller.id,
     )
@@ -1502,12 +1506,6 @@ export function DashboardPage() {
       sellerStockRevenueTransfers.filter(
         (transfer) => transfer.fromSellerId === seller.id,
       )
-    const theoreticalInvoices =
-      sellerPeriodMode === 'month' ? cumulativeStockInvoices : invoices
-    const theoreticalRevenueCededTransfers =
-      sellerPeriodMode === 'month'
-        ? stockRevenueCededTransfers
-        : revenueCededTransfers
     const cumulativeStockTheoretical = roundMoney(
       cumulativeStockInvoices.reduce(
         (sum, invoice) => sum + invoice.theoreticalRevenue,
@@ -1525,14 +1523,7 @@ export function DashboardPage() {
       ),
     )
     const sellerTheoretical = roundMoney(
-      theoreticalInvoices.reduce(
-        (sum, invoice) => sum + invoice.theoreticalRevenue,
-        0,
-      ) -
-        theoreticalRevenueCededTransfers.reduce(
-          (sum, transfer) => sum + transfer.amount,
-          0,
-        ),
+      sellerBaseTheoretical - revenueCeded,
     )
     const vatInvoices = sellerBalanceInvoices.filter(
       (invoice) => invoice.sellerId === seller.id,
@@ -1600,8 +1591,8 @@ export function DashboardPage() {
       vatReceivedAllocations,
       vatDistributedAllocations,
       theoretical: sellerTheoretical,
-      theoreticalInvoices,
-      theoreticalRevenueCededTransfers,
+      theoreticalInvoices: invoices,
+      theoreticalRevenueCededTransfers: revenueCededTransfers,
       revenueAcquired,
       revenueCeded,
       revenueAcquiredTransfers,
@@ -1740,16 +1731,8 @@ export function DashboardPage() {
       vatReceivedAllocations: [],
       vatDistributedAllocations: [],
       theoretical:
-        sellerPeriodMode === 'month'
-          ? unassignedStockInvoices.reduce(
-              (sum, invoice) => sum + invoice.theoreticalRevenue,
-              0,
-            )
-          : unassignedTheoretical,
-      theoreticalInvoices:
-        sellerPeriodMode === 'month'
-          ? unassignedStockInvoices
-          : unassignedInvoices,
+        unassignedTheoretical,
+      theoreticalInvoices: unassignedInvoices,
       theoreticalRevenueCededTransfers: [],
       revenueAcquired: 0,
       revenueCeded: 0,
@@ -1956,7 +1939,7 @@ export function DashboardPage() {
           const invoiceTheoreticalRows = selectedSeller.theoreticalInvoices
             .map((invoice) => ({
               date: invoice.date,
-              category: 'Venit teorico progressivo',
+              category: 'Venit teorico',
               description: invoice.supplierName || 'Fornitore non indicato',
               reference: `Fattura ${invoice.number || 'senza numero'}`,
               amount: invoice.theoreticalRevenue,
@@ -1992,7 +1975,7 @@ export function DashboardPage() {
             selectedSeller.theoreticalRevenueCededTransfers
               .map((transfer) => ({
                 date: transfer.date,
-                category: 'Venit ceduto progressivo',
+                category: 'Venit ceduto',
                 description: `A ${
                   accounting.sellers.find(
                     (seller) => seller.id === transfer.toSellerId,
@@ -2209,7 +2192,7 @@ export function DashboardPage() {
             },
             theoretical: {
               title: `Venit teorico · ${selectedSeller.name}`,
-              note: `Venit delle fatture meno il Venit ceduto; quello acquisito è già compreso.${progressivePeriodNote}`,
+              note: `Venit delle fatture meno il Venit ceduto; quello acquisito è già compreso.${periodNote}`,
               value: selectedSeller.theoretical,
               tone: 'violet',
               rows: theoreticalRows,
