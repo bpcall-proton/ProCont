@@ -1054,6 +1054,10 @@ export function DashboardPage() {
   )
   const sellerStockRevenueTransfers =
     sellerRevenueTransfers(sellerStockInvoices)
+  const sellerBalanceInvoices =
+    sellerPeriodMode === 'month' ? sellerStockInvoices : sellerInvoices
+  const sellerBalanceTakings =
+    sellerPeriodMode === 'month' ? sellerStockTakings : sellerTakings
   const sellerResultEnd =
     sellerPeriodMode === 'month'
       ? sellerMonthEnd
@@ -1135,6 +1139,65 @@ export function DashboardPage() {
   const productionCostRecipients = accounting.sellers.filter(
     (seller) => seller.productionCostRecipient,
   )
+  const sellerBalanceProductionVatAllocations = accounting.sellers
+    .filter((seller) => seller.productionCostDistributor)
+    .flatMap((distributor) => {
+      const sourceInvoices = sellerBalanceInvoices.filter(
+        (invoice) => invoice.sellerId === distributor.id,
+      )
+      const sourceVat = roundMoney(
+        sourceInvoices.reduce((sum, invoice) => sum + invoice.vat, 0),
+      )
+      const recipients = productionCostRecipients
+        .filter((recipient) => recipient.id !== distributor.id)
+        .map((recipient) => {
+          const deliveryInvoices = sellerBalanceInvoices.filter((invoice) => {
+            if (
+              invoice.sellerId !== recipient.id ||
+              invoice.theoreticalRevenue <= 0
+            ) {
+              return false
+            }
+            const supplier = accounting.suppliers.find(
+              (item) => item.id === invoice.supplierId,
+            )
+            return (
+              supplier?.linkedSellerId === distributor.id ||
+              bestContactNameMatch(
+                invoice.supplierName || supplier?.name || '',
+                [distributor],
+              )?.id === distributor.id
+            )
+          })
+          return {
+            recipient,
+            venit: roundMoney(
+              deliveryInvoices.reduce(
+                (sum, invoice) => sum + invoice.theoreticalRevenue,
+                0,
+              ),
+            ),
+          }
+        })
+        .filter((recipient) => recipient.venit > 0)
+      const totalVenit = roundMoney(
+        recipients.reduce((sum, recipient) => sum + recipient.venit, 0),
+      )
+      if (sourceVat <= 0 || totalVenit <= 0) return []
+      let allocatedVat = 0
+      return recipients.map((recipient, index) => {
+        const vat =
+          index === recipients.length - 1
+            ? roundMoney(sourceVat - allocatedVat)
+            : roundMoney(sourceVat * (recipient.venit / totalVenit))
+        allocatedVat = roundMoney(allocatedVat + vat)
+        return {
+          distributor,
+          recipient: recipient.recipient,
+          vat,
+        }
+      })
+    })
   const productionCostAllocations = accounting.sellers
     .filter((seller) => seller.productionCostDistributor)
     .flatMap((distributor) => {
@@ -1421,10 +1484,6 @@ export function DashboardPage() {
       (sum, taking) => sum + taking.unregisteredGoods,
       0,
     )
-    const sellerBaseTheoretical = invoices.reduce(
-      (sum, invoice) => sum + invoice.theoreticalRevenue,
-      0,
-    )
     const revenueAcquiredTransfers = supplierSellerRevenueTransfers.filter(
       (transfer) => transfer.toSellerId === seller.id,
     )
@@ -1443,6 +1502,12 @@ export function DashboardPage() {
       sellerStockRevenueTransfers.filter(
         (transfer) => transfer.fromSellerId === seller.id,
       )
+    const theoreticalInvoices =
+      sellerPeriodMode === 'month' ? cumulativeStockInvoices : invoices
+    const theoreticalRevenueCededTransfers =
+      sellerPeriodMode === 'month'
+        ? stockRevenueCededTransfers
+        : revenueCededTransfers
     const cumulativeStockTheoretical = roundMoney(
       cumulativeStockInvoices.reduce(
         (sum, invoice) => sum + invoice.theoreticalRevenue,
@@ -1460,8 +1525,44 @@ export function DashboardPage() {
       ),
     )
     const sellerTheoretical = roundMoney(
-      sellerBaseTheoretical - revenueCeded,
+      theoreticalInvoices.reduce(
+        (sum, invoice) => sum + invoice.theoreticalRevenue,
+        0,
+      ) -
+        theoreticalRevenueCededTransfers.reduce(
+          (sum, transfer) => sum + transfer.amount,
+          0,
+        ),
     )
+    const vatInvoices = sellerBalanceInvoices.filter(
+      (invoice) => invoice.sellerId === seller.id,
+    )
+    const vatTakings = sellerBalanceTakings.filter(
+      (taking) => taking.sellerId === seller.id,
+    )
+    const vatReceivedAllocations =
+      sellerBalanceProductionVatAllocations.filter(
+        (allocation) => allocation.recipient.id === seller.id,
+      )
+    const vatDistributedAllocations =
+      sellerBalanceProductionVatAllocations.filter(
+        (allocation) => allocation.distributor.id === seller.id,
+      )
+    const sellerInputVat = roundMoney(
+      vatInvoices.reduce((sum, invoice) => sum + invoice.vat, 0) +
+        vatReceivedAllocations.reduce(
+          (sum, allocation) => sum + allocation.vat,
+          0,
+        ) -
+        vatDistributedAllocations.reduce(
+          (sum, allocation) => sum + allocation.vat,
+          0,
+        ),
+    )
+    const sellerOutputVat = roundMoney(
+      vatTakings.reduce((sum, taking) => sum + taking.vat, 0),
+    )
+    const sellerVatBalance = roundMoney(sellerOutputVat - sellerInputVat)
     const realResult = sellerRealResult(seller.id)
     return {
       id: seller.id,
@@ -1491,8 +1592,16 @@ export function DashboardPage() {
       cashBalanceUnregisteredGoods: cumulativeCashUnregisteredGoods,
       official: sellerOfficial,
       real: sellerReal,
-      vat: takings.reduce((sum, taking) => sum + taking.vat, 0),
+      vatInput: sellerInputVat,
+      vatOutput: sellerOutputVat,
+      vatBalance: sellerVatBalance,
+      vatInvoices,
+      vatTakings,
+      vatReceivedAllocations,
+      vatDistributedAllocations,
       theoretical: sellerTheoretical,
+      theoreticalInvoices,
+      theoreticalRevenueCededTransfers,
       revenueAcquired,
       revenueCeded,
       revenueAcquiredTransfers,
@@ -1559,6 +1668,26 @@ export function DashboardPage() {
       (sum, invoice) => sum + invoice.theoreticalRevenue,
       0,
     )
+    const unassignedBalanceInvoices =
+      sellerPeriodMode === 'month'
+        ? unassignedStockInvoices
+        : unassignedInvoices
+    const unassignedBalanceTakings =
+      sellerPeriodMode === 'month'
+        ? unassignedStockTakings
+        : unassignedTakings
+    const unassignedInputVat = roundMoney(
+      unassignedBalanceInvoices.reduce(
+        (sum, invoice) => sum + invoice.vat,
+        0,
+      ),
+    )
+    const unassignedOutputVat = roundMoney(
+      unassignedBalanceTakings.reduce(
+        (sum, taking) => sum + taking.vat,
+        0,
+      ),
+    )
     const unassignedCashReal = unassignedStockTakings.reduce(
       (sum, taking) => sum + realTaking(taking),
       0,
@@ -1603,8 +1732,25 @@ export function DashboardPage() {
       cashBalanceUnregisteredGoods: unassignedCashUnregisteredGoods,
       official: unassignedOfficial,
       real: unassignedReal,
-      vat: unassignedTakings.reduce((sum, taking) => sum + taking.vat, 0),
-      theoretical: unassignedTheoretical,
+      vatInput: unassignedInputVat,
+      vatOutput: unassignedOutputVat,
+      vatBalance: roundMoney(unassignedOutputVat - unassignedInputVat),
+      vatInvoices: unassignedBalanceInvoices,
+      vatTakings: unassignedBalanceTakings,
+      vatReceivedAllocations: [],
+      vatDistributedAllocations: [],
+      theoretical:
+        sellerPeriodMode === 'month'
+          ? unassignedStockInvoices.reduce(
+              (sum, invoice) => sum + invoice.theoreticalRevenue,
+              0,
+            )
+          : unassignedTheoretical,
+      theoreticalInvoices:
+        sellerPeriodMode === 'month'
+          ? unassignedStockInvoices
+          : unassignedInvoices,
+      theoreticalRevenueCededTransfers: [],
       revenueAcquired: 0,
       revenueCeded: 0,
       revenueAcquiredTransfers: [],
@@ -1807,10 +1953,10 @@ export function DashboardPage() {
             reference: `Fattura ${invoice.number || 'senza numero'}`,
             amount: invoice.total,
           }))
-          const invoiceTheoreticalRows = selectedSeller.invoices
+          const invoiceTheoreticalRows = selectedSeller.theoreticalInvoices
             .map((invoice) => ({
               date: invoice.date,
-              category: 'Venit teorico',
+              category: 'Venit teorico progressivo',
               description: invoice.supplierName || 'Fornitore non indicato',
               reference: `Fattura ${invoice.number || 'senza numero'}`,
               amount: invoice.theoreticalRevenue,
@@ -1842,9 +1988,23 @@ export function DashboardPage() {
               amount: -Math.abs(transfer.amount),
             }))
             .filter((row) => row.amount !== 0)
+          const theoreticalRevenueCededRows =
+            selectedSeller.theoreticalRevenueCededTransfers
+              .map((transfer) => ({
+                date: transfer.date,
+                category: 'Venit ceduto progressivo',
+                description: `A ${
+                  accounting.sellers.find(
+                    (seller) => seller.id === transfer.toSellerId,
+                  )?.name ?? 'venditore non disponibile'
+                }`,
+                reference: transfer.reference,
+                amount: -Math.abs(transfer.amount),
+              }))
+              .filter((row) => row.amount !== 0)
           const theoreticalRows = [
             ...invoiceTheoreticalRows,
-            ...revenueCededRows,
+            ...theoreticalRevenueCededRows,
           ]
           const sellerTakingRows = (
             category: string,
@@ -1884,11 +2044,45 @@ export function DashboardPage() {
             (taking) =>
               `Incasso registrato ${money(officialTaking(taking))}`,
           )
-          const vatRows = sellerTakingRows(
-            'IVA inclusa',
-            (taking) => taking.vat,
-            () => 'IVA inclusa in Cash + POS',
-          )
+          const vatRows: DashboardDetailRow[] = [
+            ...selectedSeller.vatTakings
+              .map((taking) => ({
+                date: taking.date,
+                category: 'IVA incassi',
+                description: selectedSeller.name,
+                reference: 'IVA inclusa in Cash + POS',
+                amount: taking.vat,
+              }))
+              .filter((row) => row.amount !== 0),
+            ...selectedSeller.vatInvoices
+              .map((invoice) => ({
+                date: invoice.date,
+                category: 'IVA merce acquistata',
+                description:
+                  invoice.supplierName || 'Fornitore non indicato',
+                reference: `Fattura ${invoice.number || 'senza numero'}`,
+                amount: -invoice.vat,
+              }))
+              .filter((row) => row.amount !== 0),
+            ...selectedSeller.vatReceivedAllocations
+              .map((allocation) => ({
+                date: '',
+                category: 'Quota IVA merce ricevuta',
+                description: `Da ${allocation.distributor.name}`,
+                reference: 'Ripartizione costi PRODUCT',
+                amount: -allocation.vat,
+              }))
+              .filter((row) => row.amount !== 0),
+            ...selectedSeller.vatDistributedAllocations
+              .map((allocation) => ({
+                date: '',
+                category: 'Quota IVA merce distribuita',
+                description: `A ${allocation.recipient.name}`,
+                reference: 'Ripartizione costi PRODUCT',
+                amount: allocation.vat,
+              }))
+              .filter((row) => row.amount !== 0),
+          ]
           const withdrawalRows = sellerTakingRows(
             'Cash ritirato',
             (taking) => taking.withdrawal,
@@ -1999,6 +2193,12 @@ export function DashboardPage() {
               : sellerAsOfDate
                 ? ` Stock progressivo fino al ${sellerAsOfDate}, data compresa.`
                 : ` Stock progressivo fino al ${economicRangeEnd}: comprende il residuo precedente e i movimenti del periodo selezionato.`
+          const progressivePeriodNote =
+            sellerPeriodMode === 'month'
+              ? ` Saldo progressivo fino al ${sellerMonthEnd}, compresi i mesi precedenti.`
+              : sellerAsOfDate
+                ? ` Saldo progressivo fino al ${sellerAsOfDate}, data compresa.`
+                : ' Tutto lo storico disponibile.'
           const sellerMetrics: Record<SellerMetricKey, DashboardMetric> = {
             invoices: {
               title: `Fatture assegnate · ${selectedSeller.name}`,
@@ -2009,7 +2209,7 @@ export function DashboardPage() {
             },
             theoretical: {
               title: `Venit teorico · ${selectedSeller.name}`,
-              note: `Venit delle fatture meno il Venit ceduto; quello acquisito è già compreso.${periodNote}`,
+              note: `Venit delle fatture meno il Venit ceduto; quello acquisito è già compreso.${progressivePeriodNote}`,
               value: selectedSeller.theoretical,
               tone: 'violet',
               rows: theoreticalRows,
@@ -2043,10 +2243,20 @@ export function DashboardPage() {
               rows: realRows,
             },
             vat: {
-              title: `IVA inclusa · ${selectedSeller.name}`,
-              note: `IVA inclusa in Cash e POS del venditore.${periodNote}`,
-              value: selectedSeller.vat,
-              tone: 'amber',
+              title:
+                selectedSeller.vatBalance > 0
+                  ? `IVA da dare · ${selectedSeller.name}`
+                  : selectedSeller.vatBalance < 0
+                    ? `IVA a credito · ${selectedSeller.name}`
+                    : `IVA in pareggio · ${selectedSeller.name}`,
+              note: `IVA degli incassi registrati meno IVA della merce acquistata.${progressivePeriodNote}`,
+              value: Math.abs(selectedSeller.vatBalance),
+              tone:
+                selectedSeller.vatBalance > 0
+                  ? 'red'
+                  : selectedSeller.vatBalance < 0
+                    ? 'green'
+                    : 'cyan',
               rows: vatRows,
             },
             withdrawals: {
@@ -2392,11 +2602,23 @@ export function DashboardPage() {
             value={money(selectedStore.seller.unregisteredGoods)}
           />
           <StatCard
-            detail="IVA inclusa negli incassi registrati"
-            label="IVA incassi"
+            detail="IVA incassi meno IVA merce acquistata, compresi i saldi precedenti"
+            label={
+              selectedStore.seller.vatBalance > 0
+                ? 'IVA da dare'
+                : selectedStore.seller.vatBalance < 0
+                  ? 'IVA a credito'
+                  : 'IVA in pareggio'
+            }
             onClick={() => openMetric('vat')}
-            tone="amber"
-            value={money(selectedStore.seller.vat)}
+            tone={
+              selectedStore.seller.vatBalance > 0
+                ? 'red'
+                : selectedStore.seller.vatBalance < 0
+                  ? 'green'
+                  : 'cyan'
+            }
+            value={money(Math.abs(selectedStore.seller.vatBalance))}
           />
           <StatCard
             detail="Già conteggiato nel Venit principale"
@@ -2895,10 +3117,17 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="dashboard-seller-metrics">
-                  <button
-                    onClick={() =>
-                      setSellerDetail({
-                        sellerId: seller.id,
+                    <button
+                      className={`seller-vat-balance ${
+                        seller.vatBalance > 0
+                          ? 'metric-negative'
+                          : seller.vatBalance < 0
+                            ? 'metric-positive'
+                            : ''
+                      }`}
+                      onClick={() =>
+                        setSellerDetail({
+                          sellerId: seller.id,
                         metric: 'invoices',
                       })
                     }
@@ -2967,13 +3196,19 @@ export function DashboardPage() {
                   <button
                     onClick={() =>
                       setSellerDetail({ sellerId: seller.id, metric: 'vat' })
-                    }
-                    type="button"
-                  >
-                    <span>IVA inclusa</span>
-                    <strong>{money(seller.vat)}</strong>
-                    <em>Apri dettaglio</em>
-                  </button>
+                      }
+                      type="button"
+                    >
+                      <span>
+                        {seller.vatBalance > 0
+                          ? 'IVA da dare'
+                          : seller.vatBalance < 0
+                            ? 'IVA a credito'
+                            : 'IVA in pareggio'}
+                      </span>
+                      <strong>{money(Math.abs(seller.vatBalance))}</strong>
+                      <em>Saldo progressivo</em>
+                    </button>
                   <button
                     className="seller-cash-metric"
                     onClick={() =>
