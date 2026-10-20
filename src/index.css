@@ -3665,10 +3665,43 @@ select {
 
 .data-table th.invoice-selection-column,
 .data-table td.invoice-selection-column {
-  width: 42px;
-  min-width: 42px;
+  width: 112px;
+  min-width: 112px;
   padding-right: 4px;
   text-align: center;
+}
+
+.invoice-selection-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.invoice-selection-control strong {
+  min-width: 22px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.invoice-selection-control .invoice-selection-mode-toggle {
+  width: 38px;
+  height: 22px;
+}
+
+.invoice-selection-control .invoice-selection-mode-toggle span {
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+}
+
+.invoice-selection-control .invoice-selection-mode-toggle.on span {
+  left: 19px;
+}
+
+.invoice-selection-control .invoice-selection-mode-toggle.on + strong {
+  color: var(--cyan);
 }
 
 .invoice-selection-column input {
@@ -3677,6 +3710,11 @@ select {
   margin: 0;
   accent-color: var(--green);
   cursor: pointer;
+}
+
+.invoice-selection-column input:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .data-table th.invoice-paid-column,

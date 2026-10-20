@@ -468,6 +468,8 @@ export function InvoicesPanel({
   const sellerFilter = invoiceFilters.sellerId
   const monthFilter = invoiceFilters.month
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
+  const [includePaidInInvoiceSelection, setIncludePaidInInvoiceSelection] =
+    useState(false)
   const [paymentTarget, setPaymentTarget] =
     useState<AccountingInvoice | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -532,8 +534,10 @@ export function InvoicesPanel({
     (sum, item) => sum + item.theoreticalRevenue,
     0,
   )
-  const selectedInvoices = invoices.filter((invoice) =>
-    selectedInvoiceIds.includes(invoice.id),
+  const selectedInvoices = invoices.filter(
+    (invoice) =>
+      selectedInvoiceIds.includes(invoice.id) &&
+      (includePaidInInvoiceSelection || !invoice.settled),
   )
   const selectedInvoiceTotal = selectedInvoices.reduce(
     (sum, invoice) => sum + invoice.total,
@@ -551,7 +555,7 @@ export function InvoicesPanel({
     (supplier) => supplier.id === activeSupplierFilter,
   )
   const selectableInvoiceIds = invoices
-    .filter((invoice) => !invoice.settled)
+    .filter((invoice) => includePaidInInvoiceSelection || !invoice.settled)
     .map((invoice) => invoice.id)
   const allVisibleInvoicesSelected =
     selectableInvoiceIds.length > 0 &&
@@ -960,6 +964,11 @@ export function InvoicesPanel({
 
   function resetInvoiceSelection() {
     setSelectedInvoiceIds([])
+  }
+
+  function togglePaidInvoiceSelectionMode() {
+    setIncludePaidInInvoiceSelection((current) => !current)
+    resetInvoiceSelection()
   }
 
   function toggleInvoicePaid(invoiceId: string) {
@@ -1483,7 +1492,10 @@ export function InvoicesPanel({
               <strong>{money(selectedInvoiceTotal)}</strong>
               <span>
                 {selectedInvoices.length}{' '}
-                {selectedInvoices.length === 1 ? 'fattura' : 'fatture'}
+                {selectedInvoices.length === 1 ? 'fattura' : 'fatture'} ·{' '}
+                {includePaidInInvoiceSelection
+                  ? 'pagate e da pagare'
+                  : 'solo da pagare'}
               </span>
             </div>
             <div className="invoice-selection-total invoice-selection-revenue">
@@ -1572,13 +1584,32 @@ export function InvoicesPanel({
         </div>
         <div className={`data-table-wrap${archiveOnly ? ' invoice-archive-table-wrap' : ' accounting-records-table-wrap'}`}>
           <table className="data-table">
-            <thead><tr><th className="invoice-selection-column"><input
-              aria-label="Seleziona tutte le fatture non pagate visualizzate"
+            <thead><tr><th className="invoice-selection-column"><div className="invoice-selection-control"><input
+              aria-label={
+                includePaidInInvoiceSelection
+                  ? 'Seleziona tutte le fatture visualizzate'
+                  : 'Seleziona tutte le fatture non pagate visualizzate'
+              }
               checked={allVisibleInvoicesSelected}
               disabled={selectableInvoiceIds.length === 0}
               onChange={toggleAllVisibleInvoices}
               type="checkbox"
-            /></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Merce senza fattura</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
+            /><button
+              aria-label={
+                includePaidInInvoiceSelection
+                  ? 'Disattiva la selezione delle fatture pagate'
+                  : 'Includi anche le fatture pagate nella selezione'
+              }
+              aria-pressed={includePaidInInvoiceSelection}
+              className={`toggle invoice-selection-mode-toggle${includePaidInInvoiceSelection ? ' on' : ''}`}
+              onClick={togglePaidInvoiceSelectionMode}
+              title={
+                includePaidInInvoiceSelection
+                  ? 'ON: somma fatture pagate e da pagare'
+                  : 'OFF: somma solo fatture da pagare'
+              }
+              type="button"
+            ><span /></button><strong>{includePaidInInvoiceSelection ? 'ON' : 'OFF'}</strong></div></th><th className="invoice-paid-column">Pagata</th><th>Data / N.</th><th>Fornitore / venditore</th><th>Totale</th><th>Venit / ricarico</th><th>Merce senza fattura</th><th>Stato / scadenza</th><th>Azioni</th></tr></thead>
             <tbody>
               {invoices.map((invoice) => {
                 const dueState = invoiceDueState(invoice)
@@ -1587,6 +1618,7 @@ export function InvoicesPanel({
                   <td className="invoice-selection-column"><input
                     aria-label={`Seleziona fattura ${invoice.number || invoice.date}`}
                     checked={selectedInvoiceIds.includes(invoice.id)}
+                    disabled={!includePaidInInvoiceSelection && invoice.settled}
                     onChange={() => toggleInvoiceSelection(invoice.id)}
                     type="checkbox"
                   /></td>
