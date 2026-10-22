@@ -3061,7 +3061,24 @@ select {
 }
 
 .production-history-panel {
+  display: grid;
+  gap: 14px;
   order: 4;
+}
+
+.production-history-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.production-history-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 0.5fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.production-history-filters .button {
+  min-width: 190px;
 }
 
 .production-history-categories {
@@ -5127,8 +5144,13 @@ select {
   .production-sellers,
   .production-wage-filter,
   .production-wage-form,
-  .production-work-form {
+  .production-work-form,
+  .production-history-filters {
     grid-template-columns: 1fr;
+  }
+
+  .production-history-filters .button {
+    width: 100%;
   }
 
   .production-piece-summary {
