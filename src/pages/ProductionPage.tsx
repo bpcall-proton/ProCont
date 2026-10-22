@@ -242,6 +242,17 @@ function formatProductionDate(value: string) {
   return `${formatDate(value)} - ${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}`
 }
 
+function productionFilenamePart(value: string) {
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase() || 'tutti'
+  )
+}
+
 function safeWorksheetName(value: string, usedNames: Set<string>) {
   const base =
     value
@@ -270,7 +281,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const companyId = state.accounting.activeCompanyId
   const firstProduct = data.productionSettings[0] ?? null
   const [selectedProductId, setSelectedProductId] = useState<SelectedProductId>(
-    firstProduct?.id ?? null,
+    'all',
   )
   const savedSettings =
     selectedProductId === 'all'
@@ -308,6 +319,8 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     selectedDate: today(),
     rangeStart: `${today().slice(0, 7)}-01`,
     rangeEnd: today(),
+    historyMonth: today().slice(0, 7),
+    historyWorkerId: 'all',
   }
   const productionFilterKey = `production-filters:${companyId ?? 'none'}`
   const [productionFilters, setProductionFilters] = useStoredFilters(
@@ -323,6 +336,11 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
   const rangeEnd = isValidDate(productionFilters.rangeEnd)
     ? productionFilters.rangeEnd
     : productionFilterDefaults.rangeEnd
+  const historyMonth = /^\d{4}-\d{2}$/.test(
+    productionFilters.historyMonth,
+  )
+    ? productionFilters.historyMonth
+    : productionFilterDefaults.historyMonth
   const [selectedDateDraft, setSelectedDateDraft] = useState({
     key: productionFilterKey,
     value: selectedDate,
@@ -1079,15 +1097,45 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     .filter((seller) => selectedWorkerIds.includes(seller.id))
     .map((seller) => seller.name)
     .join(', ')
+  const historyWorkers = [
+    ...new Set(
+      data.productionEntries
+        .map((entry) => entry.workerId)
+        .filter((workerId): workerId is string => Boolean(workerId)),
+    ),
+  ]
+    .map((workerId) => ({
+      id: workerId,
+      name:
+        data.sellers.find((seller) => seller.id === workerId)?.name ??
+        'Lavoratrice rimossa',
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'it'))
+  const availableHistoryWorkerIds = new Set(
+    historyWorkers.map((worker) => worker.id),
+  )
+  const historyWorkerId =
+    productionFilters.historyWorkerId === 'unassigned' ||
+    availableHistoryWorkerIds.has(productionFilters.historyWorkerId)
+      ? productionFilters.historyWorkerId
+      : 'all'
   const entries = data.productionEntries
     .filter(
       (entry) =>
         (showingAllProducts ||
           entry.productId === selectedProductId) &&
-        entry.date >= range.start &&
-        entry.date <= range.end,
+        entry.date.startsWith(historyMonth) &&
+        (historyWorkerId === 'all' ||
+          (historyWorkerId === 'unassigned'
+            ? !entry.workerId
+            : entry.workerId === historyWorkerId)),
     )
     .sort((left, right) => right.date.localeCompare(left.date))
+  const historyWorkerName = (entry: ProductionEntry) =>
+    entry.workerId
+      ? (data.sellers.find((seller) => seller.id === entry.workerId)?.name ??
+        'Lavoratrice rimossa')
+      : 'Da assegnare'
   const quantityDetails = results.products.flatMap((product) =>
     product.productionEntries.map((entry) => ({
       entry,
@@ -1426,6 +1474,83 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
     XLSX.writeFile(
       workbook,
       `stipendi-produzione-${range.start}-${range.end}.xlsx`,
+    )
+  }
+
+  async function exportProductionHistoryExcel() {
+    if (!data.company || entries.length === 0) return
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    const selectedWorkerName =
+      historyWorkerId === 'all'
+        ? 'Tutte le produttrici'
+        : historyWorkerId === 'unassigned'
+          ? 'Da assegnare'
+          : (historyWorkers.find(
+              (worker) => worker.id === historyWorkerId,
+            )?.name ?? 'Lavoratrice rimossa')
+    const rows = entries.map((entry) => {
+      const quantities = productionQuantities(entry)
+      return [
+        formatProductionDate(entry.date),
+        entry.period === 'day' ? 'Giornaliero' : 'Settimanale',
+        productNames.get(entry.productId) ?? 'Prodotto rimosso',
+        historyWorkerName(entry),
+        quantities.sandwiches,
+        quantities.pizzas,
+        quantities.tramezzini,
+        quantities.other,
+        entry.quantity,
+      ]
+    })
+    const totals = sumProductionQuantities(entries)
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['Azienda', data.company.name],
+      ['Mese', historyMonth],
+      ['Produttrice', selectedWorkerName],
+      [],
+      [
+        'Data',
+        'Periodo',
+        'Prodotto',
+        'Produttrice',
+        'Panini',
+        'Pizze',
+        'Tramezzini',
+        'Altro',
+        'Totale giornata',
+      ],
+      ...rows,
+      [
+        'TOTALE',
+        '',
+        '',
+        '',
+        totals.sandwiches,
+        totals.pizzas,
+        totals.tramezzini,
+        totals.other,
+        entries.reduce((total, entry) => total + entry.quantity, 0),
+      ],
+    ])
+    sheet['!cols'] = [
+      { wch: 28 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 24 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 18 },
+    ]
+    sheet['!autofilter'] = {
+      ref: `A5:I${rows.length + 5}`,
+    }
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Produzione filtrata')
+    XLSX.writeFile(
+      workbook,
+      `produzione-${historyMonth}-${productionFilenamePart(selectedWorkerName)}.xlsx`,
     )
   }
 
@@ -2290,10 +2415,56 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
           </div>
           <span className="count-pill">{entries.length}</span>
         </div>
+        <div className="production-history-filters">
+          <label>
+            Mese
+            <input
+              min="2000-01"
+              onChange={(event) =>
+                setProductionFilters({
+                  ...productionFilters,
+                  historyMonth: event.target.value,
+                })
+              }
+              type="month"
+              value={historyMonth}
+            />
+          </label>
+          <label>
+            Produttrice
+            <select
+              onChange={(event) =>
+                setProductionFilters({
+                  ...productionFilters,
+                  historyWorkerId: event.target.value,
+                })
+              }
+              value={historyWorkerId}
+            >
+              <option value="all">Tutte le produttrici</option>
+              {historyWorkers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name}
+                </option>
+              ))}
+              {data.productionEntries.some((entry) => !entry.workerId) && (
+                <option value="unassigned">Da assegnare</option>
+              )}
+            </select>
+          </label>
+          <button
+            className="button button-secondary"
+            disabled={entries.length === 0}
+            onClick={() => void exportProductionHistoryExcel()}
+            type="button"
+          >
+            Esporta filtrato Excel
+          </button>
+        </div>
         {entries.length === 0 ? (
           <div className="empty-state compact-empty">
-            <strong>Nessuna quantità registrata</strong>
-            <span>Inserisci il primo totale giornaliero o settimanale.</span>
+            <strong>Nessuna quantità per i filtri selezionati</strong>
+            <span>Cambia mese, produttrice o prodotto.</span>
           </div>
         ) : (
           <div className="record-list">
@@ -2311,24 +2482,7 @@ export function ProductionPage({ onOpenWages }: ProductionPageProps) {
                       : 'Totale settimanale'}
                     {showingAllProducts &&
                       ` · ${productNames.get(entry.productId) ?? 'Prodotto'}`}
-                    {(() => {
-                      const product = data.productionSettings.find(
-                        (settings) => settings.id === entry.productId,
-                      )
-                      const requiresWorker =
-                        product?.workerPieceTrackingEnabled &&
-                        product.workerPieceTrackingStartMonth &&
-                        entry.date.slice(0, 7) >=
-                          product.workerPieceTrackingStartMonth
-                      if (entry.workerId) {
-                        return ` · ${
-                          data.sellers.find(
-                            (seller) => seller.id === entry.workerId,
-                          )?.name ?? 'Lavoratrice rimossa'
-                        }`
-                      }
-                      return requiresWorker ? ' · Da assegnare' : ''
-                    })()}
+                    {` · ${historyWorkerName(entry)}`}
                   </small>
                 </span>
                 <span>
