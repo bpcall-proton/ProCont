@@ -2780,12 +2780,22 @@ function ExpenseControlPage({
         <article className="entity-stat-card report-cyan">
           <span className="eyebrow">FATTURE RICEVUTE</span>
           <strong>{money(totals.invoiceTotal)}</strong>
-          <span>{invoices.length} fatture registrate</span>
+          <span>
+            {invoices.length}{' '}
+            {invoices.length === 1
+              ? 'fattura registrata'
+              : 'fatture registrate'}
+          </span>
         </article>
         <article className="entity-stat-card report-violet">
           <span className="eyebrow">PAGAMENTI EFFETTUATI</span>
           <strong>{money(totals.paymentTotal)}</strong>
-          <span>{payments.length} uscite manuali collegate</span>
+          <span>
+            {payments.length}{' '}
+            {payments.length === 1
+              ? 'uscita manuale collegata'
+              : 'uscite manuali collegate'}
+          </span>
         </article>
         <article
           className={`entity-stat-card ${
