@@ -2415,6 +2415,12 @@ select {
 }
 
 @media (max-width: 860px) {
+  .expense-control-card-grid,
+  .expense-control-columns,
+  .expense-control-summary {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     grid-template-columns: 78px minmax(0, 1fr);
   }
@@ -4262,6 +4268,98 @@ select {
   gap: 18px;
 }
 
+.expense-control-overview {
+  grid-column: 1 / -1;
+}
+
+.expense-control-card-grid,
+.expense-control-columns,
+.expense-control-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.expense-control-card-grid,
+.expense-control-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.expense-control-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.expense-control-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(7, 11, 22, 0.55);
+}
+
+.expense-control-card:hover,
+.expense-control-card:focus-visible {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: var(--surface-hover);
+}
+
+.expense-control-card > span:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.expense-control-card > span:first-child strong,
+.expense-control-card-balance {
+  font-size: 1.25rem;
+}
+
+.expense-control-card-totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 18px;
+  color: var(--muted);
+}
+
+.expense-control-card em {
+  color: var(--lavender);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.expense-control-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.expense-control-form > label {
+  display: grid;
+  gap: 6px;
+}
+
+.expense-control-notes,
+.expense-control-actions {
+  grid-column: 1 / -1;
+}
+
+.expense-control-actions {
+  gap: 9px;
+}
+
+.expense-control-help {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.expense-control-page .data-table td small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
 .manual-expense-archive {
   grid-column: 1 / -1;
 }
@@ -5041,6 +5139,7 @@ select {
   }
 
   .accounting-fields,
+  .expense-control-form,
   .product-fields,
   .contact-columns,
   .report-columns,
@@ -5072,6 +5171,11 @@ select {
   }
 
   .wide-field {
+    grid-column: auto;
+  }
+
+  .expense-control-notes,
+  .expense-control-actions {
     grid-column: auto;
   }
 

@@ -36,6 +36,8 @@ import type {
   AccountingState,
   AccountingSupplier,
   AccountingTaking,
+  ExpenseControlInvoice,
+  ExpenseControlKind,
   InvoiceLine,
   PaymentMethod,
   Rental,
@@ -226,6 +228,8 @@ export function AccountingPage({
     addAccountingCompany,
   } = useAppStore()
   const [section, setSection] = useState<Section>('invoices')
+  const [expenseControlKind, setExpenseControlKind] =
+    useState<ExpenseControlKind | null>(null)
   const [companyName, setCompanyName] = useState('')
   const [companyError, setCompanyError] = useState<string | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -248,7 +252,7 @@ export function AccountingPage({
     const observer = new ResizeObserver(updateOffset)
     observer.observe(header)
     return () => observer.disconnect()
-  }, [])
+  }, [expenseControlKind])
 
   function addCompany(event: FormEvent) {
     event.preventDefault()
@@ -263,6 +267,15 @@ export function AccountingPage({
     })
     setCompanyError(result.error ?? null)
     if (result.ok) setCompanyName('')
+  }
+
+  if (expenseControlKind) {
+    return (
+      <ExpenseControlPage
+        kind={expenseControlKind}
+        onBack={() => setExpenseControlKind(null)}
+      />
+    )
   }
 
   return (
@@ -354,7 +367,9 @@ export function AccountingPage({
           )}
           {section === 'takings' && <TakingsPanel />}
           {section === 'contacts' && <ContactsPanel />}
-          {section === 'expenses' && <ExpensesPanel />}
+          {section === 'expenses' && (
+            <ExpensesPanel onOpenControl={setExpenseControlKind} />
+          )}
         </>
       )}
     </div>
@@ -2488,7 +2503,585 @@ function ContactsPanel() {
   )
 }
 
-function ExpensesPanel() {
+function normalizedExpenseDescription(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function isRentPaymentDescription(value: string) {
+  return normalizedExpenseDescription(value)
+    .split(' ')
+    .some((word) => word === 'affitto' || word === 'affitti')
+}
+
+function isExpenseControlPayment(
+  expense: AccountingExpense,
+  kind: ExpenseControlKind,
+) {
+  if (kind === 'accountant') {
+    const description = normalizedExpenseDescription(expense.description)
+    return (
+      expense.type === 'contabile' ||
+      description.split(' ').some((word) =>
+        ['contabile', 'commercialista'].includes(word),
+      )
+    )
+  }
+  return isRentPaymentDescription(expense.description)
+}
+
+function expenseControlTotals(
+  invoices: ExpenseControlInvoice[],
+  expenses: AccountingExpense[],
+  kind: ExpenseControlKind,
+) {
+  const invoiceTotal = roundMoney(
+    invoices
+      .filter((invoice) => invoice.kind === kind)
+      .reduce((sum, invoice) => sum + invoice.amount, 0),
+  )
+  const paymentTotal = roundMoney(
+    expenses
+      .filter((expense) => isExpenseControlPayment(expense, kind))
+      .reduce((sum, expense) => sum + expense.amount, 0),
+  )
+  const balance = roundMoney(paymentTotal - invoiceTotal)
+  return {
+    invoiceTotal,
+    paymentTotal,
+    balance,
+    status:
+      balance > 0 ? 'In anticipo' : balance < 0 ? 'In ritardo' : 'In pari',
+  }
+}
+
+function expenseControlDate(value: string) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('it-IT').format(
+    new Date(`${value}T12:00:00`),
+  )
+}
+
+function ExpenseControlPage({
+  kind,
+  onBack,
+}: {
+  kind: ExpenseControlKind
+  onBack: () => void
+}) {
+  const { state, updateAccounting } = useAppStore()
+  const data = activeAccounting(state.accounting)
+  const title = kind === 'rent' ? 'Affitti' : 'Contabile'
+  const eyebrow = kind === 'rent' ? 'SITUAZIONE AFFITTI' : 'SITUAZIONE CONTABILE'
+  const defaultInvoiceDescription =
+    kind === 'rent' ? 'Canone di affitto' : 'Fattura contabile'
+  const defaultPaymentDescription =
+    kind === 'rent' ? 'Affitto' : 'Pagamento contabile'
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [invoiceSupplier, setInvoiceSupplier] = useState('')
+  const [invoiceDescription, setInvoiceDescription] = useState(
+    defaultInvoiceDescription,
+  )
+  const [invoiceAmount, setInvoiceAmount] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(today())
+  const [invoiceDueDate, setInvoiceDueDate] = useState(addDays(today(), 10))
+  const [invoiceNotes, setInvoiceNotes] = useState('')
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
+  const [paymentDescription, setPaymentDescription] = useState(
+    defaultPaymentDescription,
+  )
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(today())
+  const [paymentNotes, setPaymentNotes] = useState('')
+  const invoices = useMemo(
+    () =>
+      data.expenseControlInvoices
+        .filter((invoice) => invoice.kind === kind)
+        .sort(
+          (left, right) =>
+            right.date.localeCompare(left.date) ||
+            right.id.localeCompare(left.id),
+        ),
+    [data.expenseControlInvoices, kind],
+  )
+  const payments = useMemo(
+    () =>
+      data.expenses
+        .filter((expense) => isExpenseControlPayment(expense, kind))
+        .sort(
+          (left, right) =>
+            right.date.localeCompare(left.date) ||
+            right.id.localeCompare(left.id),
+        ),
+    [data.expenses, kind],
+  )
+  const totals = expenseControlTotals(
+    data.expenseControlInvoices,
+    data.expenses,
+    kind,
+  )
+
+  function resetInvoiceForm() {
+    setEditingInvoiceId(null)
+    setInvoiceNumber('')
+    setInvoiceSupplier('')
+    setInvoiceDescription(defaultInvoiceDescription)
+    setInvoiceAmount('')
+    setInvoiceDate(today())
+    setInvoiceDueDate(addDays(today(), 10))
+    setInvoiceNotes('')
+  }
+
+  function resetPaymentForm() {
+    setEditingPaymentId(null)
+    setPaymentDescription(defaultPaymentDescription)
+    setPaymentAmount('')
+    setPaymentDate(today())
+    setPaymentNotes('')
+  }
+
+  function saveInvoice(event: FormEvent) {
+    event.preventDefault()
+    const amount = numberValue(invoiceAmount)
+    if (amount <= 0) return
+    updateAccounting((current) =>
+      mutateCompany(current, (companyId) => {
+        const invoice: ExpenseControlInvoice = {
+          id: editingInvoiceId ?? createId(`expense-control-${kind}`),
+          companyId,
+          kind,
+          number: invoiceNumber.trim(),
+          supplierName: invoiceSupplier.trim(),
+          description:
+            invoiceDescription.trim() || defaultInvoiceDescription,
+          amount,
+          date: invoiceDate,
+          dueDate: invoiceDueDate,
+          notes: invoiceNotes.trim(),
+        }
+        return {
+          ...current,
+          expenseControlInvoices: editingInvoiceId
+            ? current.expenseControlInvoices.map((item) =>
+                item.id === editingInvoiceId ? invoice : item,
+              )
+            : [invoice, ...current.expenseControlInvoices],
+        }
+      }),
+    )
+    resetInvoiceForm()
+  }
+
+  function editInvoice(invoice: ExpenseControlInvoice) {
+    setEditingInvoiceId(invoice.id)
+    setInvoiceNumber(invoice.number)
+    setInvoiceSupplier(invoice.supplierName)
+    setInvoiceDescription(invoice.description)
+    setInvoiceAmount(String(invoice.amount))
+    setInvoiceDate(invoice.date)
+    setInvoiceDueDate(invoice.dueDate)
+    setInvoiceNotes(invoice.notes)
+  }
+
+  function savePayment(event: FormEvent) {
+    event.preventDefault()
+    const amount = numberValue(paymentAmount)
+    if (amount <= 0) return
+    const enteredDescription =
+      paymentDescription.trim() || defaultPaymentDescription
+    const description =
+      kind === 'rent' &&
+      !isRentPaymentDescription(enteredDescription)
+        ? `Affitto - ${enteredDescription}`
+        : enteredDescription
+    updateAccounting((current) =>
+      mutateCompany(current, (companyId) => ({
+        ...current,
+        expenses: editingPaymentId
+          ? current.expenses.map((expense) =>
+              expense.id === editingPaymentId
+                ? {
+                    ...expense,
+                    type: kind === 'accountant' ? 'contabile' : expense.type,
+                    description,
+                    amount,
+                    date: paymentDate,
+                    recurrence: 'once',
+                    recurrenceEndDate: null,
+                    notes: paymentNotes.trim(),
+                    settled: true,
+                  }
+                : expense,
+            )
+          : [
+              {
+                id: createId('expense'),
+                companyId,
+                allocationSellerIds: [],
+                attachmentImages: [],
+                type: kind === 'accountant' ? 'contabile' : 'altra',
+                description,
+                sellerId: null,
+                sellerName: '',
+                amount,
+                date: paymentDate,
+                recurrence: 'once',
+                recurrenceEndDate: null,
+                notes: paymentNotes.trim(),
+                settled: true,
+              },
+              ...current.expenses,
+            ],
+      })),
+    )
+    resetPaymentForm()
+  }
+
+  function editPayment(expense: AccountingExpense) {
+    setEditingPaymentId(expense.id)
+    setPaymentDescription(expense.description)
+    setPaymentAmount(String(expense.amount))
+    setPaymentDate(expense.date)
+    setPaymentNotes(expense.notes)
+  }
+
+  if (!data.company) {
+    return (
+      <section className="page-stack">
+        <button className="button button-secondary" onClick={onBack} type="button">
+          Torna alla Contabilità manuale
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="page-stack expense-control-page">
+      <header className="page-heading">
+        <div>
+          <span className="eyebrow">{eyebrow}</span>
+          <h1>{title}</h1>
+          <p>
+            Le fatture di controllo restano separate dai calcoli. I pagamenti
+            sono le stesse uscite manuali dell'Archivio mensile.
+          </p>
+        </div>
+        <button className="button button-secondary" onClick={onBack} type="button">
+          Torna alla Contabilità manuale
+        </button>
+      </header>
+
+      <div className="expense-control-summary">
+        <article className="entity-stat-card report-cyan">
+          <span className="eyebrow">FATTURE RICEVUTE</span>
+          <strong>{money(totals.invoiceTotal)}</strong>
+          <span>{invoices.length} fatture registrate</span>
+        </article>
+        <article className="entity-stat-card report-violet">
+          <span className="eyebrow">PAGAMENTI EFFETTUATI</span>
+          <strong>{money(totals.paymentTotal)}</strong>
+          <span>{payments.length} uscite manuali collegate</span>
+        </article>
+        <article
+          className={`entity-stat-card ${
+            totals.balance > 0
+              ? 'report-green'
+              : totals.balance < 0
+                ? 'report-red'
+                : 'report-cyan'
+          }`}
+        >
+          <span className="eyebrow">SITUAZIONE</span>
+          <strong>{totals.status}</strong>
+          <span>{money(Math.abs(totals.balance))}</span>
+        </article>
+      </div>
+
+      <div className="expense-control-columns">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">DOCUMENTI RICEVUTI</span>
+              <h2>Registra fattura {title.toLocaleLowerCase()}</h2>
+            </div>
+          </div>
+          <form className="form-grid expense-control-form" onSubmit={saveInvoice}>
+            <label>
+              Numero fattura
+              <input
+                onChange={(event) => setInvoiceNumber(event.target.value)}
+                placeholder="Numero"
+                value={invoiceNumber}
+              />
+            </label>
+            <label>
+              Fornitore / locatore
+              <input
+                onChange={(event) => setInvoiceSupplier(event.target.value)}
+                placeholder="Nome"
+                value={invoiceSupplier}
+              />
+            </label>
+            <label>
+              Descrizione
+              <input
+                onChange={(event) => setInvoiceDescription(event.target.value)}
+                required
+                value={invoiceDescription}
+              />
+            </label>
+            <label>
+              Importo
+              <input
+                inputMode="decimal"
+                onChange={(event) => setInvoiceAmount(event.target.value)}
+                placeholder="0,00"
+                required
+                value={invoiceAmount}
+              />
+            </label>
+            <label>
+              Data fattura
+              <input
+                onChange={(event) => setInvoiceDate(event.target.value)}
+                required
+                type="date"
+                value={invoiceDate}
+              />
+            </label>
+            <label>
+              Scadenza
+              <input
+                min={invoiceDate}
+                onChange={(event) => setInvoiceDueDate(event.target.value)}
+                type="date"
+                value={invoiceDueDate}
+              />
+            </label>
+            <label className="expense-control-notes">
+              Note
+              <textarea
+                onChange={(event) => setInvoiceNotes(event.target.value)}
+                placeholder="Facoltative"
+                value={invoiceNotes}
+              />
+            </label>
+            <div className="form-actions expense-control-actions">
+              {editingInvoiceId && (
+                <button
+                  className="button button-secondary"
+                  onClick={resetInvoiceForm}
+                  type="button"
+                >
+                  Annulla
+                </button>
+              )}
+              <button className="button button-primary" type="submit">
+                {editingInvoiceId ? 'Salva modifica' : 'Registra fattura'}
+              </button>
+            </div>
+          </form>
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">USCITA MANUALE</span>
+              <h2>Registra pagamento</h2>
+            </div>
+          </div>
+          <form className="form-grid expense-control-form" onSubmit={savePayment}>
+            <label>
+              Descrizione
+              <input
+                onChange={(event) => setPaymentDescription(event.target.value)}
+                required
+                value={paymentDescription}
+              />
+            </label>
+            <label>
+              Importo pagato
+              <input
+                inputMode="decimal"
+                onChange={(event) => setPaymentAmount(event.target.value)}
+                placeholder="0,00"
+                required
+                value={paymentAmount}
+              />
+            </label>
+            <label>
+              Data pagamento
+              <input
+                onChange={(event) => setPaymentDate(event.target.value)}
+                required
+                type="date"
+                value={paymentDate}
+              />
+            </label>
+            <label className="expense-control-notes">
+              Note
+              <textarea
+                onChange={(event) => setPaymentNotes(event.target.value)}
+                placeholder="Facoltative"
+                value={paymentNotes}
+              />
+            </label>
+            <div className="form-actions expense-control-actions">
+              {editingPaymentId && (
+                <button
+                  className="button button-secondary"
+                  onClick={resetPaymentForm}
+                  type="button"
+                >
+                  Annulla
+                </button>
+              )}
+              <button className="button button-primary" type="submit">
+                {editingPaymentId ? 'Salva modifica' : 'Registra pagamento'}
+              </button>
+            </div>
+          </form>
+          <p className="expense-control-help">
+            {kind === 'rent'
+              ? 'Il pagamento viene salvato nell’Archivio mensile con descrizione Affitto.'
+              : 'Il pagamento viene salvato nell’Archivio mensile come costo contabile.'}
+          </p>
+        </article>
+      </div>
+
+      <article className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">ARCHIVIO AUTONOMO</span>
+            <h2>Fatture {title.toLocaleLowerCase()}</h2>
+          </div>
+          <span className="count-pill">{invoices.length}</span>
+        </div>
+        {invoices.length > 0 ? (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Scadenza</th>
+                  <th>Numero</th>
+                  <th>Fornitore</th>
+                  <th>Descrizione</th>
+                  <th>Importo</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td>{expenseControlDate(invoice.date)}</td>
+                    <td>{expenseControlDate(invoice.dueDate)}</td>
+                    <td>{invoice.number || '—'}</td>
+                    <td>{invoice.supplierName || '—'}</td>
+                    <td>
+                      <strong>{invoice.description}</strong>
+                      {invoice.notes && <small>{invoice.notes}</small>}
+                    </td>
+                    <td>{money(invoice.amount)}</td>
+                    <td>
+                      <button onClick={() => editInvoice(invoice)} type="button">
+                        Modifica
+                      </button>
+                      <RowDeleteButton
+                        onConfirm={() =>
+                          updateAccounting((current) => ({
+                            ...current,
+                            expenseControlInvoices:
+                              current.expenseControlInvoices.filter(
+                                (item) => item.id !== invoice.id,
+                              ),
+                          }))
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">
+            <strong>Nessuna fattura registrata</strong>
+            <span>Usa il modulo sopra per aggiungere la prima fattura.</span>
+          </div>
+        )}
+      </article>
+
+      <article className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">ARCHIVIO MENSILE</span>
+            <h2>Pagamenti collegati</h2>
+          </div>
+          <span className="count-pill">{payments.length}</span>
+        </div>
+        {payments.length > 0 ? (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrizione</th>
+                  <th>Note</th>
+                  <th>Importo</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((expense) => (
+                  <tr key={expense.id}>
+                    <td>{expenseControlDate(expense.date)}</td>
+                    <td>{expense.description}</td>
+                    <td>{expense.notes || '—'}</td>
+                    <td>{money(expense.amount)}</td>
+                    <td>
+                      <button onClick={() => editPayment(expense)} type="button">
+                        Modifica
+                      </button>
+                      <RowDeleteButton
+                        onConfirm={() =>
+                          updateAccounting((current) => ({
+                            ...current,
+                            expenses: current.expenses.filter(
+                              (item) => item.id !== expense.id,
+                            ),
+                          }))
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">
+            <strong>Nessun pagamento collegato</strong>
+            <span>
+              Registra un pagamento qui oppure nell'Archivio mensile.
+            </span>
+          </div>
+        )}
+      </article>
+    </section>
+  )
+}
+
+function ExpensesPanel({
+  onOpenControl,
+}: {
+  onOpenControl: (kind: ExpenseControlKind) => void
+}) {
   const { state, updateAccounting } = useAppStore()
   const data = activeAccounting(state.accounting)
   const [expenseDescription, setExpenseDescription] = useState('')
@@ -2731,8 +3324,73 @@ function ExpensesPanel() {
     setAccountantAllocationSellerIds([])
   }
 
+  const rentControl = expenseControlTotals(
+    data.expenseControlInvoices,
+    data.expenses,
+    'rent',
+  )
+  const accountantControl = expenseControlTotals(
+    data.expenseControlInvoices,
+    data.expenses,
+    'accountant',
+  )
+
   return (
     <section className="expense-grid">
+      <article className="panel expense-control-overview">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">CONTROLLO RAPIDO</span>
+            <h2>Situazione Affitti e Contabile</h2>
+            <p>
+              Questi riquadri non modificano i calcoli contabili: confrontano
+              le fatture registrate con le uscite manuali già esistenti.
+            </p>
+          </div>
+        </div>
+        <div className="expense-control-card-grid">
+          {[
+            {
+              kind: 'rent' as const,
+              title: 'Affitti',
+              totals: rentControl,
+              detail: 'Pagamenti con descrizione Affitto o Affitti',
+            },
+            {
+              kind: 'accountant' as const,
+              title: 'Contabile',
+              totals: accountantControl,
+              detail: 'Pagamenti registrati come costo contabile',
+            },
+          ].map((item) => (
+            <button
+              className={`expense-control-card ${
+                item.totals.balance > 0
+                  ? 'report-green'
+                  : item.totals.balance < 0
+                    ? 'report-red'
+                    : 'report-cyan'
+              }`}
+              key={item.kind}
+              onClick={() => onOpenControl(item.kind)}
+              type="button"
+            >
+              <span>
+                <span className="eyebrow">{item.title.toLocaleUpperCase()}</span>
+                <strong>{item.totals.status}</strong>
+              </span>
+              <span className="expense-control-card-balance">
+                {money(Math.abs(item.totals.balance))}
+              </span>
+              <span className="expense-control-card-totals">
+                <small>Fatture {money(item.totals.invoiceTotal)}</small>
+                <small>Pagamenti {money(item.totals.paymentTotal)}</small>
+              </span>
+              <em>{item.detail} · Apri pagina</em>
+            </button>
+          ))}
+        </div>
+      </article>
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">USCITE</span><h2>Stipendi, tasse e altre spese</h2></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addExpense}>
@@ -2794,7 +3452,7 @@ function ExpensesPanel() {
         </form>
       </article>
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2></div></div>
+        <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2><p>Questa sezione storica continua a partecipare ai calcoli. Per il solo controllo usa il riquadro Affitti sopra.</p></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addRental}>
           <input placeholder="Immobile / locale" required value={rentalProperty} onChange={(event) => setRentalProperty(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={rentalTotal} onChange={(event) => setRentalTotal(event.target.value)} />
@@ -2828,7 +3486,7 @@ function ExpensesPanel() {
         </form>
       </article>
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">PRESTAZIONI</span><h2>Fatture del contabile</h2></div></div>
+        <div className="panel-heading"><div><span className="eyebrow">PRESTAZIONI</span><h2>Fatture del contabile</h2><p>Questa sezione storica continua a partecipare ai calcoli. Per il solo controllo usa il riquadro Contabile sopra.</p></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addAccountantInvoice}>
           <input placeholder="Descrizione" required value={accountantDescription} onChange={(event) => setAccountantDescription(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={accountantTotal} onChange={(event) => setAccountantTotal(event.target.value)} />
@@ -3094,12 +3752,19 @@ function MonthlyManualExpenseList({
       ) : (
         <div className="monthly-expense-list">
           {months.map((month) => {
+            const rentExpenses = month.expenses.filter((item) =>
+              isExpenseControlPayment(item, 'rent'),
+            )
+            const rentExpenseIds = new Set(
+              rentExpenses.map((item) => item.id),
+            )
             const categories = [
               {
                 key: 'stipendi',
                 label: 'Stipendi',
                 expenses: month.expenses.filter(
-                  (item) => item.type === 'stipendio',
+                  (item) =>
+                    item.type === 'stipendio' && !rentExpenseIds.has(item.id),
                 ),
                 rentals: [] as Rental[],
                 accountantInvoices: [] as AccountantInvoice[],
@@ -3108,7 +3773,8 @@ function MonthlyManualExpenseList({
                 key: 'tasse',
                 label: 'Tasse',
                 expenses: month.expenses.filter(
-                  (item) => item.type === 'tassa',
+                  (item) =>
+                    item.type === 'tassa' && !rentExpenseIds.has(item.id),
                 ),
                 rentals: [] as Rental[],
                 accountantInvoices: [] as AccountantInvoice[],
@@ -3116,7 +3782,7 @@ function MonthlyManualExpenseList({
               {
                 key: 'affitti',
                 label: 'Affitti',
-                expenses: [] as AccountingExpense[],
+                expenses: rentExpenses,
                 rentals: month.rentals,
                 accountantInvoices: [] as AccountantInvoice[],
               },
@@ -3124,7 +3790,8 @@ function MonthlyManualExpenseList({
                 key: 'contabile',
                 label: 'Costi contabili',
                 expenses: month.expenses.filter(
-                  (item) => item.type === 'contabile',
+                  (item) =>
+                    item.type === 'contabile' && !rentExpenseIds.has(item.id),
                 ),
                 rentals: [] as Rental[],
                 accountantInvoices: month.accountantInvoices,
@@ -3133,7 +3800,8 @@ function MonthlyManualExpenseList({
                 key: 'altre',
                 label: 'Altre spese',
                 expenses: month.expenses.filter(
-                  (item) => item.type === 'altra',
+                  (item) =>
+                    item.type === 'altra' && !rentExpenseIds.has(item.id),
                 ),
                 rentals: [] as Rental[],
                 accountantInvoices: [] as AccountantInvoice[],
