@@ -400,6 +400,9 @@ export function activeAccounting(state: AccountingState) {
       (item) => item.companyId === id,
     ),
     expenses: state.expenses.filter((item) => item.companyId === id),
+    expenseControlInvoices: state.expenseControlInvoices.filter(
+      (item) => item.companyId === id,
+    ),
     productionSettings: state.productionSettings.filter(
       (item) => item.companyId === id,
     ),

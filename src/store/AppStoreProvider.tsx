@@ -240,6 +240,9 @@ function resetActiveCompanySeason(state: AppState, companyId: string) {
       expenses: state.accounting.expenses.filter(
         (expense) => expense.companyId !== companyId,
       ),
+      expenseControlInvoices: state.accounting.expenseControlInvoices.filter(
+        (invoice) => invoice.companyId !== companyId,
+      ),
       productionSettings: state.accounting.productionSettings.map(
         (settings) =>
           settings.companyId === companyId
@@ -290,6 +293,9 @@ function clearActiveCompanyData(state: AppState, companyId: string) {
         state.accounting.accountantInvoices,
       ),
       expenses: outsideCompany(state.accounting.expenses),
+      expenseControlInvoices: outsideCompany(
+        state.accounting.expenseControlInvoices,
+      ),
       productionSettings: outsideCompany(
         state.accounting.productionSettings,
       ),

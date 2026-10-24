@@ -14,6 +14,7 @@ export type PaymentMethod =
   | 'Altro'
 export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
+export type ExpenseControlKind = 'rent' | 'accountant'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'
 export type ProductionEntryPeriod = 'day' | 'week'
 export type ProductionReportPeriod =
@@ -265,6 +266,19 @@ export interface AccountingExpense {
   settled: boolean
 }
 
+export interface ExpenseControlInvoice {
+  id: string
+  companyId: string
+  kind: ExpenseControlKind
+  number: string
+  supplierName: string
+  description: string
+  amount: number
+  date: string
+  dueDate: string
+  notes: string
+}
+
 export interface ProductionSettings {
   id: string
   companyId: string
@@ -396,6 +410,7 @@ export interface AccountingState {
   rentals: Rental[]
   accountantInvoices: AccountantInvoice[]
   expenses: AccountingExpense[]
+  expenseControlInvoices: ExpenseControlInvoice[]
   productionSettings: ProductionSettings[]
   productionEntries: ProductionEntry[]
   productionViewSettings: ProductionViewSettings[]
@@ -432,7 +447,7 @@ export interface ReviewDocument {
 }
 
 export interface AppState {
-  schemaVersion: 12
+  schemaVersion: 13
   company: Company
   stores: Store[]
   sellers: Seller[]

@@ -10,6 +10,7 @@ import type {
   AccountingSupplier,
   AccountingTaking,
   AppState,
+  ExpenseControlInvoice,
   InvoiceLine,
   InvoicePayment,
   PaymentMethod,
@@ -63,6 +64,28 @@ function paymentMethod(value: unknown): PaymentMethod | null {
 
 function records(value: unknown) {
   return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function expenseControlKind(value: unknown) {
+  return value === 'accountant' ? 'accountant' : 'rent'
+}
+
+function mapExpenseControlInvoice(
+  value: JsonRecord,
+  fallbackCompanyId: string,
+): ExpenseControlInvoice {
+  return {
+    id: text(value.id, crypto.randomUUID()),
+    companyId: text(value.companyId, fallbackCompanyId),
+    kind: expenseControlKind(value.kind),
+    number: text(value.number),
+    supplierName: text(value.supplierName),
+    description: text(value.description),
+    amount: Math.max(0, amount(value.amount)),
+    date: text(value.date),
+    dueDate: text(value.dueDate),
+    notes: text(value.notes),
+  }
 }
 
 function textList(value: unknown) {
@@ -569,6 +592,7 @@ export function parseLegacyAccountingJson(json: string): AccountingState {
     rentals: records(candidate.affitti).map(mapRental),
     accountantInvoices: records(candidate.contabile).map(mapAccountantInvoice),
     expenses: records(candidate.stipendiTasse).map(mapExpense),
+    expenseControlInvoices: [],
     productionSettings: [],
     productionEntries: [],
     productionViewSettings: [],
@@ -599,7 +623,8 @@ export function normalizeStoredState(
       value.schemaVersion === 9 ||
       value.schemaVersion === 10 ||
       value.schemaVersion === 11 ||
-      value.schemaVersion === 12) &&
+      value.schemaVersion === 12 ||
+      value.schemaVersion === 13) &&
     isRecord(value.company)
   ) {
     const state = value as unknown as AppState
@@ -820,7 +845,7 @@ export function normalizeStoredState(
     })
     return {
       ...state,
-      schemaVersion: 12,
+      schemaVersion: 13,
       stores,
       sellers,
       reviewDocuments: (state.reviewDocuments ?? []).map((document) => ({
@@ -902,6 +927,11 @@ export function normalizeStoredState(
           notes: product.notes ?? '',
         })),
         expenses,
+        expenseControlInvoices: records(
+          accounting.expenseControlInvoices,
+        ).map((invoice) =>
+          mapExpenseControlInvoice(invoice, fallbackCompanyId),
+        ),
         productionSettings,
         productionEntries: records(accounting.productionEntries).map(
           (entry) => {
@@ -1093,6 +1123,10 @@ export function importLegacyIntoState(
       accounting.accountantInvoices,
     ),
     expenses: mergeById(current.accounting.expenses, accounting.expenses),
+    expenseControlInvoices: mergeById(
+      current.accounting.expenseControlInvoices,
+      accounting.expenseControlInvoices,
+    ),
     productionSettings: mergeById(
       current.accounting.productionSettings,
       accounting.productionSettings,
@@ -1285,6 +1319,10 @@ export function importLegacyIntoActiveCompany(
       expenses: mergeById(
         current.accounting.expenses,
         companyRecords(imported.accounting.expenses),
+      ),
+      expenseControlInvoices: mergeById(
+        current.accounting.expenseControlInvoices,
+        companyRecords(imported.accounting.expenseControlInvoices),
       ),
       productionSettings: productionSettings.length
         ? [

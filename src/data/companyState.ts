@@ -45,6 +45,7 @@ export function createWorkspaceState(state: AppState): AppState {
       rentals: [],
       accountantInvoices: [],
       expenses: [],
+      expenseControlInvoices: [],
       productionSettings: [],
       productionEntries: [],
       productionViewSettings: [],
@@ -110,6 +111,9 @@ export function createCompanyState(
       ),
       expenses: state.accounting.expenses.filter(
         (expense) => expense.companyId === companyId,
+      ),
+      expenseControlInvoices: state.accounting.expenseControlInvoices.filter(
+        (invoice) => invoice.companyId === companyId,
       ),
       productionSettings: state.accounting.productionSettings.filter(
         (settings) => settings.companyId === companyId,
@@ -200,6 +204,9 @@ export function mergeCompanyStates(
         (state) => state.accounting.accountantInvoices,
       ),
       expenses: companyItems((state) => state.accounting.expenses),
+      expenseControlInvoices: companyItems(
+        (state) => state.accounting.expenseControlInvoices,
+      ),
       productionSettings: companyItems(
         (state) => state.accounting.productionSettings,
       ),
