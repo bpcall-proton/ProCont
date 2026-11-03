@@ -402,6 +402,7 @@ function mapAccountantInvoice(value: JsonRecord): AccountantInvoice {
 
 function mapExpense(value: JsonRecord): AccountingExpense {
   const type =
+    value.tipo === 'affitto' ||
     value.tipo === 'stipendio' ||
     value.tipo === 'contabile' ||
     value.tipo === 'altra'

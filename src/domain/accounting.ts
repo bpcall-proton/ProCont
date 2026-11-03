@@ -267,7 +267,10 @@ export function allocatedExpense(
   rangeStart: string,
   rangeEnd: string,
 ) {
-  if (expense.recurrence !== 'monthly') {
+  if (
+    expense.recurrence !== 'monthly' ||
+    isActualPaymentExpense(expense)
+  ) {
     return expense.date >= rangeStart && expense.date <= rangeEnd
       ? expense.amount
       : 0
@@ -358,7 +361,10 @@ export function expenseForMaturedDates(
   rangeEnd: string,
   maturedDates: Set<string>,
 ) {
-  if (expense.recurrence !== 'monthly') {
+  if (
+    expense.recurrence !== 'monthly' ||
+    isActualPaymentExpense(expense)
+  ) {
     return expense.date >= rangeStart && expense.date <= rangeEnd
       ? expense.amount
       : 0
@@ -380,6 +386,21 @@ export function expenseForMaturedDates(
       return sum + expense.amount / daysInMonth
     }, 0),
   )
+}
+
+export function isActualPaymentExpense(expense: AccountingExpense) {
+  if (expense.type === 'stipendio' || expense.type === 'affitto') {
+    return true
+  }
+  const normalizedDescription = expense.description
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+  return normalizedDescription
+    .split(' ')
+    .some((word) => word === 'affitto' || word === 'affitti')
 }
 
 export function activeAccounting(state: AccountingState) {

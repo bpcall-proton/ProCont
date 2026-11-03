@@ -12,7 +12,12 @@ export type PaymentMethod =
   | 'Carta'
   | 'Assegno'
   | 'Altro'
-export type ExpenseType = 'tassa' | 'stipendio' | 'contabile' | 'altra'
+export type ExpenseType =
+  | 'affitto'
+  | 'tassa'
+  | 'stipendio'
+  | 'contabile'
+  | 'altra'
 export type ExpenseRecurrence = 'once' | 'monthly'
 export type ExpenseControlKind = 'rent' | 'accountant'
 export type ProductPricingMode = 'sale-price' | 'markup' | 'manual'

@@ -2531,7 +2531,10 @@ function isExpenseControlPayment(
       )
     )
   }
-  return isRentPaymentDescription(expense.description)
+  return (
+    expense.type === 'affitto' ||
+    isRentPaymentDescription(expense.description)
+  )
 }
 
 function expenseControlTotals(
@@ -2707,7 +2710,7 @@ function ExpenseControlPage({
               expense.id === editingPaymentId
                 ? {
                     ...expense,
-                    type: kind === 'accountant' ? 'contabile' : expense.type,
+                    type: kind === 'accountant' ? 'contabile' : 'affitto',
                     description,
                     amount,
                     date: paymentDate,
@@ -2724,7 +2727,7 @@ function ExpenseControlPage({
                 companyId,
                 allocationSellerIds: [],
                 attachmentImages: [],
-                type: kind === 'accountant' ? 'contabile' : 'altra',
+                type: kind === 'accountant' ? 'contabile' : 'affitto',
                 description,
                 sellerId: null,
                 sellerName: '',
@@ -3125,6 +3128,25 @@ function ExpensesPanel({
     accountantAllocationSellerIds,
     setAccountantAllocationSellerIds,
   ] = useState<string[]>([])
+  const isDirectPaymentType =
+    expenseType === 'affitto' || expenseType === 'stipendio'
+
+  function changeExpenseType(type: AccountingExpense['type']) {
+    setExpenseType(type)
+    setExpenseDescription((current) => {
+      const isPreset =
+        current === 'Affitti' || current === 'Stipendi'
+      if (type === 'affitto') return !current || isPreset ? 'Affitti' : current
+      if (type === 'stipendio') {
+        return !current || isPreset ? 'Stipendi' : current
+      }
+      return isPreset ? '' : current
+    })
+    if (type === 'affitto' || type === 'stipendio') {
+      setExpenseRecurrence('once')
+      setExpenseEndDate('')
+    }
+  }
 
   function addExpense(event: FormEvent) {
     event.preventDefault()
@@ -3150,11 +3172,16 @@ function ExpensesPanel({
                       expenseType === 'stipendio' ? seller?.name ?? '' : '',
                     amount: numberValue(expenseAmount),
                     date: expenseDate,
-                    recurrence: expenseRecurrence,
-                    recurrenceEndDate: expenseEndDate || null,
+                    recurrence: isDirectPaymentType
+                      ? 'once'
+                      : expenseRecurrence,
+                    recurrenceEndDate: isDirectPaymentType
+                      ? null
+                      : expenseEndDate || null,
                     notes: expenseNotes.trim(),
-                    settled:
-                      expenseType === 'stipendio' ? true : expense.settled,
+                    settled: isDirectPaymentType
+                      ? true
+                      : expense.settled,
                   }
                 : expense,
             )
@@ -3175,10 +3202,14 @@ function ExpensesPanel({
                   expenseType === 'stipendio' ? seller?.name ?? '' : '',
                 amount: numberValue(expenseAmount),
                 date: expenseDate,
-                recurrence: expenseRecurrence,
-                recurrenceEndDate: expenseEndDate || null,
+                recurrence: isDirectPaymentType
+                  ? 'once'
+                  : expenseRecurrence,
+                recurrenceEndDate: isDirectPaymentType
+                  ? null
+                  : expenseEndDate || null,
                 notes: expenseNotes.trim(),
-                settled: expenseType === 'stipendio',
+                settled: isDirectPaymentType,
               },
               ...current.expenses,
             ],
@@ -3353,8 +3384,8 @@ function ExpensesPanel({
             <span className="eyebrow">CONTROLLO RAPIDO</span>
             <h2>Situazione Affitti e Contabile</h2>
             <p>
-              Questi riquadri non modificano i calcoli contabili: confrontano
-              le fatture registrate con le uscite manuali già esistenti.
+              Le fatture servono al controllo rapido; i pagamenti sono uscite
+              manuali e partecipano ai Costi complessivi.
             </p>
           </div>
         </div>
@@ -3402,9 +3433,22 @@ function ExpensesPanel({
         </div>
       </article>
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">USCITE</span><h2>Stipendi, tasse e altre spese</h2></div></div>
+        <div className="panel-heading"><div><span className="eyebrow">USCITE</span><h2>Affitti, stipendi, tasse e altre spese</h2></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addExpense}>
-          <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as AccountingExpense['type'])}><option value="tassa">Tassa</option><option value="stipendio">Stipendio</option><option value="contabile">Costo contabile</option><option value="altra">Altra spesa</option></select>
+          <select
+            value={expenseType}
+            onChange={(event) =>
+              changeExpenseType(
+                event.target.value as AccountingExpense['type'],
+              )
+            }
+          >
+            <option value="affitto">Affitti</option>
+            <option value="stipendio">Stipendi</option>
+            <option value="tassa">Tassa</option>
+            <option value="contabile">Costo contabile</option>
+            <option value="altra">Altra spesa</option>
+          </select>
           {expenseType === 'stipendio' && (
             <select required value={expenseSellerId} onChange={(event) => setExpenseSellerId(event.target.value)}>
               <option value="">Dipendente / venditrice</option>
@@ -3425,16 +3469,18 @@ function ExpensesPanel({
             onUpload={uploadExpenseAttachments}
           />
           <label>
-            {expenseType === 'stipendio'
+            {isDirectPaymentType
               ? 'Data pagamento effettivo'
               : 'Data spesa o inizio ricorrenza'}
-            <input aria-label={expenseType === 'stipendio' ? 'Data pagamento effettivo' : 'Data spesa o inizio ricorrenza'} type="date" required value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+            <input aria-label={isDirectPaymentType ? 'Data pagamento effettivo' : 'Data spesa o inizio ricorrenza'} type="date" required value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
           </label>
-          <select value={expenseRecurrence} onChange={(event) => setExpenseRecurrence(event.target.value as AccountingExpense['recurrence'])}>
-            <option value="once">Spesa singola</option>
-            <option value="monthly">Spesa fissa mensile</option>
-          </select>
-          {expenseRecurrence === 'monthly' && (
+          {!isDirectPaymentType && (
+            <select value={expenseRecurrence} onChange={(event) => setExpenseRecurrence(event.target.value as AccountingExpense['recurrence'])}>
+              <option value="once">Spesa singola</option>
+              <option value="monthly">Spesa fissa mensile</option>
+            </select>
+          )}
+          {!isDirectPaymentType && expenseRecurrence === 'monthly' && (
             <label>Fine ricorrenza (facoltativa)<input type="date" min={expenseDate} value={expenseEndDate} onChange={(event) => setExpenseEndDate(event.target.value)} /></label>
           )}
           {expenseType !== 'stipendio' && (
@@ -3462,7 +3508,7 @@ function ExpensesPanel({
         </form>
       </article>
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2><p>Questa sezione storica continua a partecipare ai calcoli. Per il solo controllo usa il riquadro Affitti sopra.</p></div></div>
+        <div className="panel-heading"><div><span className="eyebrow">CANONI</span><h2>Gestione affitti</h2><p>Questa sezione conserva fatture e IVA degli affitti, ma non entra nei Costi complessivi. Il pagamento effettivo va registrato in Uscite → Affitti.</p></div></div>
         <form className="inline-create-form vertical-form" onSubmit={addRental}>
           <input placeholder="Immobile / locale" required value={rentalProperty} onChange={(event) => setRentalProperty(event.target.value)} />
           <input inputMode="decimal" placeholder="Totale IVA inclusa" required value={rentalTotal} onChange={(event) => setRentalTotal(event.target.value)} />
@@ -3927,7 +3973,7 @@ function ExpenseList({
   onEdit: (item: AccountingExpense) => void
   onUpdate: (items: AccountingExpense[]) => void
 }) {
-  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small>{item.notes && <small>Nota: {item.notes}</small>}<AttachmentGallery images={item.attachmentImages} /></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button>{item.type === 'stipendio' ? <small>Corrisposto</small> : <button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button>}<RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
+  return <div className="record-list">{items.map((item) => <div className="record-card allocation-record-card" key={item.id}><span><strong>{item.description}</strong><small>{item.type} · {item.date}{item.sellerName ? ` · ${item.sellerName}` : ''}{item.recurrence === 'monthly' ? ` · mensile${item.recurrenceEndDate ? ` fino al ${item.recurrenceEndDate}` : ''}` : ''}</small>{item.notes && <small>Nota: {item.notes}</small>}<AttachmentGallery images={item.attachmentImages} /></span>{item.type !== 'stipendio' && <SellerAllocationFields compact selectedSellerIds={item.allocationSellerIds} sellers={sellers} onChange={(allocationSellerIds) => onUpdate(items.map((current) => current.id === item.id ? { ...current, allocationSellerIds } : current))} />}<span><strong>{money(item.amount)}{item.recurrence === 'monthly' ? '/mese' : ''}</strong><button type="button" onClick={() => onEdit(item)}>Modifica</button>{item.type === 'stipendio' || item.type === 'affitto' ? <small>Corrisposto</small> : <button type="button" onClick={() => onUpdate(items.map((current) => current.id === item.id ? { ...current, settled: !current.settled } : current))}>{item.settled ? 'Pagata' : 'Da pagare'}</button>}<RowDeleteButton onConfirm={() => onUpdate(items.filter((current) => current.id !== item.id))} /></span></div>)}</div>
 }
 
 function SettlementList({
