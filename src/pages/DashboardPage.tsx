@@ -5,10 +5,10 @@ import {
   activeAccounting,
   bestContactNameMatch,
   expenseForMaturedDates,
+  isActualPaymentExpense,
   money,
   monthlyCostsForMaturedDates,
   officialTaking,
-  productionSalaryCostsForPeriod,
   realTaking,
   roundMoney,
   today,
@@ -239,11 +239,6 @@ export function DashboardPage() {
     economicRangeStart,
     economicRangeEnd,
   )
-  const annualRentalCosts = monthlyCostsForMaturedDates(
-    accounting.rentals,
-    annualMaturedDates,
-    (rental) => rental.property.trim().toLocaleLowerCase() || rental.id,
-  )
   const annualAccountantCosts = monthlyCostsForMaturedDates(
     accounting.accountantInvoices,
     annualMaturedDates,
@@ -261,11 +256,6 @@ export function DashboardPage() {
       ),
     }))
     .filter(({ amount }) => amount !== 0)
-  const annualProductionSalaryCosts = productionSalaryCostsForPeriod(
-    accounting,
-    economicRangeStart,
-    economicRangeEnd,
-  )
   const annualReal = roundMoney(
     annualTakings.reduce((sum, taking) => sum + realTaking(taking), 0),
   )
@@ -331,13 +321,8 @@ export function DashboardPage() {
     ),
   )
   const annualFixedCosts = roundMoney(
-    annualRentalCosts.reduce((sum, cost) => sum + cost.amount, 0) +
-      annualAccountantCosts.reduce((sum, cost) => sum + cost.amount, 0) +
-      annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0) +
-      annualProductionSalaryCosts.reduce(
-        (sum, cost) => sum + cost.amount,
-        0,
-      ),
+    annualAccountantCosts.reduce((sum, cost) => sum + cost.amount, 0) +
+      annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0),
   )
   const economicTotalCosts = roundMoney(
     annualPurchaseCosts + annualFixedCosts,
@@ -697,14 +682,6 @@ export function DashboardPage() {
   const economicStockRealRows = realRows
     .filter((row) => row.date <= economicRangeEnd)
     .map((row) => ({ ...row, amount: -row.amount }))
-  const economicRentalRows: DashboardDetailRow[] =
-    annualRentalCosts.map(({ item, amount }) => ({
-      date: economicRangeEnd,
-      category: 'Affitto maturato',
-      description: item.property || item.tenant || 'Affitto',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
-      amount,
-    }))
   const economicAccountantRows: DashboardDetailRow[] =
     annualAccountantCosts.map(({ item, amount }) => ({
       date: economicRangeEnd,
@@ -716,40 +693,30 @@ export function DashboardPage() {
   const economicExpenseRows: DashboardDetailRow[] =
     annualExpenseCosts.map(({ expense, amount }) => ({
       date:
-        expense.recurrence === 'monthly'
+        expense.recurrence === 'monthly' &&
+        !isActualPaymentExpense(expense)
           ? economicRangeEnd
           : expense.date,
-      category: 'Spesa del periodo',
+      category:
+        expense.type !== 'stipendio' &&
+        isActualPaymentExpense(expense)
+          ? 'Affitto registrato'
+          : expense.type === 'stipendio'
+            ? 'Stipendio registrato'
+            : 'Spesa del periodo',
       description: expense.description || expense.type,
       reference:
-        expense.recurrence === 'monthly'
+        expense.recurrence === 'monthly' &&
+        !isActualPaymentExpense(expense)
           ? `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(expense.date)}`
-          : expense.notes || 'Spesa effettiva',
+          : expense.notes || 'Uscita effettivamente registrata',
       amount,
     }))
-  const economicProductionSalaryRows: DashboardDetailRow[] =
-    annualProductionSalaryCosts.map((cost) => {
-      const seller = accounting.sellers.find(
-        (item) => item.id === cost.sellerId,
-      )
-      return {
-        date: cost.date,
-        category: 'Stipendio produzione',
-        description: seller?.name ?? 'Lavoratrice non disponibile',
-        reference:
-          cost.payMode === 'hourly'
-            ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
-            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}`,
-        amount: cost.amount,
-      }
-    })
   const economicCostRows = [
     ...economicInvoiceRows,
     ...economicUnregisteredGoodsRows,
-    ...economicRentalRows,
     ...economicAccountantRows,
     ...economicExpenseRows,
-    ...economicProductionSalaryRows,
   ]
   const negativeEconomicCostRows = economicCostRows.map((row) => ({
     ...row,
@@ -772,13 +739,6 @@ export function DashboardPage() {
       reference: `Fattura ${invoice.number || 'senza numero'} · include merce senza fattura`,
       amount: -(invoice.total + invoice.unregisteredGoods),
     })),
-    ...annualRentalCosts.map(({ item, amount }) => ({
-      date: economicRangeEnd,
-      category: 'Affitto maturato',
-      description: item.property || item.tenant || 'Affitto',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
-      amount: -amount,
-    })),
     ...annualAccountantCosts.map(({ item, amount }) => ({
       date: economicRangeEnd,
       category: 'Contabile maturato',
@@ -788,32 +748,25 @@ export function DashboardPage() {
     })),
     ...annualExpenseCosts.map(({ expense, amount }) => ({
       date:
-        expense.recurrence === 'monthly'
+        expense.recurrence === 'monthly' &&
+        !isActualPaymentExpense(expense)
           ? economicRangeEnd
           : expense.date,
-      category: 'Spesa del periodo',
+      category:
+        expense.type !== 'stipendio' &&
+        isActualPaymentExpense(expense)
+          ? 'Affitto registrato'
+          : expense.type === 'stipendio'
+            ? 'Stipendio registrato'
+            : 'Spesa del periodo',
       description: expense.description || expense.type,
       reference:
-        expense.recurrence === 'monthly'
+        expense.recurrence === 'monthly' &&
+        !isActualPaymentExpense(expense)
           ? `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(expense.date)}`
-          : expense.notes || 'Spesa effettiva',
+          : expense.notes || 'Uscita effettivamente registrata',
       amount: -amount,
     })),
-    ...annualProductionSalaryCosts.map((cost) => {
-      const seller = accounting.sellers.find(
-        (item) => item.id === cost.sellerId,
-      )
-      return {
-        date: cost.date,
-        category: 'Stipendio produzione',
-        description: seller?.name ?? 'Lavoratrice non disponibile',
-        reference:
-          cost.payMode === 'hourly'
-            ? `${cost.quantity.toLocaleString('it-IT')} ore × ${money(cost.rate)}`
-            : `${cost.quantity.toLocaleString('it-IT')} pezzi × ${money(cost.rate)}`,
-        amount: -cost.amount,
-      }
-    }),
     ...(annualStock > 0
       ? [
           {
@@ -968,21 +921,21 @@ export function DashboardPage() {
     costs: {
       title: `Costi complessivi · ${economicPeriodLabel}`,
       note:
-        'Fatture e costi maturati nel periodo selezionato.',
+        'Fatture, costi contabili maturati e uscite effettivamente registrate nel periodo.',
       value: economicTotalCosts,
       tone: 'amber',
       rows: economicCostRows,
     },
     'real-result': {
       title: `Risultato reale · ${economicPeriodLabel}`,
-      note: 'Incasso reale meno i costi maturati nel periodo.',
+      note: 'Incasso reale meno gli stessi Costi complessivi del periodo.',
       value: annualRealBalance,
       tone: annualRealBalance >= 0 ? 'green' : 'red',
       rows: [...economicRealRows, ...negativeEconomicCostRows],
     },
     'annual-real-balance': {
       title: `Bilancio reale · ${economicPeriodLabel}`,
-      note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − spese maturate sui giorni trascorsi. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
+      note: `${annualBalanceStatus}. Bilancio attuale = incasso reale − acquisti − contabile maturato − uscite registrate. Bilancio potenziale vendendo tutto lo stock = ${money(annualPotentialBalance)}. Cash, POS e quote statistiche sono esclusi.`,
       value: annualRealBalance,
       tone: annualBalanceTone,
       rows: annualBalanceRows,
@@ -1088,26 +1041,12 @@ export function DashboardPage() {
     sellerResultStart,
     sellerResultEnd,
   )
-  const sellerResultRentalCosts = monthlyCostsForMaturedDates(
-    accounting.rentals,
-    sellerResultMaturedDates,
-    (rental) => rental.property.trim().toLocaleLowerCase() || rental.id,
-  )
   const sellerResultAccountantCosts = monthlyCostsForMaturedDates(
     accounting.accountantInvoices,
     sellerResultMaturedDates,
     (invoice) => invoice.description.trim().toLocaleLowerCase() || invoice.id,
   )
-  const sellerResultProductionSalaryCosts =
-    productionSalaryCostsForPeriod(
-      accounting,
-      sellerResultStart,
-      sellerResultEnd,
-    )
   const allSellerIds = accounting.sellers.map((seller) => seller.id)
-  const productionSalarySellerIds = accounting.sellers
-    .filter((seller) => seller.pointOfSaleSeller)
-    .map((seller) => seller.id)
   const allocationTargets = (item: { allocationSellerIds: string[] }) => {
     const validSellerIds = item.allocationSellerIds.filter((sellerId) =>
       knownSellerIds.has(sellerId),
@@ -1125,22 +1064,6 @@ export function DashboardPage() {
     return sellerIds.includes(sellerId) && sellerIds.length > 0
       ? roundMoney(value / sellerIds.length)
       : 0
-  }
-  const allocatedProductionSalaryCost = (
-    value: number,
-    sellerId: string,
-  ) => {
-    const sellerIndex = productionSalarySellerIds.indexOf(sellerId)
-    if (sellerIndex < 0) return 0
-    const equalShare = roundMoney(
-      value / productionSalarySellerIds.length,
-    )
-    return sellerIndex === productionSalarySellerIds.length - 1
-      ? roundMoney(
-          value -
-            equalShare * (productionSalarySellerIds.length - 1),
-        )
-      : equalShare
   }
   const productionCostRecipients = accounting.sellers.filter(
     (seller) => seller.productionCostRecipient,
@@ -1335,11 +1258,6 @@ export function DashboardPage() {
       statisticalTransferCostAllocations
         .filter((allocation) => allocation.fromSellerId === sellerId)
         .reduce((sum, allocation) => sum + allocation.cost, 0)
-    const rent = sellerResultRentalCosts.reduce(
-      (sum, cost) =>
-        sum + allocatedSellerCost(cost.amount, cost.item, sellerId),
-      0,
-    )
     const accountant = sellerResultAccountantCosts.reduce(
       (sum, cost) =>
         sum + allocatedSellerCost(cost.amount, cost.item, sellerId),
@@ -1364,11 +1282,6 @@ export function DashboardPage() {
       }
       return sum + allocatedSellerCost(amount, expense, sellerId)
     }, 0)
-    const productionSalary = sellerResultProductionSalaryCosts.reduce(
-      (sum, cost) =>
-        sum + allocatedProductionSalaryCost(cost.amount, sellerId),
-      0,
-    )
     const goodsCost = roundMoney(
       directInvoiceCost +
         unregisteredGoods +
@@ -1377,7 +1290,7 @@ export function DashboardPage() {
         transferCost,
     )
     const fixedCosts = roundMoney(
-      rent + accountant + expenses + productionSalary,
+      accountant + expenses,
     )
     const value = roundMoney(real - goodsCost - fixedCosts)
     const rows: DashboardDetailRow[] = [
@@ -1411,13 +1324,6 @@ export function DashboardPage() {
       },
       {
         date: sellerResultEnd,
-        category: 'Affitti maturati',
-        description: 'Quota personale',
-        reference: `${sellerResultMaturedDates.size} giorni maturati`,
-        amount: -rent,
-      },
-      {
-        date: sellerResultEnd,
         category: 'Contabile maturato',
         description: 'Quota personale',
         reference: `${sellerResultMaturedDates.size} giorni maturati`,
@@ -1425,17 +1331,10 @@ export function DashboardPage() {
       },
       {
         date: sellerResultEnd,
-        category: 'Tasse, spese e stipendi',
-        description: 'Quota personale maturata',
-        reference: `${sellerResultMaturedDates.size} giorni maturati`,
+        category: 'Uscite e altre spese',
+        description: 'Quota personale del periodo',
+        reference: 'Pagamenti registrati e spese attribuite',
         amount: -expenses,
-      },
-      {
-        date: sellerResultEnd,
-        category: 'Stipendi produzione',
-        description: 'Quota ripartita tra le venditrici',
-        reference: `${productionSalarySellerIds.length} venditrici punto vendita`,
-        amount: -productionSalary,
       },
     ].filter((row) => row.amount !== 0)
     return { value, rows }
@@ -2285,7 +2184,7 @@ export function DashboardPage() {
             },
             'real-result': {
               title: `Risultato reale · ${selectedSeller.name}`,
-              note: `Incasso reale del mese meno costo merce, quote PRODUCT, costo Venit trasferito e spese maturate fino al giorno selezionato.`,
+              note: `Incasso reale del mese meno costo merce, quote PRODUCT, costo Venit trasferito e uscite attribuite al periodo.`,
               value: selectedSeller.realResult,
               tone: selectedSeller.realResult >= 0 ? 'green' : 'red',
               rows: selectedSeller.realResultRows,
@@ -2859,7 +2758,7 @@ export function DashboardPage() {
           value={money(annualStock)}
         />
         <StatCard
-          detail="Fatture e spese maturate nel periodo"
+          detail="Fatture e uscite registrate nel periodo"
           label="Costi complessivi"
           onClick={() => setDetail('costs')}
           tone="amber"
@@ -3270,7 +3169,7 @@ export function DashboardPage() {
                   >
                     <span>Risultato reale</span>
                     <strong>{money(seller.realResult)}</strong>
-                    <em>Costi maturati del mese</em>
+                    <em>Costi e uscite del mese</em>
                   </button>
                   <button
                     className="seller-cash-metric seller-cash-withdrawn seller-final-cash"

@@ -1613,6 +1613,7 @@ export function ReportsPage() {
       .map(({ item, allocated }) => ({
         date: item.date,
         category: {
+          affitto: 'Affitto',
           stipendio: 'Stipendio',
           tassa: 'Tassa',
           contabile: 'Contabile',
@@ -2575,6 +2576,7 @@ export function ReportsPage() {
           return {
             date: item.date,
             category: {
+              affitto: 'Quota affitto',
               stipendio: 'Stipendio corrisposto',
               tassa: 'Quota tassa',
               contabile: 'Quota contabile',
