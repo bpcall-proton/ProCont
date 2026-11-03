@@ -1001,6 +1001,25 @@ select {
   font-weight: 800;
 }
 
+.dashboard-year-basis {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.dashboard-year-basis > div {
+  display: flex;
+  gap: 6px;
+}
+
+.dashboard-year-basis .button {
+  min-height: 38px;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
 .dashboard-economic-summary-grid {
   grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: 10px;
