@@ -107,6 +107,13 @@ function monthEnd(month: string) {
   return new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
 }
 
+function fiscalYearStart(date: string) {
+  const year = Number(date.slice(0, 4))
+  const month = Number(date.slice(5, 7))
+  if (!year || !month) return ''
+  return String(month >= 9 ? year : year - 1)
+}
+
 export function DashboardPage() {
   const { state } = useAppStore()
   const [detail, setDetail] = useState<DashboardMetricKey | null>(null)
@@ -139,6 +146,7 @@ export function DashboardPage() {
     mode: 'year',
     month: currentMonth,
     year: currentYear,
+    yearBasis: 'calendar',
   }
   const [economicFilters, setEconomicFilters] = useStoredFilters(
     `dashboard-economic-filters:${companyId ?? 'none'}`,
@@ -151,6 +159,10 @@ export function DashboardPage() {
   const economicYear = /^\d{4}$/.test(economicFilters.year)
     ? economicFilters.year
     : currentYear
+  const economicYearBasis =
+    economicFilters.yearBasis === 'fiscal' ? 'fiscal' : 'calendar'
+  const currentFiscalYear = fiscalYearStart(currentDate)
+  const fiscalEndYear = String(Number(economicYear) + 1)
   const cashWithdrawalFilterDefaults = {
     startDate: currentDate,
     endDate: currentDate,
@@ -166,11 +178,15 @@ export function DashboardPage() {
   const economicRangeStart =
     economicMode === 'month'
       ? `${economicMonth}-01`
-      : `${economicYear}-01-01`
+      : economicYearBasis === 'fiscal'
+        ? `${economicYear}-09-01`
+        : `${economicYear}-01-01`
   const unboundedEconomicRangeEnd =
     economicMode === 'month'
       ? monthEnd(economicMonth)
-      : `${economicYear}-12-31`
+      : economicYearBasis === 'fiscal'
+        ? `${fiscalEndYear}-08-31`
+        : `${economicYear}-12-31`
   const economicRangeEnd =
     unboundedEconomicRangeEnd > currentDate
       ? currentDate
@@ -184,21 +200,38 @@ export function DashboardPage() {
           year: 'numeric',
           timeZone: 'UTC',
         }).format(new Date(`${economicRangeStart}T00:00:00Z`))
-      : `anno ${economicYear} maturato`
-  const economicYears = [
+      : economicYearBasis === 'fiscal'
+        ? `anno fiscale ${economicYear}/${fiscalEndYear} maturato`
+        : `anno solare ${economicYear} maturato`
+  const economicDates = [
+    ...accounting.invoices.map((invoice) => invoice.date),
+    ...accounting.takings.map((taking) => taking.date),
+    ...accounting.rentals.map((rental) => rental.date),
+    ...accounting.accountantInvoices.map((invoice) => invoice.date),
+    ...accounting.expenses.map((expense) => expense.date),
+  ]
+  const economicCalendarYears = [
     ...new Set([
       currentYear,
-      ...accounting.invoices.map((invoice) => invoice.date.slice(0, 4)),
-      ...accounting.takings.map((taking) => taking.date.slice(0, 4)),
-      ...accounting.rentals.map((rental) => rental.date.slice(0, 4)),
-      ...accounting.accountantInvoices.map((invoice) =>
-        invoice.date.slice(0, 4),
-      ),
-      ...accounting.expenses.map((expense) => expense.date.slice(0, 4)),
+      economicYear,
+      ...economicDates.map((date) => date.slice(0, 4)),
     ]),
   ]
     .filter((year) => /^\d{4}$/.test(year))
     .sort((left, right) => right.localeCompare(left))
+  const economicFiscalYears = [
+    ...new Set([
+      currentFiscalYear,
+      economicYear,
+      ...economicDates.map(fiscalYearStart),
+    ]),
+  ]
+    .filter((year) => /^\d{4}$/.test(year))
+    .sort((left, right) => right.localeCompare(left))
+  const economicYears =
+    economicYearBasis === 'fiscal'
+      ? economicFiscalYears
+      : economicCalendarYears
   const stores = state.stores.filter(
     (store) =>
       store.companyId === companyId &&
@@ -2598,24 +2631,74 @@ export function DashboardPage() {
                 />
               </label>
             ) : (
-              <label>
-                Anno
-                <select
-                  onChange={(event) =>
-                    setEconomicFilters((current) => ({
-                      ...current,
-                      year: event.target.value,
-                    }))
-                  }
-                  value={economicYear}
+              <>
+                <div
+                  aria-label="Tipo di anno"
+                  className="dashboard-year-basis"
+                  role="group"
                 >
-                  {economicYears.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <span>Tipo anno</span>
+                  <div>
+                    {[
+                      { value: 'calendar', label: 'Solare' },
+                      { value: 'fiscal', label: 'Fiscale set–ago' },
+                    ].map((basis) => (
+                      <button
+                        className={`button ${
+                          economicYearBasis === basis.value
+                            ? 'button-primary'
+                            : 'button-secondary'
+                        }`}
+                        key={basis.value}
+                        onClick={() =>
+                          setEconomicFilters((current) => {
+                            const nextYear =
+                              basis.value === 'fiscal' &&
+                              economicYearBasis === 'calendar' &&
+                              economicYear === currentYear
+                                ? currentFiscalYear
+                                : basis.value === 'calendar' &&
+                                    economicYearBasis === 'fiscal' &&
+                                    economicYear === currentFiscalYear
+                                  ? currentYear
+                                  : current.year
+                            return {
+                              ...current,
+                              year: nextYear,
+                              yearBasis: basis.value,
+                            }
+                          })
+                        }
+                        type="button"
+                      >
+                        {basis.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label>
+                  {economicYearBasis === 'fiscal'
+                    ? 'Anno fiscale'
+                    : 'Anno'}
+                  <select
+                    onChange={(event) =>
+                      setEconomicFilters((current) => ({
+                        ...current,
+                        year: event.target.value,
+                      }))
+                    }
+                    value={economicYear}
+                  >
+                    {economicYears.map((year) => (
+                      <option key={year} value={year}>
+                        {economicYearBasis === 'fiscal'
+                          ? `${year}/${Number(year) + 1}`
+                          : year}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
             )}
           </div>
         </div>
