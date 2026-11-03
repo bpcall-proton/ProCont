@@ -339,8 +339,11 @@ export function DashboardPage() {
         0,
       ),
   )
+  const economicTotalCosts = roundMoney(
+    annualPurchaseCosts + annualFixedCosts,
+  )
   const annualRealBalance = roundMoney(
-    annualReal - annualPurchaseCosts - annualFixedCosts,
+    annualReal - economicTotalCosts,
   )
   const annualPotentialBalance = roundMoney(
     annualRealBalance + annualStock,
@@ -463,9 +466,6 @@ export function DashboardPage() {
   )
   const economicCashResidual = roundMoney(
     Math.max(0, economicRawCashResidual),
-  )
-  const economicTotalCosts = roundMoney(
-    annualPurchaseCosts + annualFixedCosts,
   )
   const invoiceRows: DashboardDetailRow[] = accounting.invoices.map(
     (invoice) => ({
@@ -699,28 +699,31 @@ export function DashboardPage() {
     .map((row) => ({ ...row, amount: -row.amount }))
   const economicRentalRows: DashboardDetailRow[] =
     annualRentalCosts.map(({ item, amount }) => ({
-      date: item.date,
+      date: economicRangeEnd,
       category: 'Affitto maturato',
       description: item.property || item.tenant || 'Affitto',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
       amount,
     }))
   const economicAccountantRows: DashboardDetailRow[] =
     annualAccountantCosts.map(({ item, amount }) => ({
-      date: item.date,
+      date: economicRangeEnd,
       category: 'Contabile maturato',
       description: item.description || 'Fattura contabile',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
       amount,
     }))
   const economicExpenseRows: DashboardDetailRow[] =
     annualExpenseCosts.map(({ expense, amount }) => ({
-      date: expense.date,
+      date:
+        expense.recurrence === 'monthly'
+          ? economicRangeEnd
+          : expense.date,
       category: 'Spesa del periodo',
       description: expense.description || expense.type,
       reference:
         expense.recurrence === 'monthly'
-          ? `Quota su ${annualMaturedDates.size} giorni maturati`
+          ? `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(expense.date)}`
           : expense.notes || 'Spesa effettiva',
       amount,
     }))
@@ -770,26 +773,29 @@ export function DashboardPage() {
       amount: -(invoice.total + invoice.unregisteredGoods),
     })),
     ...annualRentalCosts.map(({ item, amount }) => ({
-      date: item.date,
+      date: economicRangeEnd,
       category: 'Affitto maturato',
       description: item.property || item.tenant || 'Affitto',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
       amount: -amount,
     })),
     ...annualAccountantCosts.map(({ item, amount }) => ({
-      date: item.date,
+      date: economicRangeEnd,
       category: 'Contabile maturato',
       description: item.description || 'Fattura contabile',
-      reference: `Quota su ${annualMaturedDates.size} giorni maturati`,
+      reference: `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(item.date)}`,
       amount: -amount,
     })),
     ...annualExpenseCosts.map(({ expense, amount }) => ({
-      date: expense.date,
+      date:
+        expense.recurrence === 'monthly'
+          ? economicRangeEnd
+          : expense.date,
       category: 'Spesa del periodo',
       description: expense.description || expense.type,
       reference:
         expense.recurrence === 'monthly'
-          ? `Quota su ${annualMaturedDates.size} giorni maturati`
+          ? `Quota su ${annualMaturedDates.size} giorni maturati · registrata il ${formatDashboardDate(expense.date)}`
           : expense.notes || 'Spesa effettiva',
       amount: -amount,
     })),
