@@ -35,6 +35,7 @@ type DashboardMetricKey =
   | 'stock'
   | 'costs'
   | 'real-result'
+  | 'registered-result'
   | 'annual-real-balance'
 
 type SellerMetricKey =
@@ -475,6 +476,9 @@ export function DashboardPage() {
       (sum, taking) => sum + officialTaking(taking),
       0,
     ),
+  )
+  const registeredOperatingBalance = roundMoney(
+    economicOfficial - economicTotalCosts,
   )
   const economicRawCashResidual = roundMoney(
     annualReal -
@@ -960,11 +964,19 @@ export function DashboardPage() {
       rows: economicCostRows,
     },
     'real-result': {
-      title: `Risultato reale · ${economicPeriodLabel}`,
+      title: `Risultato operativo reale · ${economicPeriodLabel}`,
       note: 'Incasso reale meno gli stessi Costi complessivi del periodo.',
       value: annualRealBalance,
       tone: annualRealBalance >= 0 ? 'green' : 'red',
       rows: [...economicRealRows, ...negativeEconomicCostRows],
+    },
+    'registered-result': {
+      title: `Risultato operativo registrato · ${economicPeriodLabel}`,
+      note:
+        'Cash + POS registrati meno gli stessi Costi complessivi del periodo.',
+      value: registeredOperatingBalance,
+      tone: registeredOperatingBalance >= 0 ? 'green' : 'red',
+      rows: [...economicOfficialRows, ...negativeEconomicCostRows],
     },
     'annual-real-balance': {
       title: `Bilancio reale · ${economicPeriodLabel}`,
@@ -2849,10 +2861,17 @@ export function DashboardPage() {
         />
         <StatCard
           detail="Incasso reale meno i costi del periodo"
-          label="Risultato reale"
+          label="Risultato operativo reale"
           onClick={() => setDetail('real-result')}
           tone={annualRealBalance >= 0 ? 'green' : 'red'}
           value={money(annualRealBalance)}
+        />
+        <StatCard
+          detail="Cash + POS meno i costi del periodo"
+          label="Risultato operativo registrato"
+          onClick={() => setDetail('registered-result')}
+          tone={registeredOperatingBalance >= 0 ? 'green' : 'red'}
+          value={money(registeredOperatingBalance)}
         />
       </section>
 
