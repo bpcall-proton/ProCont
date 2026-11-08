@@ -3368,7 +3368,7 @@ export function DashboardPage() {
             </div>
             <div>
               <strong>{review.unrecognized}</strong>
-              <span>Foto non riconosciute</span>
+              <span>Documenti non riconosciuti</span>
             </div>
             <div>
               <strong>{review.possibleDuplicates}</strong>

@@ -4,6 +4,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react'
+import { AttachmentItem } from '../components/AttachmentItem'
 import { ScanIcon } from '../components/Icons'
 import {
   addDays,
@@ -13,6 +14,10 @@ import {
   roundMoney,
   today,
 } from '../domain/accounting'
+import {
+  attachmentAccept,
+  fileAttachmentDataUrl,
+} from '../domain/attachments'
 import { createId } from '../domain/defaults'
 import type {
   AccountingInvoice,
@@ -54,15 +59,6 @@ function suggestionForm(suggestion: ReviewInvoiceSuggestion): ReviewForm {
   }
 }
 
-function fileDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
 export function ReviewPage() {
   const {
     state,
@@ -98,7 +94,7 @@ export function ReviewPage() {
   async function uploadPhotos(event: ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files ?? [])]
     if (!companyId || files.length === 0) return
-    const images = await Promise.all(files.map(fileDataUrl))
+    const images = await Promise.all(files.map(fileAttachmentDataUrl))
     const document: ReviewDocument = {
       id: createId('review-document'),
       companyId,
@@ -128,7 +124,7 @@ export function ReviewPage() {
   }
 
   function removeDocument(id: string) {
-    if (!window.confirm('Eliminare definitivamente queste foto?')) return
+    if (!window.confirm('Eliminare definitivamente questi allegati?')) return
     updateReviewDocuments((current) =>
       current.filter((document) => document.id !== id),
     )
@@ -248,16 +244,16 @@ export function ReviewPage() {
       <header className="page-heading">
         <div>
           <span className="eyebrow">DOCUMENTI</span>
-          <h1>Foto in arrivo</h1>
+          <h1>Documenti in arrivo</h1>
           <p>
-            Le foto non comprese restano parcheggiate finché non le registri
-            oppure le elimini.
+            Foto, PDF e documenti non registrati restano in attesa finché non
+            li inserisci oppure li elimini.
           </p>
         </div>
         <label className="button button-secondary photo-upload">
-          Aggiungi foto da controllare
+          Aggiungi foto o documenti
           <input
-            accept="image/*"
+            accept={attachmentAccept}
             multiple
             onChange={uploadPhotos}
             type="file"
@@ -270,7 +266,7 @@ export function ReviewPage() {
           <span className="empty-icon">
             <ScanIcon size={42} />
           </span>
-          <strong>Nessuna foto in attesa</strong>
+          <strong>Nessun documento in attesa</strong>
           <span>
             I documenti non riconosciuti da WhatsApp e Viber compariranno qui.
           </span>
@@ -280,11 +276,11 @@ export function ReviewPage() {
           {documents.map((document) => (
             <article className="panel review-document-card" key={document.id}>
               <div className="review-photo-strip">
-                {document.images.map((image, index) => (
-                  <img
-                    alt={`Documento ${index + 1}`}
+                {document.images.map((attachment, index) => (
+                  <AttachmentItem
+                    attachment={attachment}
+                    index={index}
                     key={`${document.id}-${index}`}
-                    src={image}
                   />
                 ))}
               </div>
@@ -373,11 +369,12 @@ export function ReviewPage() {
             </button>
           </div>
           <div className="review-photo-strip large">
-            {selected.images.map((image, index) => (
-              <img
-                alt={`Documento da controllare ${index + 1}`}
+            {selected.images.map((attachment, index) => (
+              <AttachmentItem
+                attachment={attachment}
+                index={index}
                 key={`${selected.id}-large-${index}`}
-                src={image}
+                large
               />
             ))}
           </div>
@@ -493,7 +490,7 @@ export function ReviewPage() {
           </div>
           <div className="form-actions">
             <button className="button button-primary" type="submit">
-              Registra fattura e archivia foto
+              Registra fattura e archivia allegati
             </button>
           </div>
         </form>

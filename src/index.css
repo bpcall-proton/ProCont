@@ -3302,6 +3302,46 @@ select {
   cursor: pointer;
 }
 
+.attachment-document-tile {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.attachment-document-tile strong {
+  color: var(--cyan);
+  font-size: 1rem;
+}
+
+.attachment-document-tile small {
+  width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.65rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-document-card .attachment-document-tile {
+  width: 145px;
+  height: 175px;
+}
+
+.review-photo-strip.large .attachment-document-tile {
+  width: min(320px, 78vw);
+  height: 390px;
+}
+
 .attachment-photo-actions,
 .attachment-preview-actions {
   display: flex;
@@ -3344,6 +3384,33 @@ select {
   max-height: calc(100vh - 130px);
   border-radius: 12px;
   object-fit: contain;
+}
+
+.attachment-preview iframe {
+  width: 100%;
+  height: min(72vh, 760px);
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.attachment-document-preview {
+  min-height: 240px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.attachment-document-preview strong {
+  color: var(--cyan);
+  font-size: 2rem;
+}
+
+.attachment-document-preview small {
+  color: var(--muted);
 }
 
 .verification-settings-panel {
