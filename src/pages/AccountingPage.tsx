@@ -1825,6 +1825,25 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
       (taking) => !monthFilter || taking.date.slice(0, 7) === monthFilter,
     )
     .sort((left, right) => right.date.localeCompare(left.date))
+  const sellerTakingSummaries = data.sellers.map((seller) => ({
+    seller,
+    real: roundMoney(
+      data.takings
+        .filter((taking) => taking.sellerId === seller.id)
+        .filter(
+          (taking) =>
+            !monthFilter || taking.date.slice(0, 7) === monthFilter,
+        )
+        .reduce((sum, taking) => sum + realTaking(taking), 0),
+    ),
+  }))
+  const takingSummaryPeriod = monthFilter
+    ? new Intl.DateTimeFormat('it-IT', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(new Date(`${monthFilter}-01T00:00:00Z`))
+    : 'Tutto lo storico'
 
   function pendingUnregisteredGoods(
     date: string,
@@ -2085,6 +2104,44 @@ export function TakingsPanel({ compact = false }: TakingsPanelProps) {
           <button className="button button-primary" type="submit">{editingId ? 'Salva modifiche' : 'Registra incasso'}</button>
         </div>
       </form>
+      <section className="panel taking-seller-summary">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">INCASSO REALE PER VENDITORE</span>
+            <h2>{takingSummaryPeriod}</h2>
+            <p>
+              Le card seguono il filtro mese. Premi una card per filtrare
+              anche l’elenco.
+            </p>
+          </div>
+        </div>
+        <div className="taking-seller-card-grid">
+          {sellerTakingSummaries.map(({ seller, real: sellerReal }) => (
+            <button
+              className={`taking-seller-card ${
+                activeSellerFilter === seller.id ? 'active' : ''
+              }`}
+              key={seller.id}
+              onClick={() =>
+                setTakingFilters((current) => ({
+                  ...current,
+                  sellerId:
+                    current.sellerId === seller.id ? '' : seller.id,
+                }))
+              }
+              type="button"
+            >
+              <span
+                className={`seller-name ${sellerColorClass(seller.name)}`}
+              >
+                {seller.name}
+              </span>
+              <strong>{money(sellerReal)}</strong>
+              <small>Incasso reale</small>
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="panel accounting-records-panel">
         <div className="table-toolbar invoice-table-toolbar">
           <h2>Storico incassi</h2>
