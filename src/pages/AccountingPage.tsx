@@ -461,6 +461,8 @@ export function InvoicesPanel({
   const sellerFilter = invoiceFilters.sellerId
   const monthFilter = invoiceFilters.month
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
+  const [attachmentInvoiceId, setAttachmentInvoiceId] =
+    useState<string | null>(null)
   const [includePaidInInvoiceSelection, setIncludePaidInInvoiceSelection] =
     useState(false)
   const [paymentTarget, setPaymentTarget] =
@@ -469,6 +471,9 @@ export function InvoicesPanel({
   const [paymentDate, setPaymentDate] = useState(today())
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>('Bonifico')
+  const attachmentInvoice = data.invoices.find(
+    (invoice) => invoice.id === attachmentInvoiceId,
+  )
   const [advanceSupplier, setAdvanceSupplier] = useState('')
   const [advanceAmount, setAdvanceAmount] = useState('')
   const currentPaymentTarget = paymentTarget
@@ -1643,7 +1648,7 @@ export function InvoicesPanel({
                     </small>
                   </td>
                   <td>{money(invoice.total)}<small>Residuo {money(invoiceRemaining(invoice))}</small></td>
-                  <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe{invoice.verificationIncluded ? ' · Verifica attiva' : ''}</small></td>
+                  <td>{money(invoice.theoreticalRevenue)}<small>Ricarico {invoice.markupPercent}% · {invoice.lines.length} righe{invoice.verificationIncluded ? ' · Verifica attiva' : ''}{invoice.verificationImages.length > 0 ? ` · ${invoice.verificationImages.length} allegati` : ''}</small></td>
                   <td>{money(invoice.unregisteredGoods)}</td>
                   <td>
                     <span className={`record-status ${dueState}`}>
@@ -1661,6 +1666,14 @@ export function InvoicesPanel({
                   </td>
                   <td className="row-actions">
                     <button type="button" onClick={() => edit(invoice)}>Modifica</button>
+                    {invoice.verificationImages.length > 0 && (
+                      <button
+                        onClick={() => setAttachmentInvoiceId(invoice.id)}
+                        type="button"
+                      >
+                        Visualizza allegati
+                      </button>
+                    )}
                     {!invoice.settled && <button type="button" onClick={() => { setPaymentTarget(invoice); setPaymentAmount('') }}>Acconto / paga</button>}
                     <RowDeleteButton onConfirm={() => remove(invoice.id)} />
                   </td>
@@ -1672,6 +1685,41 @@ export function InvoicesPanel({
           {invoices.length === 0 && <div className="empty-state compact-empty"><strong>Nessuna fattura</strong><span>{archiveOnly ? 'Modifica i filtri per cercare nell’archivio.' : "Usa il modulo sopra per l'inserimento manuale."}</span></div>}
         </div>
       </section>
+
+      {attachmentInvoice && (
+        <div
+          className="attachment-preview-overlay"
+          onClick={() => setAttachmentInvoiceId(null)}
+          role="presentation"
+        >
+          <div
+            aria-label={`Allegati fattura ${attachmentInvoice.number || attachmentInvoice.date}`}
+            aria-modal="true"
+            className="attachment-preview"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div>
+              <strong>
+                Allegati fattura{' '}
+                {attachmentInvoice.number || attachmentInvoice.date}
+              </strong>
+              <small>
+                {attachmentInvoice.supplierName ||
+                  'Fornitore non indicato'}
+              </small>
+            </div>
+            <AttachmentGallery images={attachmentInvoice.verificationImages} />
+            <button
+              className="button button-secondary"
+              onClick={() => setAttachmentInvoiceId(null)}
+              type="button"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
 
       {currentPaymentTarget && (
         <form className="panel payment-panel" onSubmit={addPayment}>
