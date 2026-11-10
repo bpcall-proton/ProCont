@@ -135,9 +135,9 @@ const navigation: {
   {
     id: 'review',
     label: {
-      it: 'Foto in arrivo',
-      ro: 'Fotografii primite',
-      en: 'Incoming photos',
+      it: 'Documenti in arrivo',
+      ro: 'Documente primite',
+      en: 'Incoming documents',
     },
     icon: ScanIcon,
     permission: 'reviewDocuments',

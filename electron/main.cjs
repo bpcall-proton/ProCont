@@ -307,7 +307,7 @@ ipcMain.handle(
       throw new Error('Allegato non valido')
     }
     const match = dataUrl.match(
-      /^data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\r\n]+)$/,
+      /^data:([a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+)(?:;name=[^;,]*)?;base64,([a-zA-Z0-9+/=\r\n]+)$/,
     )
     if (!match) {
       throw new Error('Formato allegato non supportato')
@@ -316,10 +316,10 @@ ipcMain.handle(
       typeof suggestedFilename === 'string' &&
       /^[a-zA-Z0-9._-]{1,180}$/.test(suggestedFilename)
         ? suggestedFilename
-        : 'allegato.jpg'
+        : 'allegato.bin'
     const result = await dialog.showSaveDialog({
       defaultPath: path.join(app.getPath('downloads'), filename),
-      filters: [{ name: 'Immagine', extensions: [path.extname(filename).slice(1)] }],
+      filters: [{ name: 'Allegato', extensions: [path.extname(filename).slice(1)] }],
     })
     if (result.canceled || !result.filePath) return null
     await fs.writeFile(result.filePath, Buffer.from(match[2], 'base64'))

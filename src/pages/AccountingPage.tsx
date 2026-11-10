@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
+import { AttachmentItem } from '../components/AttachmentItem'
 import {
   activeAccounting,
   addDays,
@@ -26,6 +27,11 @@ import {
   splitVat,
   today,
 } from '../domain/accounting'
+import {
+  attachmentAccept,
+  fileAttachmentDataUrl,
+  isImageAttachment,
+} from '../domain/attachments'
 import { createId } from '../domain/defaults'
 import { analyzeInvoiceImages } from '../domain/invoiceOcr'
 import type {
@@ -126,35 +132,6 @@ function filenamePart(value: string) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'azienda'
   )
-}
-
-function fileDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
-function attachmentFilename(image: string, index: number) {
-  const mimeType = image.match(/^data:image\/([a-zA-Z0-9.+-]+);/)?.[1] ?? 'jpg'
-  const extension = mimeType === 'jpeg' ? 'jpg' : mimeType.replaceAll('+', '-')
-  return `allegato-${index + 1}.${extension}`
-}
-
-async function downloadAttachment(image: string, index: number) {
-  const filename = attachmentFilename(image, index)
-  if (window.desktopApp?.saveAttachment) {
-    await window.desktopApp.saveAttachment(image, filename)
-    return
-  }
-  const anchor = document.createElement('a')
-  anchor.href = image
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
 }
 
 function cashBalanceByTaking(takings: AccountingTaking[]) {
@@ -601,7 +578,8 @@ export function InvoicesPanel({
     verificationSettings?.enabled === true &&
     verificationSettings.sellerIds.includes(form.sellerId)
 
-  async function analyzeVerificationPhotos(images = verificationImages) {
+  async function analyzeVerificationPhotos(attachments = verificationImages) {
+    const images = attachments.filter(isImageAttachment)
     if (images.length === 0) {
       setVerificationMessage('Carica almeno una foto della fattura.')
       return
@@ -649,15 +627,15 @@ export function InvoicesPanel({
   async function uploadVerificationImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
-    const images = await Promise.all(files.map(fileDataUrl))
-    setVerificationImages(images)
+    const attachments = await Promise.all(files.map(fileAttachmentDataUrl))
+    setVerificationImages(attachments)
     setVerificationOcrText('')
     setVerificationOcrConfidence(null)
     setVerificationMessage(
-      `${images.length} foto pronte. Saranno conservate nell’archivio JSON dell’azienda.`,
+      `${attachments.length} allegati pronti. Saranno conservati nell’archivio JSON dell’azienda.`,
     )
     if (verificationIncluded) {
-      await analyzeVerificationPhotos(images)
+      await analyzeVerificationPhotos(attachments)
     }
     event.target.value = ''
   }
@@ -1260,10 +1238,11 @@ export function InvoicesPanel({
           <section className="invoice-verification-box">
           <div className="panel-heading">
             <div>
-              <strong>Foto e verifica contabile</strong>
+              <strong>Allegati e verifica contabile</strong>
               <small>
-                Le foto restano nel JSON separato dell’azienda: Google Drive in
-                modalità Cloud, archivio locale in modalità Locale.
+                Foto, PDF e documenti restano nel JSON separato dell’azienda:
+                Google Drive in modalità Cloud, archivio locale in modalità
+                Locale.
               </small>
             </div>
             <label className="checkbox-row">
@@ -1284,20 +1263,20 @@ export function InvoicesPanel({
           </div>
           {!verificationSettings?.enabled ? (
             <small>
-              Le foto possono essere archiviate; attiva Verifica contabile
-              nelle Impostazioni per analizzarle.
+              Gli allegati possono essere archiviati; attiva Verifica contabile
+              nelle Impostazioni per analizzare le foto.
             </small>
           ) : !verificationAvailable ? (
             <small>
-              Le foto possono essere archiviate; seleziona un venditore
-              confermato per abilitarne l’analisi.
+              Gli allegati possono essere archiviati; seleziona un venditore
+              confermato per abilitare l’analisi delle foto.
             </small>
           ) : null}
           <div className="invoice-verification-actions">
             <label className="button button-secondary">
-              Carica foto fattura
+              Carica foto o documenti
               <input
-                accept="image/*"
+                accept={attachmentAccept}
                 hidden
                 multiple
                 onChange={(event) => void uploadVerificationImages(event)}
@@ -1309,7 +1288,7 @@ export function InvoicesPanel({
               disabled={
                 !verificationAvailable ||
                 verificationBusy ||
-                verificationImages.length === 0
+                !verificationImages.some(isImageAttachment)
               }
               onClick={() => void analyzeVerificationPhotos()}
               type="button"
@@ -1324,23 +1303,19 @@ export function InvoicesPanel({
           </div>
           {verificationImages.length > 0 && (
             <div className="review-photo-strip">
-              {verificationImages.map((image, index) => (
-                <figure key={`${image.slice(0, 40)}-${index}`}>
-                  <img alt={`Foto fattura ${index + 1}`} src={image} />
-                  <button
-                    className="danger-text"
-                    onClick={() =>
-                      setVerificationImages((current) =>
-                        current.filter(
-                          (_, imageIndex) => imageIndex !== index,
-                        ),
-                      )
-                    }
-                    type="button"
-                  >
-                    Rimuovi
-                  </button>
-                </figure>
+              {verificationImages.map((attachment, index) => (
+                <AttachmentItem
+                  attachment={attachment}
+                  index={index}
+                  key={`${attachment.slice(0, 40)}-${index}`}
+                  onRemove={() =>
+                    setVerificationImages((current) =>
+                      current.filter(
+                        (_, attachmentIndex) => attachmentIndex !== index,
+                      ),
+                    )
+                  }
+                />
               ))}
             </div>
           )}
@@ -3246,7 +3221,7 @@ function ExpensesPanel({
   ) {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
-    const images = await Promise.all(files.map(fileDataUrl))
+    const images = await Promise.all(files.map(fileAttachmentDataUrl))
     setExpenseAttachmentImages((current) => [...current, ...images])
     event.target.value = ''
   }
@@ -3326,7 +3301,7 @@ function ExpensesPanel({
   ) {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
-    const images = await Promise.all(files.map(fileDataUrl))
+    const images = await Promise.all(files.map(fileAttachmentDataUrl))
     setRentalAttachmentImages((current) => [...current, ...images])
     event.target.value = ''
   }
@@ -3460,7 +3435,7 @@ function ExpensesPanel({
           <textarea placeholder="Nota (facoltativa), es. ACT verifica 3.000, pagato 1.000, saldo 2.000" value={expenseNotes} onChange={(event) => setExpenseNotes(event.target.value)} />
           <AttachmentEditor
             images={expenseAttachmentImages}
-            label="Allega foto alla spesa"
+            label="Allega foto o documenti alla spesa"
             onRemove={(index) =>
               setExpenseAttachmentImages((current) =>
                 current.filter((_, imageIndex) => imageIndex !== index),
@@ -3515,7 +3490,7 @@ function ExpensesPanel({
           <textarea placeholder="Nota (facoltativa), es. ACT verifica 3.000, pagato 1.000, saldo 2.000" value={rentalNotes} onChange={(event) => setRentalNotes(event.target.value)} />
           <AttachmentEditor
             images={rentalAttachmentImages}
-            label="Allega foto all'affitto"
+            label="Allega foto o documenti all'affitto"
             onRemove={(index) =>
               setRentalAttachmentImages((current) =>
                 current.filter((_, imageIndex) => imageIndex !== index),
@@ -3593,7 +3568,7 @@ function AttachmentEditor({
       <label className="button button-secondary">
         {label}
         <input
-          accept="image/*"
+          accept={attachmentAccept}
           hidden
           multiple
           onChange={(event) => void onUpload(event)}
@@ -3602,16 +3577,16 @@ function AttachmentEditor({
       </label>
       <small>
         {images.length === 0
-          ? 'Nessuna foto allegata.'
-          : `${images.length} foto allegate.`}
+          ? 'Nessun allegato.'
+          : `${images.length} allegati.`}
       </small>
       {images.length > 0 && (
         <div className="review-photo-strip">
-          {images.map((image, index) => (
-            <AttachmentPhoto
-              image={image}
+          {images.map((attachment, index) => (
+            <AttachmentItem
+              attachment={attachment}
               index={index}
-              key={`${index}-${image.slice(0, 40)}`}
+              key={`${index}-${attachment.slice(0, 40)}`}
               onRemove={() => onRemove(index)}
             />
           ))}
@@ -3626,90 +3601,19 @@ function AttachmentGallery({ images }: { images: string[] }) {
   return (
     <>
       <small>
-        {images.length} {images.length === 1 ? 'foto allegata' : 'foto allegate'}
+        {images.length}{' '}
+        {images.length === 1 ? 'allegato' : 'allegati'}
       </small>
       <div className="review-photo-strip">
-        {images.map((image, index) => (
-          <AttachmentPhoto
-            image={image}
+        {images.map((attachment, index) => (
+          <AttachmentItem
+            attachment={attachment}
             index={index}
-            key={`${index}-${image.slice(0, 40)}`}
+            key={`${index}-${attachment.slice(0, 40)}`}
           />
         ))}
       </div>
     </>
-  )
-}
-
-function AttachmentPhoto({
-  image,
-  index,
-  onRemove,
-}: {
-  image: string
-  index: number
-  onRemove?: () => void
-}) {
-  const [previewOpen, setPreviewOpen] = useState(false)
-  return (
-    <figure>
-      <button
-        className="attachment-photo-button"
-        onClick={() => setPreviewOpen(true)}
-        type="button"
-      >
-        <img alt={`Allegato ${index + 1}`} src={image} />
-      </button>
-      <span className="attachment-photo-actions">
-        <button onClick={() => setPreviewOpen(true)} type="button">
-          Apri
-        </button>
-        <button
-          onClick={() => void downloadAttachment(image, index)}
-          type="button"
-        >
-          Scarica
-        </button>
-        {onRemove && (
-          <button className="danger-text" onClick={onRemove} type="button">
-            Rimuovi
-          </button>
-        )}
-      </span>
-      {previewOpen && (
-        <div
-          className="attachment-preview-overlay"
-          onClick={() => setPreviewOpen(false)}
-          role="presentation"
-        >
-          <div
-            aria-label={`Anteprima allegato ${index + 1}`}
-            aria-modal="true"
-            className="attachment-preview"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <img alt={`Allegato ${index + 1}`} src={image} />
-            <div className="attachment-preview-actions">
-              <button
-                className="button button-secondary"
-                onClick={() => setPreviewOpen(false)}
-                type="button"
-              >
-                Chiudi
-              </button>
-              <button
-                className="button button-primary"
-                onClick={() => void downloadAttachment(image, index)}
-                type="button"
-              >
-                Scarica foto
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </figure>
   )
 }
 
