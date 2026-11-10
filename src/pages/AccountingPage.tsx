@@ -631,14 +631,15 @@ export function InvoicesPanel({
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
     const attachments = await Promise.all(files.map(fileAttachmentDataUrl))
-    setVerificationImages(attachments)
+    const combinedAttachments = [...verificationImages, ...attachments]
+    setVerificationImages(combinedAttachments)
     setVerificationOcrText('')
     setVerificationOcrConfidence(null)
     setVerificationMessage(
-      `${attachments.length} allegati pronti. Saranno conservati nell’archivio JSON dell’azienda.`,
+      `${combinedAttachments.length} allegati pronti. Saranno conservati nell’archivio JSON dell’azienda.`,
     )
     if (verificationIncluded) {
-      await analyzeVerificationPhotos(attachments)
+      await analyzeVerificationPhotos(combinedAttachments)
     }
     event.target.value = ''
   }
