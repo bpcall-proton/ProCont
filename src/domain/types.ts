@@ -153,6 +153,7 @@ export interface AccountingInvoice {
   vat: number
   theoreticalRevenue: number
   unregisteredGoods: number
+  unregisteredPurchase?: boolean
   total: number
   markupPercent: number
   lines: InvoiceLine[]
