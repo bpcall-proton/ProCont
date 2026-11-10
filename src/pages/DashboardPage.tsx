@@ -354,12 +354,18 @@ export function DashboardPage() {
       0,
     ),
   )
+  const annualRegisteredPurchaseCosts = roundMoney(
+    annualInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+  )
   const annualFixedCosts = roundMoney(
     annualAccountantCosts.reduce((sum, cost) => sum + cost.amount, 0) +
       annualExpenseCosts.reduce((sum, cost) => sum + cost.amount, 0),
   )
   const economicTotalCosts = roundMoney(
     annualPurchaseCosts + annualFixedCosts,
+  )
+  const economicRegisteredTotalCosts = roundMoney(
+    annualRegisteredPurchaseCosts + annualFixedCosts,
   )
   const annualRealBalance = roundMoney(
     annualReal - economicTotalCosts,
@@ -478,7 +484,7 @@ export function DashboardPage() {
     ),
   )
   const registeredOperatingBalance = roundMoney(
-    economicOfficial - economicTotalCosts,
+    economicOfficial - economicRegisteredTotalCosts,
   )
   const economicRawCashResidual = roundMoney(
     annualReal -
@@ -755,10 +761,21 @@ export function DashboardPage() {
     ...economicAccountantRows,
     ...economicExpenseRows,
   ]
+  const economicRegisteredCostRows = [
+    ...economicInvoiceRows,
+    ...economicAccountantRows,
+    ...economicExpenseRows,
+  ]
   const negativeEconomicCostRows = economicCostRows.map((row) => ({
     ...row,
     amount: -row.amount,
   }))
+  const negativeEconomicRegisteredCostRows = economicRegisteredCostRows.map(
+    (row) => ({
+      ...row,
+      amount: -row.amount,
+    }),
+  )
   const annualBalanceRows: DashboardDetailRow[] = [
     ...annualTakings
       .map((taking) => ({
@@ -973,10 +990,13 @@ export function DashboardPage() {
     'registered-result': {
       title: `Risultato operativo registrato · ${economicPeriodLabel}`,
       note:
-        'Cash + POS registrati meno gli stessi Costi complessivi del periodo.',
+        'Cash + POS meno acquisti fiscali e uscite registrate; gli acquisti in nero sono esclusi.',
       value: registeredOperatingBalance,
       tone: registeredOperatingBalance >= 0 ? 'green' : 'red',
-      rows: [...economicOfficialRows, ...negativeEconomicCostRows],
+      rows: [
+        ...economicOfficialRows,
+        ...negativeEconomicRegisteredCostRows,
+      ],
     },
     'annual-real-balance': {
       title: `Bilancio reale · ${economicPeriodLabel}`,
@@ -2867,7 +2887,7 @@ export function DashboardPage() {
           value={money(annualRealBalance)}
         />
         <StatCard
-          detail="Cash + POS meno i costi del periodo"
+          detail="Cash + POS meno costi fiscali e uscite"
           label="Risultato operativo registrato"
           onClick={() => setDetail('registered-result')}
           tone={registeredOperatingBalance >= 0 ? 'green' : 'red'}

@@ -365,6 +365,7 @@ const emptyInvoice = {
   unregisteredGoods: '',
   date: today(),
   settled: false,
+  unregisteredPurchase: false,
 }
 
 const emptyInvoiceLine = {
@@ -573,6 +574,8 @@ export function InvoicesPanel({
   const automaticCashPurchase =
     (selectedSupplier?.cashUnregisteredByDefault ?? false) &&
     !preservesDocumentedInvoice
+  const unregisteredPurchase =
+    automaticCashPurchase || form.unregisteredPurchase
   const verificationSettings = data.verificationSettings
   const verificationAvailable =
     verificationSettings?.enabled === true &&
@@ -787,8 +790,12 @@ export function InvoicesPanel({
           (item) => item.id === editingId,
         )
         const cashUnregistered =
-          (supplier?.cashUnregisteredByDefault ?? false) &&
-          !(previous?.supplierId === form.supplierId && previous.total > 0)
+          form.unregisteredPurchase ||
+          ((supplier?.cashUnregisteredByDefault ?? false) &&
+            !(
+              previous?.supplierId === form.supplierId &&
+              previous.total > 0
+            ))
         const storedTotal = cashUnregistered ? 0 : invoiceTotal
         const storedUnregisteredGoods = cashUnregistered
           ? invoiceTotal
@@ -813,6 +820,7 @@ export function InvoicesPanel({
           vat: cashUnregistered ? 0 : numberValue(form.vat),
           theoreticalRevenue: invoiceRevenue,
           unregisteredGoods: storedUnregisteredGoods,
+          unregisteredPurchase: cashUnregistered,
           total: storedTotal,
           markupPercent: invoiceMarkup,
           lines,
@@ -887,8 +895,8 @@ export function InvoicesPanel({
     submitAfterValidationRef.current = false
     const vat = invoice.vat ?? 0
     const cashUnregistered =
-      data.suppliers.find((supplier) => supplier.id === invoice.supplierId)
-        ?.cashUnregisteredByDefault ?? false
+      invoice.unregisteredPurchase ??
+      (invoice.total === 0 && invoice.unregisteredGoods > 0)
     const taxableAmount =
       cashUnregistered && invoice.total === 0
         ? invoice.unregisteredGoods
@@ -908,6 +916,7 @@ export function InvoicesPanel({
       unregisteredGoods: String(invoice.unregisteredGoods),
       date: invoice.date,
       settled: invoice.settled,
+      unregisteredPurchase: cashUnregistered,
     })
     setLines(invoice.lines)
     setVerificationIncluded(invoice.verificationIncluded)
@@ -1130,6 +1139,7 @@ export function InvoicesPanel({
           Totale: invoice.total,
           Venit: invoice.theoreticalRevenue,
           'Merce senza fattura': invoice.unregisteredGoods,
+          Nero: invoice.unregisteredPurchase ? 'Sì' : 'No',
           'Ricarico %': invoice.markupPercent,
           Pagata: invoice.settled ? 'Sì' : 'No',
           Residuo: invoiceRemaining(invoice),
@@ -1230,9 +1240,10 @@ export function InvoicesPanel({
           <label>IVA facoltativa<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" value={form.vat} onChange={(event) => setForm((current) => ({ ...current, vat: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Tab' && !event.shiftKey && lines.length === 0) { event.preventDefault(); theoreticalRevenueInputRef.current?.focus() } }} /></label>
           <label>Totale automatico<input readOnly tabIndex={-1} value={money(invoiceTotal)} /></label>
           <label>Venit totale<input data-invoice-entry ref={theoreticalRevenueInputRef} disabled={lines.length > 0} inputMode="decimal" value={lines.length > 0 ? String(lineRevenue) : form.theoreticalRevenue} onChange={(event) => setForm((current) => ({ ...current, theoreticalRevenue: event.target.value }))} /></label>
-          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" readOnly={automaticCashPurchase} value={automaticCashPurchase ? String(invoiceTotal) : form.unregisteredGoods} onChange={(event) => setForm((current) => ({ ...current, unregisteredGoods: event.target.value }))} /></label>
+          <label>Merce acquistata senza fattura<input data-invoice-entry inputMode="decimal" min="0" placeholder="0,00" readOnly={unregisteredPurchase} value={unregisteredPurchase ? String(invoiceTotal) : form.unregisteredGoods} onChange={(event) => setForm((current) => ({ ...current, unregisteredGoods: event.target.value }))} /></label>
           <label>Ricarico fattura<input readOnly tabIndex={-1} value={`${invoiceMarkup}%`} /></label>
-          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={automaticCashPurchase || form.settled} disabled={automaticCashPurchase} onChange={(event) => setForm((current) => ({ ...current, settled: event.target.checked }))} /> Già pagata</label>
+          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={unregisteredPurchase || form.settled} disabled={unregisteredPurchase} onChange={(event) => setForm((current) => ({ ...current, settled: event.target.checked }))} /> Già pagata</label>
+          <label className="checkbox-row accounting-paid-field"><input type="checkbox" checked={unregisteredPurchase} disabled={automaticCashPurchase} onChange={(event) => setForm((current) => ({ ...current, unregisteredPurchase: event.target.checked, settled: event.target.checked || current.settled }))} /> Nero</label>
         </div>
         {!archiveOnly && (
           <section className="invoice-verification-box">
@@ -1616,10 +1627,11 @@ export function InvoicesPanel({
                     aria-label={`Segna fattura ${invoice.number || invoice.date} come pagata`}
                     checked={invoice.settled}
                     className="invoice-paid-checkbox"
+                    disabled={invoice.unregisteredPurchase}
                     onChange={() => toggleInvoicePaid(invoice.id)}
                     type="checkbox"
                   /></td>
-                  <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}</small></td>
+                  <td><strong>{invoice.date}</strong><small>{invoice.number || '—'} · {invoice.category}{invoice.unregisteredPurchase ? ' · NERO' : ''}</small></td>
                   <td>
                     {invoice.supplierName || '—'}
                     <small>

@@ -209,6 +209,9 @@ function mapInvoice(value: JsonRecord): AccountingInvoice {
     vat: amount(value.iva),
     theoreticalRevenue,
     unregisteredGoods: amount(value.merceSenzaFattura),
+    unregisteredPurchase:
+      flag(value.acquistoInNero) ||
+      (total === 0 && amount(value.merceSenzaFattura) > 0),
     total,
     markupPercent:
       typeof value.ricaricoPercentuale === 'number'
@@ -709,6 +712,9 @@ export function normalizeStoredState(
         vat,
         lines,
         unregisteredGoods: invoice.unregisteredGoods ?? 0,
+        unregisteredPurchase:
+          invoice.unregisteredPurchase ??
+          (invoice.total === 0 && (invoice.unregisteredGoods ?? 0) > 0),
         markupPercent:
           invoice.markupPercent ??
           markupPercent(invoice.total, invoice.theoreticalRevenue),

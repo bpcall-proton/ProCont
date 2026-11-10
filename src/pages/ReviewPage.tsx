@@ -161,6 +161,7 @@ export function ReviewPage() {
       vat: suggestion.vat,
       theoreticalRevenue: suggestion.theoreticalRevenue,
       unregisteredGoods: 0,
+      unregisteredPurchase: false,
       total: invoiceTotal,
       markupPercent: markupPercentage(
         invoiceTotal,
