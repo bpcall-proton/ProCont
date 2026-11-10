@@ -2809,6 +2809,48 @@ select {
   font-size: clamp(1rem, 2vw, 1.35rem);
 }
 
+.taking-seller-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 12px;
+}
+
+.taking-seller-card {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  text-align: left;
+  background: linear-gradient(
+    145deg,
+    rgba(19, 27, 46, 0.95),
+    rgba(9, 14, 27, 0.9)
+  );
+}
+
+.taking-seller-card:hover,
+.taking-seller-card:focus-visible,
+.taking-seller-card.active {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: var(--cyan-soft);
+}
+
+.taking-seller-card strong {
+  font-size: clamp(1rem, 2vw, 1.35rem);
+}
+
+.taking-seller-card small,
+.taking-seller-summary p {
+  color: var(--muted);
+}
+
+.taking-seller-summary p {
+  margin: 5px 0 0;
+  font-size: 0.76rem;
+}
+
 .accounting-form,
 .payment-panel {
   display: grid;
